@@ -1,0 +1,288 @@
+import {
+  BackSide,
+  Color,
+  DoubleSide,
+  MeshStandardMaterial,
+  ShaderMaterial,
+  type WebGLProgramParametersWithUniforms,
+  type IUniform,
+} from 'three';
+import { NOISE_GLSL } from './shaderChunks';
+
+export const shared = {
+  time: { value: 0 } as IUniform<number>,
+  wind: { value: 1 } as IUniform<number>,
+};
+
+function inject(shader: WebGLProgramParametersWithUniforms, vertexDecl: string, vertexBody: string, fragDecl: string) {
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>\n${vertexDecl}`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>\n${vertexBody}`);
+  shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${NOISE_GLSL}\n${fragDecl}`);
+}
+
+/** Granite. Pattern lives in the original boulder's material space, so fragments match. */
+export function createRockMaterial(opts: { tint?: Color; scale?: number } = {}): MeshStandardMaterial {
+  const m = new MeshStandardMaterial({ color: opts.tint ?? new Color(1, 1, 1), roughness: 0.9, metalness: 0 });
+  const scale = (opts.scale ?? 1).toFixed(3);
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uWet = { value: 0 };
+    inject(
+      shader,
+      'attribute vec3 rockPos; attribute float fresh; varying vec3 vRockPos; varying float vFresh;',
+      'vRockPos = rockPos; vFresh = fresh;',
+      'varying vec3 vRockPos; varying float vFresh;',
+    );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        vec3 rp = vRockPos * ${scale};
+        float n1 = eFbm3(rp * 0.8);
+        float n2 = eNoise3(rp * 8.0);
+        float n3 = eNoise3(rp * 21.0 + 3.1);
+        float n4 = eNoise3(rp * 15.0 + 7.7);
+        vec3 base = mix(vec3(0.40, 0.39, 0.38), vec3(0.55, 0.49, 0.46), smoothstep(0.3, 0.7, n1));
+        base = mix(base, vec3(0.66, 0.55, 0.5), smoothstep(0.6, 0.8, n2) * 0.35);
+        base = mix(base, vec3(0.16, 0.15, 0.15), smoothstep(0.8, 0.9, n3) * 0.5);
+        base = mix(base, vec3(0.82, 0.81, 0.78), smoothstep(0.84, 0.94, n4) * 0.35);
+        float lich = smoothstep(0.52, 0.68, eFbm3(rp * 1.6 + 3.0));
+        vec3 weathered = base * vec3(0.74, 0.73, 0.70);
+        weathered = mix(weathered, vec3(0.60, 0.60, 0.46), lich * 0.5);
+        weathered = mix(weathered, vec3(0.72, 0.46, 0.20), smoothstep(0.72, 0.86, eFbm3(rp * 3.0 + 9.0)) * 0.55);
+        weathered *= 0.85 + 0.3 * eFbm3(rp * 0.4 + 11.0);
+        vec3 freshCol = base * vec3(1.12, 1.08, 1.05);
+        diffuseColor.rgb *= mix(weathered, freshCol, vFresh);
+        `,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        float hb = eFbm3(vRockPos * ${scale} * 1.6) * 0.8 + eNoise3(vRockPos * ${scale} * 7.0) * 0.08;
+        normal = ePerturbNormal(-vViewPosition, normal, hb, mix(0.55, 0.25, vFresh));
+        `,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+        roughnessFactor = mix(0.95, 0.72, vFresh) - n3 * 0.08;
+        `,
+      );
+  };
+  m.customProgramCacheKey = () => `rock-${scale}`;
+  return m;
+}
+
+/** Ground: vertex colours set the material, shader noise adds grain at close range. */
+export function createTerrainMaterial(): MeshStandardMaterial {
+  const m = new MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 });
+  m.onBeforeCompile = (shader) => {
+    inject(
+      shader,
+      'varying vec3 vWorldPos2;',
+      'vWorldPos2 = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+      'varying vec3 vWorldPos2;',
+    );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        vec2 wp = vWorldPos2.xz;
+        float d1 = eFbm2(wp * 0.21);
+        float d2 = eNoise2(wp * 2.3);
+        float d3 = eNoise2(wp * 9.0);
+        diffuseColor.rgb *= (0.8 + 0.34 * d1) * (0.9 + 0.16 * d2) * (0.94 + 0.1 * d3);
+        `,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        float th = eFbm2(vWorldPos2.xz * 0.6) * 0.6 + eNoise2(vWorldPos2.xz * 3.0) * 0.15;
+        normal = ePerturbNormal(-vViewPosition, normal, th, 0.18);
+        `,
+      );
+  };
+  m.customProgramCacheKey = () => 'terrain';
+  return m;
+}
+
+/** Bark: furrows along the trunk axis (local Y). */
+export function createBarkMaterial(base = new Color(0.36, 0.27, 0.2)): MeshStandardMaterial {
+  const m = new MeshStandardMaterial({ color: base, roughness: 0.95 });
+  m.onBeforeCompile = (shader) => {
+    inject(shader, 'varying vec3 vObj;', 'vObj = position;', 'varying vec3 vObj;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        float ang = atan(vObj.z, vObj.x);
+        float furrow = eNoise3(vec3(cos(ang) * 3.0, vObj.y * 0.7, sin(ang) * 3.0));
+        float fine = eNoise3(vec3(cos(ang) * 9.0, vObj.y * 3.0, sin(ang) * 9.0));
+        diffuseColor.rgb *= 0.65 + 0.5 * smoothstep(0.25, 0.75, furrow) + 0.15 * fine;
+        `,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        float bh = eNoise3(vec3(cos(atan(vObj.z, vObj.x)) * 3.0, vObj.y * 0.7, sin(atan(vObj.z, vObj.x)) * 3.0));
+        normal = ePerturbNormal(-vViewPosition, normal, bh, 1.2);
+        `,
+      );
+  };
+  m.customProgramCacheKey = () => 'bark';
+  return m;
+}
+
+/** End-grain for cut log faces. */
+export function createEndGrainMaterial(): MeshStandardMaterial {
+  const m = new MeshStandardMaterial({ color: new Color(0.62, 0.48, 0.32), roughness: 0.9 });
+  m.onBeforeCompile = (shader) => {
+    inject(shader, 'varying vec3 vObj;', 'vObj = position;', 'varying vec3 vObj;');
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+      float r = length(vObj.xz);
+      float rings = 0.5 + 0.5 * sin(r * 40.0 + eNoise3(vObj * 6.0) * 4.0);
+      diffuseColor.rgb *= 0.78 + 0.25 * rings;
+      `,
+    );
+  };
+  m.customProgramCacheKey = () => 'endgrain';
+  return m;
+}
+
+/** Conifer foliage with wind sway (works for instanced and plain meshes). */
+export function createFoliageMaterial(): MeshStandardMaterial {
+  const m = new MeshStandardMaterial({ vertexColors: true, roughness: 0.88, side: DoubleSide });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = shared.time;
+    shader.uniforms.uWind = shared.wind;
+    inject(
+      shader,
+      'uniform float uTime; uniform float uWind; varying vec3 vObjF;',
+      `
+      vObjF = position;
+      float phase = 0.0;
+      #ifdef USE_INSTANCING
+        phase = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.23;
+      #endif
+      float sway = max(0.0, position.y) * 0.018 * uWind;
+      transformed.x += sin(uTime * 1.3 + phase) * sway;
+      transformed.z += cos(uTime * 1.1 + phase * 1.3) * sway * 0.6;
+      `,
+      'varying vec3 vObjF;',
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+      float nf = eNoise3(vObjF * 3.5);
+      diffuseColor.rgb *= 0.72 + 0.45 * nf;
+      // darker toward the trunk and the ground: the interior of a conifer is in shade
+      diffuseColor.rgb *= 0.7 + 0.3 * smoothstep(0.1, 0.9, vObjF.y);
+      `,
+    );
+  };
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (shader, r) => {
+    prev(shader, r);
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      float rim = pow(1.0 - abs(dot(normalize(vViewPosition), normal)), 3.0);
+      totalEmissiveRadiance += vec3(0.16, 0.2, 0.1) * rim * 0.35;`,
+    );
+  };
+  m.customProgramCacheKey = () => 'foliage';
+  return m;
+}
+
+export function createSoilMaterial(): MeshStandardMaterial {
+  const m = new MeshStandardMaterial({ color: new Color(0.42, 0.31, 0.21), roughness: 1 });
+  m.onBeforeCompile = (shader) => {
+    inject(shader, 'varying vec3 vObjS;', 'vObjS = position;', 'varying vec3 vObjS;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        float s1 = eFbm3(vObjS * 1.6);
+        float s2 = eNoise3(vObjS * 12.0);
+        diffuseColor.rgb *= 0.7 + 0.45 * s1 + 0.12 * s2;
+        // root-bound grass on the crown of the bank
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.30, 0.34, 0.16), smoothstep(0.55, 0.85, normalize(vObjS).y) * smoothstep(0.45, 0.6, s1) * 0.8);
+        `,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        normal = ePerturbNormal(-vViewPosition, normal, eFbm3(vObjS * 3.0), 1.4);
+        `,
+      );
+  };
+  m.customProgramCacheKey = () => 'soil';
+  return m;
+}
+
+export function createIceMaterial(): MeshStandardMaterial {
+  const m = new MeshStandardMaterial({
+    color: new Color(0.78, 0.9, 0.98),
+    roughness: 0.12,
+    metalness: 0.05,
+    transparent: true,
+    opacity: 0.78,
+    depthWrite: false,
+  });
+  m.onBeforeCompile = (shader) => {
+    inject(shader, 'varying vec3 vWorldI;', 'vWorldI = (modelMatrix * vec4(transformed, 1.0)).xyz;', 'varying vec3 vWorldI;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        float cr = eNoise2(vWorldI.xz * 2.2);
+        float cracks = smoothstep(0.03, 0.0, abs(cr - 0.5));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), cracks * 0.6 + eNoise2(vWorldI.xz * 7.0) * 0.12);
+        diffuseColor.a *= 0.85 + cracks * 0.15;
+        `,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        normal = ePerturbNormal(-vViewPosition, normal, eNoise2(vWorldI.xz * 1.5), 0.25);
+        `,
+      );
+  };
+  m.customProgramCacheKey = () => 'ice';
+  return m;
+}
+
+/** Inverted-hull outline used to show interactivity and selection. */
+export function createOutlineMaterial(color: Color, width: number): ShaderMaterial {
+  return new ShaderMaterial({
+    uniforms: {
+      uColor: { value: color },
+      uWidth: { value: width },
+      uOpacity: { value: 0.0 },
+      uTime: shared.time,
+    },
+    vertexShader: /* glsl */ `
+      uniform float uWidth;
+      void main() {
+        vec3 n = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        // constant-ish screen width: scale offset with distance
+        mv.xyz += n * uWidth * (0.6 + 0.012 * -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      uniform float uTime;
+      void main() {
+        gl_FragColor = vec4(uColor, uOpacity);
+      }
+    `,
+    side: BackSide,
+    transparent: true,
+    depthWrite: false,
+  });
+}
