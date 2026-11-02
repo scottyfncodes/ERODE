@@ -32,7 +32,7 @@ export function detectQuality(): Quality {
   const dpr = window.devicePixelRatio || 1;
   const small = Math.min(window.innerWidth, window.innerHeight) < 600;
   if (mobile || small) {
-    return { pixelRatio: Math.min(dpr, 1.75), shadowSize: 1024, shadows: true, trees: 0.6, far: true };
+    return { pixelRatio: Math.min(dpr, 1.5), shadowSize: 1024, shadows: true, trees: 0.45, far: true };
   }
   return { pixelRatio: Math.min(dpr, 2), shadowSize: 2048, shadows: true, trees: 1, far: true };
 }

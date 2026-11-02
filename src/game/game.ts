@@ -1,49 +1,44 @@
-import { Color, Group, Raycaster, Vector2, Vector3, type Material, type Mesh, type Object3D } from 'three';
-import type RAPIER_T from '@dimforge/rapier3d-deterministic-compat';
-import type { LevelDef, LevelObject, ObjectState, Plan } from '../levels/types';
+import { Color, Group, Vector3, type Material, type Mesh, type Object3D } from 'three';
+import type { LevelDef } from '../levels/types';
 import { LEVELS, levelById } from '../levels/index';
 import { loadLevelData, type LevelData } from '../sim/levelData';
-import { Simulation, RECORD_EVERY, FRAME, DT, MEDALS, restingBoulder, type Medal, type SimEvent, type SimResult, type Recording, type Track } from '../sim/simulation';
-import { activeWater, clonePlan, countInterventions, defaultPlan, defaultState, isModified, sanitizePlan } from '../sim/plan';
+import { pathPointAt, makePolyline, clamp, type Polyline } from '../sim/geom';
+import { generateBoulder } from '../sim/fracture';
 import { COMPOSITIONS, composition, type CompositionId } from '../sim/composition';
+import { RunSim, DT, KIND_LABEL, type RunEvent, type RunResult } from '../run/runner';
+import { layoutLevel, type Layout } from '../run/layout';
 import { createSceneRig, detectQuality, type Quality, type SceneRig } from '../render/scene';
 import { buildTerrain } from '../render/terrainView';
 import { buildVegetation } from '../render/vegetation';
 import { buildWater, type WaterView } from '../render/waterView';
-import { ObjectsView } from '../render/objectsView';
-import { Effects, PiecesView, Trails, type PieceState } from '../render/dynamicView';
-import { PropsView } from '../render/propsView';
-import { layoutProps } from '../sim/props';
+import { DestructView } from '../render/destructView';
+import { Effects, PiecesView, Trails } from '../render/dynamicView';
 import { shared, type RockLook } from '../render/materials';
-import { CameraDirector } from './camera';
-import { attachGestures } from './input';
-import { compositionUnlocked, levelProgress, levelUnlocked, loadProgress, recordResult, saveProgress, type Progress } from './progress';
+import { CameraDirector, type ChaseInfo } from './camera';
+import { compositionUnlocked, levelProgress, levelUnlocked, loadProgress, MEDALS, recordResult, saveProgress, type Medal, type Progress, type Records } from './progress';
 import { AudioEngine } from '../audio/audio';
-import { UI, type ContextAction, type MountainCard } from '../ui/ui';
-import { kg, pct } from '../ui/format';
+import { UI, pts, type MountainCard } from '../ui/ui';
 import { wordmark } from '../ui/brand';
-import { clamp, makePolyline, pathDistance } from '../sim/geom';
 
-type State = 'title' | 'mountains' | 'plan' | 'sim' | 'results' | 'replay';
-const deg = Math.PI / 180;
-const ROUTE_COLORS = [new Color(1, 0.82, 0.45), new Color(0.55, 0.85, 1), new Color(0.8, 0.66, 1), new Color(0.6, 1, 0.7)];
+type State = 'title' | 'mountains' | 'ready' | 'run' | 'results';
 
 /** Everything that belongs to one mountain, rebuilt when the player moves to another. */
 interface World {
   level: LevelDef;
   data: LevelData;
+  layout: Layout;
   group: Group;
   water: WaterView;
-  objects: ObjectsView;
-  props: PropsView;
+  destruct: DestructView;
   effects: Effects;
   trails: Trails;
-  ghost: Trails;
-  routes: Trails;
+  guides: Trails;
+  paths: Map<string, Polyline>;
 }
 
+const GUIDE = [new Color(1, 0.84, 0.5), new Color(0.6, 0.86, 1), new Color(0.85, 0.7, 1)];
+
 export class Game {
-  private R: typeof RAPIER_T;
   private rig: SceneRig;
   private quality: Quality;
   private cam: CameraDirector;
@@ -51,52 +46,30 @@ export class Game {
   private pieces = new PiecesView();
   private audio = new AudioEngine();
   private ui: UI;
-  private markers: HTMLElement;
   private progress: Progress;
   private state: State = 'title';
-  private plan: Plan = {};
-  private sim: Simulation | null = null;
-  private recording: Recording | null = null;
-  private result: SimResult | null = null;
-  private selected: string | null = null;
-  private dragging: { id: string; offX: number; offZ: number } | null = null;
+  private sim: RunSim | null = null;
+  private result: RunResult | null = null;
+  private records: Records | null = null;
   private acc = 0;
   private timeScale = 1;
   private slowUntil = 0;
-  private hitStopUntil = 0;
-  private releaseUntil = 0;
-  private fast = false;
+  private slowTo = 1;
   private paused = false;
+  private menuOpen = false;
+  private fast = false;
   private now = 0;
   private last = 0;
-  private ghostOn = true;
-  private routesOn = false;
-  private replayT = 0;
-  private replayPlaying = true;
-  private replaySpeed = 1;
-  private replayEventIdx = 0;
-  private replayLastF = 0;
-  private menuOpen = false;
-  private markerEls: { el: HTMLElement; pos: Vector3 }[] = [];
-  private raycaster = new Raycaster();
-  private runStatusTimer = 0;
-  private runTier: Medal = 'platinum';
-  private steerKeys = { left: false, right: false };
-  private steerTouch = 0;
-  private steerButtons = 0;
-  private steerSmoothed = 0;
+  private hudTimer = 0;
   private sprayAcc = 0;
-  private rolling = 0;
-  private gravel = 0;
-  private followInfo: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number; wet?: boolean } | undefined;
-  private coursePl: ReturnType<typeof makePolyline> | null = null;
+  private lastSound = new Map<string, number>();
+  private resultsShown = true;
+  private resultsTimer = 0;
+  private guideFor = '';
   private loadingEl = document.getElementById('loading');
-  /** headless test browsers render in software; don't let them degrade quality */
   private automation = navigator.webdriver === true;
 
-  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement, markers: HTMLElement, R: typeof RAPIER_T, onProgress: (f: number, label: string) => void) {
-    this.R = R;
-    this.markers = markers;
+  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement, onProgress: (f: number, label: string) => void) {
     this.progress = loadProgress();
     const idx = LEVELS.findIndex((l) => l.id === this.progress.lastLevel);
     const level = idx >= 0 && levelUnlocked(this.progress, LEVELS, idx) ? LEVELS[idx] : LEVELS[0];
@@ -107,7 +80,6 @@ export class Game {
     this.rig.scene.add(this.pieces.group);
     this.buildWorld(level, onProgress);
     this.cam = new CameraDirector(this.rig.camera, level, this.w.data.heightAt);
-    this.cam.onSurveyEnd = () => this.endSurvey();
     this.audio.setSound(this.progress.settings.sound);
     this.audio.setMusic(this.progress.settings.music);
     this.applyLook();
@@ -116,93 +88,37 @@ export class Game {
       play: () => this.showMountains(),
       pickLevel: (id) => void this.pickLevel(id),
       mountains: () => this.showMountains(),
-      release: () => this.release(),
-      reset: () => this.resetLevel(),
+      release: () => this.startRun(),
       menu: () => this.openMenu(),
-      action: (k) => this.doAction(k),
-      closeContext: () => this.select(null),
-      replay: () => this.startReplay(),
-      adjust: () => this.toPlanning(),
       retry: () => this.startRun(),
       next: () => this.nextLevel(),
       pause: () => this.togglePause(),
-      skip: () => this.toggleFast(),
-      scrub: (f) => this.scrub(f),
-      replayToggle: () => (this.replayPlaying = !this.replayPlaying),
-      replaySpeed: () => (this.replaySpeed = this.replaySpeed === 1 ? 0.25 : this.replaySpeed === 0.25 ? 2 : 1),
-      exitReplay: () => this.endReplay(),
       toggleSound: () => this.setSound(!this.progress.settings.sound),
       toggleMusic: () => this.setMusic(!this.progress.settings.music),
       toTitle: () => this.toTitle(),
       resumeFromMenu: () => this.closeMenu(),
-      toggleGhost: () => {
-        this.ghostOn = !this.ghostOn;
-        this.updateGhost();
-      },
-      toggleRoutes: () => {
-        this.routesOn = !this.routesOn;
-        this.updateRoutes();
-      },
-      survey: () => this.survey(),
-      zone: (id) => this.goZone(id),
       composition: (id) => this.setComposition(id),
-      steer: (d) => (this.steerButtons = d),
+      choose: (side) => this.choose(side),
     });
 
-    // during a run: drag anywhere — left/right of where you touched — to lean
-    let drag: { id: number; x: number } | null = null;
+    // during a run: the left or right of the screen picks that way at a fork
     canvas.addEventListener('pointerdown', (e) => {
-      if (this.state === 'sim') drag = { id: e.pointerId, x: e.clientX };
-      if (this.state === 'plan' && this.cam.surveying) this.endSurvey(true);
+      this.audio.unlock();
+      if (this.state === 'run' && this.sim?.decision) {
+        const x = e.clientX / Math.max(1, canvas.clientWidth);
+        const n = this.sim.decision.options.length;
+        this.choose(n === 3 && x > 0.36 && x < 0.64 ? 'centre' : x < 0.5 ? 'left' : 'right');
+      } else if (this.state === 'results' && !this.resultsShown) this.revealResults();
     });
-    canvas.addEventListener('pointermove', (e) => {
-      if (this.state !== 'sim' || !drag || drag.id !== e.pointerId) return;
-      const w = Math.max(320, canvas.clientWidth);
-      const range = w * 0.12;
-      let dx = e.clientX - drag.x;
-      if (dx > range) {
-        drag.x = e.clientX - range;
-        dx = range;
-      } else if (dx < -range) {
-        drag.x = e.clientX + range;
-        dx = -range;
-      }
-      const v = dx / range;
-      this.steerTouch = Math.abs(v) < 0.08 ? 0 : clamp((v - Math.sign(v) * 0.08) / 0.92, -1, 1);
-    });
-    const endDrag = (e: PointerEvent) => {
-      if (drag && drag.id === e.pointerId) {
-        drag = null;
-        this.steerTouch = 0;
-      }
-    };
-    canvas.addEventListener('pointerup', endDrag);
-    canvas.addEventListener('pointercancel', endDrag);
-    window.addEventListener('keyup', (e) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a') this.steerKeys.left = false;
-      if (e.key === 'ArrowRight' || e.key === 'd') this.steerKeys.right = false;
-    });
-
-    attachGestures(canvas, {
-      enabled: () => this.state === 'plan' && !this.menuOpen && !this.cam.surveying,
-      tap: (x, y) => this.tap(x, y),
-      grab: (x, y) => this.grab(x, y),
-      dragObject: (x, y) => this.dragTo(x, y),
-      release: () => this.dropDrag(),
-      pan: (dx, dy) => this.cam.pan(dx, dy, canvas.clientHeight),
-      orbit: (dx, dy) => this.cam.rotate(-dx * 0.005, dy * 0.004),
-      zoom: (f) => this.cam.zoom(f),
-      hover: (x, y) => this.w.objects.setHover(this.pick(x, y)),
-    });
+    window.addEventListener('keydown', (e) => this.key(e));
     const unlock = () => this.audio.unlock();
     for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) window.addEventListener(ev, unlock, { passive: true });
-    window.addEventListener('keydown', (e) => this.key(e));
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 250));
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         this.audio.suspend();
-        if (this.state === 'sim' && !this.paused) this.togglePause();
+        if (this.state === 'run' && !this.paused) this.togglePause();
       } else this.audio.resume();
     });
     this.resize();
@@ -212,14 +128,11 @@ export class Game {
   private get level(): LevelDef {
     return this.w.level;
   }
-  private get data(): LevelData {
-    return this.w.data;
-  }
   private get comp() {
     return composition(this.progress.composition);
   }
 
-  // ------------------------------------------------------------------ world building
+  // ------------------------------------------------------------------ world
   private buildWorld(level: LevelDef, onProgress?: (f: number, label: string) => void) {
     const scene = this.rig.scene;
     if (this.w) {
@@ -227,40 +140,30 @@ export class Game {
       disposeTree(this.w.group);
     }
     const data = loadLevelData(level);
+    const layout = layoutLevel(level, data);
     const group = new Group();
     onProgress?.(0.35, 'Laying down the ground…');
     group.add(buildTerrain(data, this.quality.far));
     onProgress?.(0.5, 'Growing the forest…');
     const avoid = [
-      ...level.objects.map((o) => {
-        const p = 'position' in o ? o.position : o.center;
-        return { x: p[0], z: p[1], r: o.type === 'tree' ? 4 : 5 };
-      }),
-      ...level.formations.map((f) => ({ x: f.position[0], z: f.position[1], r: Math.max(f.size[0], f.size[2]) })),
+      ...layout.trees.map((t) => ({ x: t.x, z: t.z, r: 3 })),
+      ...layout.structures.map((s) => ({ x: s.x, z: s.z, r: Math.max(s.hx, s.hz) + 3 })),
+      ...layout.rocks.filter((r) => r.role !== 'rock').map((r) => ({ x: r.x, z: r.z, r: r.r + 2 })),
     ];
     if (level.forest.count > 0) group.add(buildVegetation(data, this.quality.trees, avoid).group);
-    onProgress?.(0.7, 'Finding the water…');
+    onProgress?.(0.7, 'Stacking the timber…');
     const water = buildWater(data, this.rig.sunDir, this.rig.fogColor);
     group.add(water.group);
-    const objects = new ObjectsView(data);
-    group.add(objects.group);
-    const props = new PropsView(layoutProps(level, data));
-    group.add(props.group);
+    const destruct = new DestructView(level, layout);
+    group.add(destruct.group);
     const effects = new Effects(data.heightAt);
     const trails = new Trails(data.heightAt);
-    const ghost = new Trails(data.heightAt);
-    const routes = new Trails(data.heightAt);
-    group.add(effects.group, trails.group, ghost.group, routes.group);
+    const guides = new Trails(data.heightAt);
+    group.add(effects.group, trails.group, guides.group);
     scene.add(group);
-    objects.onChange = (id, kind, pos) => this.onObjectChange(id, kind, pos);
-    this.w = { level, data, group, water, objects, props, effects, trails, ghost, routes };
-    this.coursePl = level.terrain.course ? makePolyline(level.terrain.course) : null;
-    const lp = levelProgress(this.progress, level.id);
-    this.plan = lp.lastPlan ? sanitizePlan(level, lp.lastPlan) : defaultPlan(level);
-    objects.sync(this.plan, false);
-    water.setActive(activeWater(level, this.plan), true);
     effects.setViewportHeight(this.rig.renderer.domElement.clientHeight * Math.min(2, window.devicePixelRatio || 1));
-    this.recording = null;
+    const paths = new Map(level.segments.map((s) => [s.id, makePolyline(s.path)]));
+    this.w = { level, data, layout, group, water, destruct, effects, trails, guides, paths };
     this.result = null;
   }
 
@@ -272,12 +175,11 @@ export class Game {
       l.classList.remove('gone');
     }
     await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30)));
-    this.sim?.dispose();
     this.sim = null;
     this.pieces.clear();
     this.buildWorld(level);
     this.rig.setLevel(level);
-    this.cam.setLevel(level, this.data.heightAt);
+    this.cam.setLevel(level, this.w.data.heightAt);
     this.progress.lastLevel = level.id;
     saveProgress(this.progress);
     this.showRestingBoulder();
@@ -298,7 +200,6 @@ export class Game {
     requestAnimationFrame(loop);
   }
 
-  // ------------------------------------------------------------------ helpers
   private resize() {
     this.rig.resize();
     this.cam.baseFov = this.rig.camera.fov;
@@ -309,143 +210,67 @@ export class Game {
     const c = this.comp;
     const look: RockLook = { tint: c.tint, speck: c.speck, gloss: c.gloss };
     this.pieces.setLook(look);
+    this.w.destruct.setBoulderLook(c.tint, c.speck, c.gloss);
+  }
+
+  private boulderShape = new Map<string, ReturnType<typeof generateBoulder>>();
+  private shapeFor(level: LevelDef) {
+    let s = this.boulderShape.get(level.id);
+    if (!s) this.boulderShape.set(level.id, (s = generateBoulder(level.boulder.radius, level.boulder.seed)));
+    return s;
   }
 
   private showRestingBoulder() {
-    const b = restingBoulder(this.level);
+    const [bx, bz] = this.level.boulder.position;
+    const y = this.w.data.heightAt(bx, bz) + this.level.boulder.radius * 0.92;
     this.pieces.clear();
     this.applyLook();
-    this.pieces.sync([{ id: 1, shape: b.shape, kind: 'stone', pos: b.pos, quat: [0, 0, 0, 1], scale: 1 }]);
+    this.pieces.sync([{ id: 1, shape: this.shapeFor(this.level), kind: 'stone', pos: [bx, y, bz], quat: [0, 0, 0, 1], scale: 1 }]);
   }
 
-  /** starting mass of this level's boulder in a given stone */
   private massFor(id: CompositionId): number {
-    return restingBoulder(this.level).shape.volume * composition(id).density * 1000;
-  }
-
-  private statesFromSim(s: Simulation): PieceState[] {
-    const out: PieceState[] = [];
-    for (const p of s.pieces.values()) {
-      const pose = s.pose(p);
-      out.push({ id: p.id, shape: p.shape, kind: p.kind, pos: pose.pos, quat: pose.quat, scale: pose.scale, smooth: pose.smooth });
-    }
-    return out;
-  }
-
-  private ndc(x: number, y: number): Vector2 {
-    const c = this.rig.renderer.domElement;
-    return new Vector2((x / c.clientWidth) * 2 - 1, -(y / c.clientHeight) * 2 + 1);
-  }
-
-  private pick(x: number, y: number): string | null {
-    this.raycaster.setFromCamera(this.ndc(x, y), this.rig.camera);
-    const hits = this.raycaster.intersectObjects(this.w.objects.pickTargets() as Object3D[], false);
-    if (hits.length) return hits[0].object.userData.objectId as string;
-    // forgiving touch: nearest object anchor on screen within ~46px
-    const c = this.rig.renderer.domElement;
-    let best: string | null = null;
-    let bestD = 46;
-    for (const o of this.level.objects) {
-      const a = this.w.objects.anchorOf(o.id);
-      if (!a) continue;
-      const st = this.plan[o.id];
-      if (st?.type === 'rock' && st.removed) continue;
-      const v = a.clone().project(this.rig.camera);
-      if (v.z > 1) continue;
-      const sx = (v.x * 0.5 + 0.5) * c.clientWidth,
-        sy = (-v.y * 0.5 + 0.5) * c.clientHeight;
-      const d = Math.hypot(sx - x, sy - y);
-      if (d < bestD) {
-        bestD = d;
-        best = o.id;
-      }
-    }
-    return best;
-  }
-
-  /** Where the pointer ray meets the ground (marching the heightfield). */
-  private groundPoint(x: number, y: number): Vector3 | null {
-    this.raycaster.setFromCamera(this.ndc(x, y), this.rig.camera);
-    const o = this.raycaster.ray.origin.clone();
-    const d = this.raycaster.ray.direction.clone();
-    let prev = o.clone();
-    for (let t = 0; t < 400; t += 0.6) {
-      const p = o.clone().addScaledVector(d, t);
-      if (p.y <= this.data.heightAt(p.x, p.z)) {
-        let a = prev,
-          b = p;
-        for (let i = 0; i < 12; i++) {
-          const m = a.clone().lerp(b, 0.5);
-          if (m.y <= this.data.heightAt(m.x, m.z)) b = m;
-          else a = m;
-        }
-        return b;
-      }
-      prev = p;
-    }
-    return null;
-  }
-
-  private obj(id: string): LevelObject {
-    return this.level.objects.find((o) => o.id === id)!;
-  }
-
-  private interventions(): number {
-    return countInterventions(this.level, this.plan);
-  }
-
-  private canModify(id: string): boolean {
-    const o = this.obj(id);
-    const st = this.plan[id] ?? defaultState(o);
-    return isModified(o, st) || this.interventions() < this.level.budget;
-  }
-
-  private courseYawAt(x: number, z: number): number {
-    if (!this.coursePl) return 0;
-    const h = pathDistance(this.coursePl, x, z);
-    return Math.atan2(h.tx, h.tz);
-  }
-
-  private zoneAt(z: number): { id: string; name: string } | null {
-    for (const q of this.level.zones ?? []) if (z >= q.z[0] && z < q.z[1]) return q;
-    return null;
+    return this.shapeFor(this.level).volume * composition(id).density * 1000;
   }
 
   // ------------------------------------------------------------------ flow
   private hideAll() {
     this.ui.hideTitle();
     this.ui.hideMountains();
-    this.ui.hidePlanning();
+    this.ui.hideReady();
     this.ui.hideRun();
     this.ui.hideResults();
-    this.ui.hideReplay();
     this.ui.tip(null);
   }
 
   private showTitle() {
     const medals: Record<Medal, number> = { none: 0, bronze: 0, silver: 0, gold: 0, platinum: 0 };
     let finished = 0;
+    let best = 0;
     for (const l of LEVELS) {
       const lp = this.progress.levels[l.id];
       if (lp?.finished) {
         finished++;
         medals[lp.medal]++;
       }
+      best = Math.max(best, lp?.bestScore ?? 0);
     }
-    this.ui.showTitle({ medals, finished, total: LEVELS.length });
+    this.ui.showTitle({ medals, finished, total: LEVELS.length, best });
+  }
+
+  private resetMountain() {
+    this.sim = null;
+    this.w.destruct.reset();
+    this.w.effects.clear();
+    this.w.trails.clear();
+    this.w.guides.clear();
+    this.guideFor = '';
+    this.showRestingBoulder();
   }
 
   private toTitle() {
     this.closeMenu();
-    this.sim?.dispose();
-    this.sim = null;
     this.hideAll();
-    this.clearMarkers();
-    this.w.trails.clear();
-    this.w.routes.clear();
-    this.w.objects.setPlanning(false);
-    this.resetObjectsView();
-    this.showRestingBoulder();
+    this.resetMountain();
     this.state = 'title';
     this.cam.setMode('intro');
     this.showTitle();
@@ -455,15 +280,8 @@ export class Game {
     this.audio.unlock();
     this.audio.click();
     this.closeMenu();
-    this.sim?.dispose();
-    this.sim = null;
     this.hideAll();
-    this.clearMarkers();
-    this.w.trails.clear();
-    this.w.routes.clear();
-    this.w.objects.setPlanning(false);
-    this.resetObjectsView();
-    this.showRestingBoulder();
+    this.resetMountain();
     this.state = 'mountains';
     this.cam.setMode('intro');
     const cards: MountainCard[] = LEVELS.map((level, i) => ({
@@ -481,7 +299,7 @@ export class Game {
     this.audio.click();
     this.ui.hideMountains();
     await this.loadLevel(level);
-    this.toPlanning();
+    this.toReady();
   }
 
   private nextLevel() {
@@ -491,42 +309,16 @@ export class Game {
     else this.showMountains();
   }
 
-  private resetObjectsView() {
-    this.w.objects.sync(this.plan, false);
-    for (const o of this.level.objects) {
-      if (o.type === 'soil') this.w.objects.slump(o.id, false);
-      if (o.type === 'branches') this.w.objects.smash(o.id, false, false);
-    }
-    this.w.props.reset();
-  }
-
-  private toPlanning() {
+  /** At the summit: pick a stone, then let go. */
+  private toReady() {
     this.closeMenu();
-    this.sim?.dispose();
-    this.sim = null;
-    this.state = 'plan';
     this.hideAll();
-    this.w.trails.clear();
-    this.clearMarkers();
-    this.w.effects.clear();
-    this.w.objects.setPlanning(true);
-    this.resetObjectsView();
-    this.w.water.setActive(activeWater(this.level, this.plan));
-    this.showRestingBoulder();
-    this.cam.setMode('plan');
+    this.resetMountain();
+    this.state = 'ready';
+    this.cam.setMode('summit');
     const lp = levelProgress(this.progress, this.level.id);
-    this.ui.showPlanning(this.level, lp);
+    this.ui.showReady(this.level, lp, !this.progress.tutorial.decided);
     this.refreshCompositions();
-    this.refreshChanges();
-    this.updateGhost();
-    this.updateRoutes();
-    this.addPlanMarkers();
-    if (!this.progress.tutorial.selected) {
-      const touch = window.matchMedia('(pointer: coarse)').matches;
-      this.ui.tip(
-        `Survey the descent, then plan it: ${touch ? 'tap' : 'click'} the glowing objects to move, fell, clear or lever them — ${this.level.budget} moves. ${touch ? 'Swipe' : 'Drag'} to look around.`,
-      );
-    } else if (!this.progress.tutorial.released) this.ui.tip('Ready? Release the boulder — then drag left and right to lean.', 5000);
   }
 
   private refreshCompositions() {
@@ -543,711 +335,371 @@ export class Game {
     this.audio.impact(0.4, 'granite');
     this.applyLook();
     this.refreshCompositions();
-    this.renderContext();
-    this.ui.tip(`${composition(id).name}: ${composition(id).blurb}`, 3200);
-  }
-
-  /** Fly the planning camera to a stretch of the course. */
-  private goZone(id: string) {
-    const z = this.level.zones?.find((q) => q.id === id);
-    if (!z) return;
-    const zc = (z.z[0] + z.z[1]) / 2;
-    let x = 0;
-    if (this.coursePl) {
-      const course = this.level.terrain.course!;
-      for (let i = 0; i < course.length - 1; i++)
-        if (course[i][1] <= zc && course[i + 1][1] >= zc) {
-          const u = (zc - course[i][1]) / (course[i + 1][1] - course[i][1]);
-          x = course[i][0] + (course[i + 1][0] - course[i][0]) * u;
-        }
-    }
-    this.audio.click();
-    this.cam.focusOn(new Vector3(x, this.data.heightAt(x, zc), zc), Math.max(55, (z.z[1] - z.z[0]) * 0.7));
-  }
-
-  /** The survey: a glide down the mountain before you commit. */
-  private survey() {
-    if (this.state !== 'plan') return;
-    this.audio.whoosh();
-    this.select(null);
-    this.clearMarkers();
-    this.ui.setSurveying(true);
-    this.routesOn = true;
-    this.updateRoutes();
-    const course = this.level.terrain.course!;
-    const start = this.level.boulder.position[1];
-    const end = this.level.finish.z + 10;
-    this.cam.survey(course.filter((p) => p[1] >= start - 5 && p[1] <= end + 40));
-  }
-  private endSurvey(early = false) {
-    if (early) this.cam.setMode('plan');
-    this.ui.setSurveying(false);
-    if (this.state === 'plan') this.addPlanMarkers();
-  }
-
-  private refreshChanges() {
-    this.ui.setChanges(this.interventions(), this.level.budget);
-  }
-
-  private updateGhost() {
-    this.w.ghost.clear();
-    const lp = levelProgress(this.progress, this.level.id);
-    const available = !!lp.lastTrail && lp.lastTrail.length > 1;
-    this.ui.setGhost(this.ghostOn, available);
-    if (this.state === 'plan' && this.ghostOn && lp.lastTrail) this.w.ghost.add(lp.lastTrail, new Color(1, 0.93, 0.8), 0.9, { dashed: true, opacity: 0.55 });
-  }
-
-  private updateRoutes() {
-    this.w.routes.clear();
-    this.ui.setRoutes(this.routesOn);
-    if (this.state !== 'plan' || !this.routesOn) return;
-    this.level.routes.forEach((r, i) => {
-      const pl = makePolyline(r.path);
-      const pts: [number, number, number][] = [];
-      for (let s = 0; s <= pl.length; s += 2) {
-        let k = 0;
-        while (k < pl.cum.length - 2 && pl.cum[k + 1] < s) k++;
-        const a = pl.pts[k],
-          b = pl.pts[k + 1];
-        const u = (s - pl.cum[k]) / (pl.cum[k + 1] - pl.cum[k] || 1);
-        const x = a[0] + (b[0] - a[0]) * u,
-          z = a[1] + (b[1] - a[1]) * u;
-        pts.push([x, this.data.heightAt(x, z) + 0.25, z]);
-      }
-      this.w.routes.add(pts, ROUTE_COLORS[i % ROUTE_COLORS.length], 0.7, { dashed: true, opacity: 0.8 });
-    });
-    this.clearMarkers();
-    this.addPlanMarkers();
-  }
-
-  private resetLevel() {
-    this.audio.click();
-    if (this.state !== 'plan') this.toPlanning();
-    this.plan = defaultPlan(this.level);
-    this.w.objects.sync(this.plan, true);
-    this.w.water.setActive(activeWater(this.level, this.plan));
-    this.select(null);
-    this.refreshChanges();
-    this.cam.resetPlan();
-    this.ui.tip('The mountain is as you found it.', 2200);
-  }
-
-  // ------------------------------------------------------------------ selection & actions
-  private select(id: string | null) {
-    this.selected = id;
-    this.w.objects.setSelected(id);
-    if (!id) {
-      this.ui.hideContext();
-      return;
-    }
-    if (!this.progress.tutorial.selected) {
-      this.progress.tutorial.selected = true;
-      saveProgress(this.progress);
-      this.ui.tip(null);
-    }
-    const a = this.w.objects.anchorOf(id);
-    if (a && !this.dragging) {
-      const v = a.clone().project(this.rig.camera);
-      if (Math.abs(v.x) > 0.5 || v.y < -0.15 || v.y > 0.6) this.cam.focusOn(a);
-    }
-    this.renderContext();
-  }
-
-  /** what it takes (speed) for the current stone to burst through a barrier */
-  private breakSpeed(momentum: number): string {
-    const m = this.massFor(this.progress.composition);
-    return `${Math.round((momentum / m) * 3.6)} km/h`;
-  }
-
-  private renderContext() {
-    const id = this.selected;
-    if (!id) return;
-    const o = this.obj(id);
-    const st = this.plan[id] ?? defaultState(o);
-    const modified = isModified(o, st);
-    const locked = !this.canModify(id);
-    const acts: ContextAction[] = [];
-    let tag = '';
-    let text = o.hint;
-    let note: string | undefined;
-    let kind: 'hazard' | 'block' | 'tweak' = 'tweak';
-    switch (o.type) {
-      case 'rock': {
-        const s = st as Extract<ObjectState, { type: 'rock' }>;
-        tag = 'Loose boulder · drag to move';
-        kind = 'hazard';
-        acts.push(s.removed ? { key: 'restore', label: 'Put it back', icon: 'undo' } : { key: 'remove', label: 'Lever it away', primary: true, disabled: locked });
-        if (!s.removed && modified) acts.push({ key: 'restore', label: 'Return', icon: 'undo' });
-        note = s.removed ? undefined : `Drag it to move it (up to ${o.moveRadius} m).`;
-        break;
-      }
-      case 'log': {
-        const s = st as Extract<ObjectState, { type: 'log' }>;
-        tag = 'Trunk · rotate and drag';
-        const a = Math.round((((s.yaw / deg) % 180) + 180) % 180);
-        const desc =
-          Math.abs(a - 90) < 16
-            ? 'it lies along the slope — out of the way'
-            : a < 16 || a > 164
-              ? 'it lies straight across — a barrier'
-              : a < 90
-                ? 'it is angled to turn the boulder to the right'
-                : 'it is angled to turn the boulder to the left';
-        text = `${o.hint} Now ${desc}.`;
-        acts.push({ key: 'rotL', label: '15°', icon: 'rotL', disabled: locked, repeat: true }, { key: 'rotR', label: '15°', icon: 'rotR', disabled: locked, repeat: true });
-        if (modified) acts.push({ key: 'restore', label: 'Restore', icon: 'undo' });
-        note = `Drag the trunk to move it (up to ${o.moveRadius} m).`;
-        break;
-      }
-      case 'branches': {
-        const s = st as Extract<ObjectState, { type: 'branches' }>;
-        kind = 'block';
-        tag = s.removed ? 'Barrier · cleared' : o.breakMomentum ? 'Barrier · breakable' : 'Barrier';
-        acts.push(s.removed ? { key: 'restore', label: 'Put it back', icon: 'undo' } : { key: 'remove', label: o.style === 'logjam' ? 'Clear the jam' : o.style === 'fence' || o.style === 'trestle' ? 'Pull it down' : 'Clear it', primary: true, disabled: locked });
-        if (!s.removed) note = o.breakMomentum ? `Your ${this.comp.name.toLowerCase()} boulder bursts through at about ${this.breakSpeed(o.breakMomentum)} or more. Slower, and it stops dead.` : 'Nothing breaks through this. Clear it, or go another way.';
-        break;
-      }
-      case 'tree': {
-        const s = st as Extract<ObjectState, { type: 'tree' }>;
-        tag = 'Tree · fell it';
-        for (const f of o.fellOptions) acts.push({ key: `fell:${f.id}`, label: f.label, active: s.felled === f.id, disabled: locked && s.felled !== f.id, primary: !s.felled && f.id === o.fellOptions[0].id });
-        if (s.felled) acts.push({ key: 'restore', label: 'Let it stand', icon: 'undo' });
-        break;
-      }
-      case 'soil': {
-        const s = st as Extract<ObjectState, { type: 'soil' }>;
-        const what = o.material === 'snow' ? 'Snowbank' : o.material === 'ash' ? 'Ash drift' : 'Earth bank';
-        tag = s.dug ? `${what} · dug out` : `${what} · cushion`;
-        acts.push(s.dug ? { key: 'restore', label: 'Heap it back', icon: 'undo' } : { key: 'dig', label: 'Dig it out', primary: true, disabled: locked });
-        const soaked = o.saturatedBy && activeWater(this.level, this.plan).has(o.saturatedBy);
-        if (!s.dug) note = soaked ? 'Water is soaking this bank — it will slump when struck.' : 'Soft: it soaks up a hit but swallows speed.';
-        break;
-      }
-      case 'outcrop': {
-        const s = st as Extract<ObjectState, { type: 'outcrop' }>;
-        tag = s.split ? 'Rock · levered' : 'Rock · lever it';
-        kind = 'hazard';
-        acts.push(s.split ? { key: 'restore', label: 'Put it back', icon: 'undo' } : { key: 'split', label: o.actionLabel ?? 'Lever it over', primary: true, disabled: locked });
-        break;
-      }
-      case 'ice': {
-        const s = st as Extract<ObjectState, { type: 'ice' }>;
-        tag = 'Ice · break it';
-        acts.push(s.broken ? { key: 'restore', label: 'Let it freeze', icon: 'undo' } : { key: 'break', label: 'Break the ice', primary: true, disabled: locked });
-        break;
-      }
-      case 'gate': {
-        const s = st as Extract<ObjectState, { type: 'gate' }>;
-        tag = 'Water · divert it';
-        for (const op of o.options) acts.push({ key: `gate:${op.id}`, label: op.label, active: s.option === op.id, disabled: locked && s.option !== op.id });
-        break;
-      }
-    }
-    if (locked) note = `You’ve used all ${this.level.budget} moves. Undo one to free it up.`;
-    this.ui.showContext(o.name, tag, text, acts, note, kind);
-  }
-
-  private setState(id: string, s: ObjectState, animate = true) {
-    this.plan[id] = s;
-    this.w.objects.sync(this.plan, animate);
-    this.w.water.setActive(activeWater(this.level, this.plan));
-    this.refreshChanges();
-    this.renderContext();
-    window.setTimeout(() => {
-      if (this.state !== 'plan' || this.cam.surveying) return;
-      this.clearMarkers();
-      this.addPlanMarkers();
-    }, 1300);
-  }
-
-  private doAction(key: string) {
-    const id = this.selected;
-    if (!id) return;
-    const o = this.obj(id);
-    const st = JSON.parse(JSON.stringify(this.plan[id] ?? defaultState(o))) as ObjectState;
-    if (key === 'restore') {
-      this.setState(id, defaultState(o));
-      return;
-    }
-    if (!this.canModify(id) && !key.startsWith('gate:') && !key.startsWith('fell:')) return;
-    switch (st.type) {
-      case 'rock':
-        if (key === 'remove') this.setState(id, { ...st, removed: true });
-        break;
-      case 'log':
-        if (key === 'rotL' || key === 'rotR') {
-          const step = 15 * deg * (key === 'rotL' ? -1 : 1);
-          const yaw = Math.round((st.yaw + step) / (15 * deg)) * 15 * deg;
-          this.setState(id, { ...st, yaw }, true);
-          this.audio.impact(0.25, 'wood');
-        }
-        break;
-      case 'branches':
-        if (key === 'remove') this.setState(id, { ...st, removed: true });
-        break;
-      case 'tree':
-        if (key.startsWith('fell:')) {
-          const f = key.slice(5);
-          if (st.felled && st.felled !== f) {
-            this.plan[id] = { type: 'tree', felled: null };
-            this.w.objects.sync(this.plan, false);
-          }
-          if (!this.canModify(id) && !st.felled) return;
-          this.setState(id, { type: 'tree', felled: f });
-        }
-        break;
-      case 'soil':
-        if (key === 'dig') this.setState(id, { ...st, dug: true });
-        break;
-      case 'outcrop':
-        if (key === 'split') this.setState(id, { ...st, split: true });
-        break;
-      case 'ice':
-        if (key === 'break') this.setState(id, { ...st, broken: true });
-        break;
-      case 'gate':
-        if (key.startsWith('gate:')) {
-          const opt = key.slice(5);
-          if (opt !== st.option && (this.canModify(id) || opt === (o as Extract<LevelObject, { type: 'gate' }>).initial)) this.setState(id, { ...st, option: opt });
-        }
-        break;
-    }
-  }
-
-  private onObjectChange(id: string, kind: string, pos: Vector3) {
-    const fx = this.w.effects;
-    switch (kind) {
-      case 'lift':
-        this.audio.grind();
-        fx.dust(pos, 0.2, new Color(0.5, 0.42, 0.32));
-        break;
-      case 'snap':
-        this.audio.snap();
-        fx.shards(pos, new Color(0.45, 0.36, 0.25), 40);
-        break;
-      case 'fell':
-        this.audio.treeFall();
-        window.setTimeout(() => {
-          const a = this.w.objects.anchorOf(id);
-          if (a) fx.dust(a, 0.6, new Color(0.55, 0.5, 0.4));
-          this.cam.shake(0.25);
-        }, 1300);
-        break;
-      case 'dig':
-        this.audio.dig();
-        fx.earth(pos, 0.8);
-        break;
-      case 'split':
-        this.audio.fracture(0.6);
-        fx.dust(pos, 0.7);
-        fx.grit(pos, 0.6);
-        window.setTimeout(() => this.cam.shake(0.3), 600);
-        break;
-      case 'shatter':
-        this.audio.shatter();
-        fx.shards(pos, new Color(0.85, 0.93, 1), 60);
-        break;
-      case 'gate':
-        this.audio.gate();
-        break;
-      case 'log':
-        break;
-      default:
-        this.audio.click();
-    }
-  }
-
-  // ------------------------------------------------------------------ gestures
-  private tap(x: number, y: number) {
-    this.audio.unlock();
-    const id = this.pick(x, y);
-    if (id) this.audio.click();
-    this.select(id === this.selected ? null : id);
-  }
-
-  private grab(x: number, y: number): boolean {
-    const id = this.pick(x, y);
-    if (!id) return false;
-    const o = this.obj(id);
-    if (o.type !== 'rock' && o.type !== 'log') return false;
-    const st = this.plan[id] ?? defaultState(o);
-    if (st.type === 'rock' && st.removed) return false;
-    if (!this.canModify(id)) {
-      this.ui.tip(`You’ve used all ${this.level.budget} moves. Undo one to free it up.`, 2500);
-      return true;
-    }
-    const g = this.groundPoint(x, y);
-    if (!g) return false;
-    const s = st as { x: number; z: number };
-    this.dragging = { id, offX: s.x - g.x, offZ: s.z - g.z };
-    this.select(id);
-    return true;
-  }
-
-  private dragTo(x: number, y: number) {
-    if (!this.dragging) return;
-    const g = this.groundPoint(x, y);
-    if (!g) return;
-    const { id } = this.dragging;
-    const o = this.obj(id) as Extract<LevelObject, { type: 'rock' | 'log' }>;
-    let nx = g.x + this.dragging.offX;
-    let nz = g.z + this.dragging.offZ;
-    const dx = nx - o.position[0],
-      dz = nz - o.position[1];
-    const d = Math.hypot(dx, dz);
-    if (d > o.moveRadius) {
-      nx = o.position[0] + (dx / d) * o.moveRadius;
-      nz = o.position[1] + (dz / d) * o.moveRadius;
-    }
-    const b = this.level.terrain.bounds;
-    nx = clamp(nx, b.x[0] + 3, b.x[1] - 3);
-    nz = clamp(nz, b.z[0] + 3, b.z[1] - 3);
-    const st = this.plan[id] ?? defaultState(o);
-    this.plan[id] = { ...(st as object), x: nx, z: nz } as ObjectState;
-    this.w.objects.sync(this.plan, false);
-    this.refreshChanges();
-  }
-
-  private dropDrag() {
-    if (!this.dragging) return;
-    const o = this.obj(this.dragging.id);
-    this.audio.impact(0.3, o.type === 'log' ? 'wood' : 'granite');
-    const a = this.w.objects.anchorOf(this.dragging.id);
-    if (a) this.w.effects.dust(a, 0.15, new Color(0.5, 0.45, 0.36));
-    this.dragging = null;
-    this.renderContext();
+    this.ui.tip(`<b>${composition(id).name}</b> — ${composition(id).blurb}`, 3200);
   }
 
   private key(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       if (this.menuOpen) this.closeMenu();
-      else if (this.selected) this.select(null);
       else this.openMenu();
+      return;
     }
+    if (this.state === 'run' && this.sim?.decision) {
+      if (e.key === 'ArrowLeft' || e.key === 'a') this.choose('left');
+      if (e.key === 'ArrowRight' || e.key === 'd') this.choose('right');
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'ArrowUp' || e.key === 'w') this.choose('centre');
+    }
+    if (e.key === ' ' && this.state === 'run') this.togglePause();
     if (e.key === 'Enter' && !this.menuOpen) {
       if (this.state === 'title') this.showMountains();
-      else if (this.state === 'results') this.startRun();
-      else if (this.state === 'plan' && !this.selected) this.release();
-    }
-    if (this.state === 'sim' && e.key === ' ') this.togglePause();
-    if (e.key === 'ArrowLeft' || e.key === 'a') this.steerKeys.left = true;
-    if (e.key === 'ArrowRight' || e.key === 'd') this.steerKeys.right = true;
-    if (this.state === 'plan' && this.selected && this.obj(this.selected).type === 'log') {
-      if (e.key === 'q') this.doAction('rotL');
-      if (e.key === 'e') this.doAction('rotR');
+      else if (this.state === 'ready') this.startRun();
+      else if (this.state === 'results') {
+        if (!this.resultsShown) this.revealResults();
+        else this.startRun();
+      }
     }
   }
 
   // ------------------------------------------------------------------ the run
-  private release() {
-    if (this.state !== 'plan') return;
-    this.startRun();
-  }
-
   private startRun() {
     this.audio.unlock();
     this.closeMenu();
     this.hideAll();
-    this.w.trails.clear();
-    this.w.routes.clear();
-    this.steerKeys = { left: false, right: false };
-    this.steerTouch = 0;
-    this.steerButtons = 0;
-    this.resetObjectsView();
-    this.select(null);
-    this.clearMarkers();
-    this.w.ghost.clear();
-    this.w.objects.setPlanning(false);
-    try {
-      this.sim?.dispose();
-      this.sim = new Simulation(this.R, this.level, clonePlan(this.plan), { composition: this.progress.composition });
-    } catch (err) {
-      console.error(err);
-      this.ui.tip('The mountain could not be prepared. Try again.', 3000);
-      this.toPlanning();
-      return;
-    }
+    this.resetMountain();
+    // every run plays out a little differently: the same choices, a different landslide
+    this.sim = new RunSim(this.level, this.w.data, { composition: this.progress.composition, seed: (Math.random() * 2 ** 31) | 0 });
     const lp = levelProgress(this.progress, this.level.id);
-    lp.lastPlan = clonePlan(this.plan);
     lp.attempts++;
     saveProgress(this.progress);
-    this.state = 'sim';
+    this.state = 'run';
     this.acc = 0;
     this.timeScale = 1;
     this.fast = false;
     this.paused = false;
     this.slowUntil = 0;
-    this.runTier = 'platinum';
-    this.w.effects.clear();
-    this.pieces.clear();
+    this.resultsShown = true;
     this.applyLook();
-    const rb = restingBoulder(this.level);
-    this.cam.subject.set(rb.pos[0], rb.pos[1], rb.pos[2]);
-    this.cam.subjectYaw = this.courseYawAt(rb.pos[0], rb.pos[2]);
-    this.cam.setMode('release');
-    this.releaseUntil = this.now + 1.1;
-    this.ui.showRun(this.level.zones ?? [], this.sim.startMass, this.level.medals);
+    this.cam.setMode('chase');
+    // the forks, as fractions of the way down (for the progress line)
+    const z0 = this.level.boulder.position[1];
+    const fin = this.level.segments.find((s) => s.kind === 'finale')!.path;
+    const z1 = fin[fin.length - 1][1];
+    const forks = [...new Set(this.level.segments.filter((s) => s.next.length > 1).map((s) => s.path[s.path.length - 1][1]))].map((z) => (z - z0) / (z1 - z0));
+    this.ui.showRun(forks);
+    this.sim.release();
     this.audio.release();
-    this.audio.riser(1.2);
+    this.audio.riser(1.4);
+  }
+
+  private choose(side: 'left' | 'right' | 'centre') {
+    const sim = this.sim;
+    if (!sim?.decision || sim.decision.chosen !== null) return;
+    if (sim.chooseSide(side)) {
+      if (!this.progress.tutorial.decided) {
+        this.progress.tutorial.decided = true;
+        saveProgress(this.progress);
+      }
+    }
   }
 
   private togglePause() {
-    if (this.state === 'sim') {
-      this.paused = !this.paused;
-      this.ui.setPaused(this.paused);
+    if (this.state !== 'run') return;
+    this.paused = !this.paused;
+    this.ui.setPaused(this.paused);
+    if (this.paused) this.openMenu();
+    else this.closeMenu();
+  }
+
+  private slow(scale: number, seconds: number) {
+    if (this.now + seconds > this.slowUntil || scale < this.slowTo) {
+      this.slowTo = scale;
+      this.slowUntil = this.now + seconds;
     }
   }
 
-  private toggleFast() {
-    this.fast = !this.fast;
-    if (this.fast) this.ui.callout('Fast forward', 900);
-  }
-
-  private stepSim(dt: number) {
+  private stepRun(dt: number) {
     const sim = this.sim!;
     if (this.paused || this.menuOpen) return;
     let scale = this.fast ? 4 : 1;
-    if (!this.fast && this.now < this.hitStopUntil) scale = 0.08;
-    else if (this.now < this.slowUntil && !this.fast) scale = 0.35;
-    this.timeScale += (scale - this.timeScale) * Math.min(1, dt * 12);
+    if (!this.fast && this.now < this.slowUntil) scale = this.slowTo;
+    else if (sim.decision && sim.decision.chosen === null) scale = 0.7;
+    this.timeScale += (scale - this.timeScale) * Math.min(1, dt * 10);
     this.acc += dt * this.timeScale;
-    const keys = (this.steerKeys.right ? 1 : 0) - (this.steerKeys.left ? 1 : 0);
-    const want = clamp(keys + this.steerButtons + this.steerTouch, -1, 1);
-    this.steerSmoothed += (want - this.steerSmoothed) * Math.min(1, dt * 22);
-    this.ui.setSteer(this.steerSmoothed);
-    sim.steer = this.steerSmoothed;
     let steps = 0;
-    const maxSteps = this.fast ? 16 : 6;
-    try {
-      while (this.acc >= DT && steps < maxSteps && !sim.done) {
-        sim.stepOnce();
-        this.acc -= DT;
-        steps++;
-      }
-    } catch (err) {
-      console.error(err);
-      sim.finish('unstable');
+    const max = this.fast ? 16 : 5;
+    while (this.acc >= DT && steps < max && !sim.done) {
+      sim.stepOnce();
+      this.acc -= DT;
+      steps++;
     }
-    if (steps >= maxSteps) this.acc = Math.min(this.acc, DT);
-    for (const e of sim.drainEvents()) this.handleEvent(e, true);
-    const states = this.statesFromSim(sim);
-    this.pieces.sync(states);
-    this.groundFx(sim, dt);
-    if (this.cam.mode === 'release') {
-      const h = sim.hero;
-      if (h) {
-        const t = h.body.translation();
-        this.cam.subject.set(t.x, t.y, t.z);
+    if (steps >= max) this.acc = Math.min(this.acc, DT);
+    for (const e of sim.drainEvents()) this.handleEvent(e);
+    if (!this.sim) return;
+
+    // the boulder
+    if (!sim.shattered) {
+      this.pieces.sync([{ id: 1, shape: sim.shape, kind: 'stone', pos: [sim.pos.x, sim.pos.y, sim.pos.z], quat: [sim.quat.x, sim.quat.y, sim.quat.z, sim.quat.w], scale: 1 }]);
+      this.groundFx(sim, dt);
+    } else this.pieces.sync([]);
+    this.w.destruct.update(sim);
+
+    // the fork ahead: show the ways
+    const d = sim.decision;
+    if (d) this.ui.showDecision(d, !this.progress.tutorial.decided);
+    if (sim.forkAhead && this.guideFor !== sim.seg.seg.id) this.drawGuides();
+
+    // the camera
+    if (this.cam.mode === 'chase' && sim.kind === 'finale') {
+      const hall = this.w.layout.structures.find((s) => s.finale);
+      if (hall && Math.hypot(hall.x - sim.pos.x, hall.z - sim.pos.z) < 30 + sim.speed * 0.6) {
+        this.cam.finaleAt.set(hall.x, hall.y, hall.z);
+        this.cam.finaleYaw = Math.atan2(sim.heading.x, sim.heading.z);
+        this.cam.setMode('finale');
       }
-      if (this.now > this.releaseUntil) this.cam.setMode('follow');
     }
-    this.followFrom(states, sim.leader?.id ?? -1, (id) => {
-      const p = sim.pieces.get(id);
-      if (!p) return new Vector3();
-      const l = p.body.linvel();
-      return new Vector3(l.x, l.y, l.z);
+    this.hudTimer -= dt;
+    if (this.hudTimer <= 0) {
+      this.hudTimer = 0.05;
+      this.ui.setRun({ score: sim.score, speed: sim.speed, integrity: sim.integrity / sim.maxIntegrity, progress: sim.progress, segment: sim.segmentName });
+    }
+    if (sim.done && this.state === 'run') this.finishRun();
+  }
+
+  /** where the boulder is headed: a point on the route ahead, on the way it is committed to */
+  private aheadPoint(sim: RunSim, dist: number): Vector3 {
+    let s = sim.s + dist;
+    let seg = sim.seg.seg;
+    if (s > sim.seg.len && seg.next.length) {
+      s -= sim.seg.len;
+      const d = sim.decision;
+      seg = this.level.segments.find((q) => q.id === seg.next[d ? (d.chosen ?? d.fallback) : 0])!;
+    }
+    const pl = this.w.paths.get(seg.id)!;
+    const p = pathPointAt(pl, Math.min(s, pl.length));
+    return new Vector3(p.x, this.w.data.heightAt(p.x, p.z), p.z);
+  }
+
+  private chaseInfo(): ChaseInfo | undefined {
+    const sim = this.sim;
+    if (!sim) return undefined;
+    return {
+      pos: sim.pos,
+      ahead: this.aheadPoint(sim, 14 + sim.speed * 0.7),
+      speed: sim.speed,
+      fork: sim.forkAhead ? { t: sim.forkAhead.t, at: sim.forkAhead.at } : null,
+      air: !sim.grounded,
+      canopy: sim.kind === 'forest' || sim.kind === 'camp',
+    };
+  }
+
+  /** Ribbons along the first stretch of each way at the coming fork, in its own colour. */
+  private drawGuides(chosen?: number) {
+    const sim = this.sim;
+    if (!sim) return;
+    const next = sim.seg.seg.next;
+    this.guideFor = sim.seg.seg.id;
+    this.w.guides.clear();
+    next.forEach((id, i) => {
+      if (chosen !== undefined && chosen !== i) return;
+      const pl = this.w.paths.get(id)!;
+      const pts: [number, number, number][] = [];
+      for (let s = 2; s <= Math.min(pl.length, 70); s += 2) {
+        const p = pathPointAt(pl, s);
+        pts.push([p.x, this.w.data.heightAt(p.x, p.z) + 0.3, p.z]);
+      }
+      this.w.guides.add(pts, GUIDE[i % GUIDE.length], chosen !== undefined ? 2.4 : 1.6, { dashed: chosen === undefined, opacity: chosen !== undefined ? 0.75 : 0.85 });
     });
-    this.runStatusTimer -= dt;
-    if (this.runStatusTimer <= 0) {
-      this.runStatusTimer = 0.05;
-      const lead = sim.leader;
-      const mass = sim.liveMass;
-      this.ui.setMass(mass);
-      const lz = lead?.body.translation().z ?? 0;
-      const v = lead?.body.linvel();
-      const z0 = this.level.boulder.position[1];
-      this.ui.setRun({
-        progress: (lz - z0) / (this.level.finish.z - z0),
-        zone: this.zoneAt(lz)?.name ?? '',
-        speed: v ? Math.hypot(v.x, v.y, v.z) : 0,
-      });
-      // a medal slipping away is news
-      const f = mass / sim.startMass;
-      const m = this.level.medals;
-      const tier: Medal = f >= m.platinum ? 'platinum' : f >= m.gold ? 'gold' : f >= m.silver ? 'silver' : 'bronze';
-      if (MEDALS.indexOf(tier) < MEDALS.indexOf(this.runTier) && !sim.crossed) {
-        this.ui.callout(`${this.runTier[0].toUpperCase()}${this.runTier.slice(1)} slips away`, 1800);
-        this.runTier = tier;
-      }
-    }
-    if (sim.done) this.finishRun();
   }
 
-  /** Gravel spray under a rolling stone. */
-  private groundFx(sim: Simulation, dt: number) {
-    const h = sim.hero;
-    if (!h) return;
-    const t = h.body.translation();
-    const v = h.body.linvel();
-    const vel = new Vector3(v.x, v.y, v.z);
-    const sp = vel.length();
-    const grounded = sim.step - h.lastContactStep < 4 && !h.wet;
-    if (grounded && sp > 5) {
-      this.sprayAcc += dt * Math.min(1.5, sp / 12) * (0.5 + Math.min(1, h.size));
-      const surf = h.contactSurface;
-      const col =
-        surf === 'snow' || surf === 'ice'
-          ? new Color(0.95, 0.97, 1)
-          : surf === 'sand'
-            ? new Color(0.95, 0.82, 0.58)
-            : surf === 'mud'
-              ? new Color(0.32, 0.24, 0.16)
-              : surf === 'ash'
-                ? new Color(0.35, 0.33, 0.32)
-                : surf === 'meadow' || surf === 'soil'
-                  ? new Color(0.42, 0.36, 0.22)
-                  : new Color(0.62, 0.56, 0.48);
-      while (this.sprayAcc > 0.02) {
-        this.sprayAcc -= 0.02;
-        const r = h.shape.radius * h.physScale;
-        this.w.effects.spray(new Vector3(t.x, t.y - r * 0.8, t.z), vel, 1, col);
-      }
+  private groundFx(sim: RunSim, dt: number) {
+    if (!sim.grounded || sim.speed < 6) return;
+    this.sprayAcc += dt * Math.min(1.5, sim.speed / 12);
+    const k = sim.kind;
+    const col = k === 'forest' || k === 'camp' ? new Color(0.4, 0.32, 0.2) : new Color(...this.level.theme.dust).multiplyScalar(0.8);
+    while (this.sprayAcc > 0.025) {
+      this.sprayAcc -= 0.025;
+      this.w.effects.spray(new Vector3(sim.pos.x, sim.pos.y - this.level.boulder.radius * 0.8, sim.pos.z), sim.vel, 1.4, col);
     }
   }
 
-  private followFrom(states: PieceState[], leaderId: number, velOf: (id: number) => Vector3) {
-    const lead = states.find((s) => s.id === leaderId) ?? states.find((s) => s.kind === 'stone');
-    if (!lead) return;
-    const focus = new Vector3(...lead.pos);
-    const vel = velOf(lead.id);
-    let spread = 0;
-    for (const s of states) {
-      if (s.kind !== 'stone') continue;
-      const d = focus.distanceTo(new Vector3(...s.pos));
-      if (d < 26) spread = Math.max(spread, d);
-    }
-    const r = lead.shape.radius * lead.scale;
-    const courseYaw = this.coursePl ? this.courseYawAt(focus.x, focus.z) : undefined;
-    const wet = this.sim?.hero?.wet ?? false;
-    this.followInfo = { focus: focus.add(new Vector3(0, r * 0.4, 0)), vel, spread: Math.min(18, spread), small: r < 0.3, size: r, courseYaw, wet };
-    let rolling = 0;
-    let gravel = 0;
-    for (const s of states) {
-      if (s.kind !== 'stone') continue;
-      const v = velOf(s.id).length();
-      const ground = this.data.heightAt(s.pos[0], s.pos[2]);
-      if (s.pos[1] - ground > s.shape.radius * 1.4 + 0.3) continue;
-      rolling += Math.min(1, v / 12) * Math.min(1, s.shape.volume / 4);
-      gravel += Math.min(1, v / 8) * 0.25;
-    }
-    this.rolling = Math.min(1, rolling);
-    this.gravel = Math.min(1, gravel);
-  }
-
-  private squashHero(amount: number, live: boolean) {
-    const id = live ? this.sim?.hero?.id : this.recording?.leader[Math.min(this.recording.leader.length - 1, Math.max(0, Math.round(this.replayT)))];
-    if (id !== undefined) this.pieces.squash(id, amount);
-  }
-
-  private screenPan(p: Vector3): number {
-    const v = p.clone().project(this.rig.camera);
-    return clamp(v.x, -1, 1) * 0.7;
-  }
-
-  private screenPos(p: Vector3): { x: number; y: number } {
+  private screen(p: Vector3): { x: number; y: number; on: boolean } {
     const v = p.clone().project(this.rig.camera);
     const c = this.rig.renderer.domElement;
-    return { x: clamp((v.x * 0.5 + 0.5) * c.clientWidth, 80, c.clientWidth - 80), y: clamp((-v.y * 0.5 + 0.5) * c.clientHeight - 40, 150, c.clientHeight - 170) };
+    return { x: clamp((v.x * 0.5 + 0.5) * c.clientWidth, 70, c.clientWidth - 70), y: clamp((-v.y * 0.5 + 0.5) * c.clientHeight - 30, 120, c.clientHeight - 160), on: v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 };
   }
 
-  private handleEvent(e: SimEvent, live: boolean) {
+  /** limit how often one kind of sound plays */
+  private sound(kind: string, gap: number): boolean {
+    const t = this.lastSound.get(kind) ?? -1;
+    if (this.now - t < gap) return false;
+    this.lastSound.set(kind, this.now);
+    return true;
+  }
+
+  private handleEvent(e: RunEvent) {
+    const sim = this.sim!;
     const pos = new Vector3(...e.pos);
-    const pan = this.screenPan(pos);
+    const v = pos.clone().project(this.rig.camera);
+    const pan = clamp(v.x, -1, 1) * 0.7;
     const dist = pos.distanceTo(this.rig.camera.position);
-    const att = clamp(40 / Math.max(10, dist), 0.3, 1);
-    const fx = live || this.replaySpeed >= 1;
-    const eff = this.w.effects;
+    const att = clamp(30 / Math.max(10, dist), 0.25, 1);
+    const fx = this.w.effects;
+    const dust = new Color(...this.level.theme.dust);
+    const wood = new Color(...this.level.theme.wood);
     switch (e.type) {
-      case 'breakoff':
-        this.audio.fracture(0.8, 0);
-        eff.dust(pos.clone().add(new Vector3(0, -0.5, 3)), 0.3);
-        eff.grit(pos, 0.6);
-        this.cam.shake(0.6);
-        if (live) this.slowUntil = this.now + 0.7;
+      case 'release':
+        this.audio.fracture(0.7);
+        fx.dust(pos.clone().add(new Vector3(0, -1.5, 2)), 0.6, dust);
+        fx.grit(pos, 0.6);
+        this.cam.shake(0.5);
         break;
-      case 'damage': {
-        const sev = e.severity ?? 'minor';
-        if (fx) {
-          const sp = this.screenPos(pos);
-          this.ui.damagePop(sp.x, sp.y, e.kg ?? 0, sev, e.label ?? '');
-        }
-        if (sev === 'major') {
-          this.cam.shake(1);
-          if (fx) this.ui.doFlash(0.3);
-          if (live) {
-            this.hitStopUntil = this.now + 0.1;
-            this.slowUntil = this.now + 0.6;
-            this.cam.punchIn(this.now);
-          }
-        } else if (sev === 'moderate') this.cam.shake(0.55);
-        this.squashHero(sev === 'major' ? 0.4 : sev === 'moderate' ? 0.22 : 0.1, live);
+      case 'approach':
+        this.drawGuides();
+        break;
+      case 'decision':
+        this.audio.whoosh();
+        break;
+      case 'commit': {
+        const d = sim.decision;
+        this.ui.committed(!!e.auto, e.label ?? '');
+        this.drawGuides(e.id ?? d?.chosen ?? 0);
+        window.setTimeout(() => this.w.guides.clear(), 1400);
+        this.audio.whoosh();
+        this.audio.impact(0.5, 'granite', 0);
+        this.cam.punch(0.35);
+        this.ui.tip(null);
+        if (e.auto) this.ui.bigBanner(e.label ?? '', 'The mountain chose', 1300, 'small');
         break;
       }
-      case 'fracture':
-        eff.ring(pos, 9 + e.intensity * 8, new Color(1, 0.93, 0.82));
-        this.audio.fracture(e.intensity * att + 0.3, pan);
-        eff.dust(pos, 0.6 + e.intensity * 0.6);
-        eff.grit(pos, 1 + e.intensity);
+      case 'enter': {
+        const seg = sim.seg.seg;
+        if (seg.kind !== 'finale' && seg.kind !== 'summit') this.ui.bigBanner(seg.name.toUpperCase(), KIND_LABEL[seg.kind], 1400, 'small');
+        if (seg.kind === 'finale') this.ui.bigBanner(this.level.finale.name.replace(/^the /, '').toUpperCase(), 'Dead ahead', 1600, 'small');
+        break;
+      }
+      case 'tree':
+        if (this.sound('tree', 0.06)) {
+          this.audio.snap();
+          this.audio.impact(0.6 * att, 'wood', pan);
+        }
+        fx.shards(pos.clone().add(new Vector3(0, 2.5, 0)), new Color(0.22, 0.4, 0.16), e.depth ? 10 : 22);
+        fx.shards(pos.clone().add(new Vector3(0, -0.6, 0)), new Color(0.7, 0.52, 0.32), e.depth ? 6 : 14);
+        if (!e.depth) this.cam.shake(0.3);
+        break;
+      case 'treeLand':
+        fx.dust(pos, 0.25 + e.intensity * 0.35, dust.clone().lerp(new Color(0.5, 0.42, 0.3), 0.3));
+        if (this.sound('treeLand', 0.09)) this.audio.impact(0.75 * att * e.intensity, 'soil', pan);
+        if (dist < 30) this.cam.shake(0.3 * att);
+        break;
+      case 'crack':
+        if (this.sound('crack', 0.15)) this.audio.creak();
+        fx.shards(pos, new Color(0.7, 0.52, 0.32), 8);
+        break;
+      case 'rock':
+        if (this.sound('rock', 0.05)) this.audio.fracture(0.35 + e.intensity * 0.5, pan);
+        fx.grit(pos, 0.5 + e.intensity);
+        fx.dust(pos, 0.3 + e.intensity * 0.5, dust);
+        if (e.intensity > 0.8) fx.ring(pos, 6 + e.intensity * 5, dust);
+        this.cam.shake(0.3 + e.intensity * 0.45);
+        this.pieces.squash(1, 0.12);
+        this.ui.hurt();
+        break;
+      case 'pillar':
+        this.audio.fracture(1, pan);
+        this.audio.impact(1, 'granite', pan);
+        fx.dust(pos, 1.2, dust);
+        fx.grit(pos.clone().add(new Vector3(0, 3, 0)), 1.6);
+        this.cam.shake(0.8);
+        this.cam.punch(0.5);
+        this.slow(0.45, 0.35);
+        this.ui.hurt();
+        break;
+      case 'hit':
+        if (this.sound('hit', 0.07)) {
+          this.audio.snap();
+          this.audio.impact(Math.max(0.4, e.intensity) * att, 'wood', pan);
+        }
+        fx.shards(pos, wood, 30 + Math.round(e.intensity * 30));
+        fx.dust(pos, 0.4 + e.intensity * 0.4, dust.clone().lerp(wood, 0.3));
+        if (!e.depth) {
+          this.cam.shake(0.45 + e.intensity * 0.4);
+          this.pieces.squash(1, 0.1);
+        }
+        break;
+      case 'collapse':
+        if (this.sound('collapse', 0.25)) {
+          this.audio.treeFall();
+          this.audio.impact(0.9 * att, 'soil', pan);
+        }
+        fx.dust(pos, 0.9 + e.intensity * 0.8, dust.clone().lerp(wood, 0.25));
+        fx.dust(pos.clone().add(new Vector3(2, -1, 2)), 0.6 + e.intensity * 0.5, dust);
+        if (dist < 45) this.cam.shake(0.4 + e.intensity * 0.4);
+        if (e.intensity > 0.6 && dist < 45) this.slow(0.5, 0.3);
+        break;
+      case 'wall':
+        this.audio.impact(0.6 + e.intensity * 0.4, 'granite', pan);
+        if (e.intensity > 0.4) this.audio.fracture(e.intensity * 0.7, pan);
+        fx.grit(pos, 0.8 + e.intensity);
+        fx.dust(pos, 0.4 + e.intensity * 0.6, dust);
+        this.cam.shake(0.4 + e.intensity * 0.6);
+        this.pieces.squash(1, 0.15);
+        if (e.intensity > 0.6) this.ui.doFlash(0.25);
+        this.ui.hurt();
+        break;
+      case 'land':
+        this.audio.impact(0.6 + e.intensity * 0.4, 'granite', pan);
+        fx.ring(pos, 8 + e.intensity * 8, dust);
+        fx.dust(pos, 0.5 + e.intensity * 0.8, dust);
+        fx.grit(pos, 0.6 + e.intensity);
+        this.cam.shake(0.5 + e.intensity * 0.5);
+        this.cam.punch(0.3 + e.intensity * 0.4);
+        this.pieces.squash(1, 0.2);
+        if (e.intensity > 0.3) this.ui.hurt();
+        break;
+      case 'slide':
+        this.ui.bigBanner('ROCKSLIDE', 'The slope lets go', 1700);
+        this.audio.fracture(1, pan);
+        this.audio.grind();
+        fx.dust(pos, 1.3, dust);
+        fx.dust(pos.clone().add(new Vector3(0, 2, 8)), 1, dust);
+        this.cam.shake(0.7);
+        break;
+      case 'milestone':
+        this.ui.bigBanner(`${e.label?.toUpperCase()}`, `+${pts(e.points ?? 0)}`, 1100, 'small speed');
+        this.audio.combo(4 + (e.points ?? 0) / 500);
+        this.cam.punch(0.4);
+        break;
+      case 'chain':
+        this.ui.chain(e.depth ?? 0);
+        this.audio.combo(e.depth ?? 3);
+        break;
+      case 'score': {
+        const s = this.screen(pos);
+        if (s.on) this.ui.scorePop(s.x, s.y, e.points ?? 0, e.label ?? '', (e.points ?? 0) >= 1000);
+        break;
+      }
+      case 'finale':
+        this.slow(0.28, 1.5);
+        this.audio.fracture(1, 0);
+        this.audio.impact(1, 'wood', 0);
+        this.audio.impact(1, 'granite', 0);
+        this.ui.doFlash(0.6);
         this.cam.shake(1);
-        if (fx) this.ui.bigBanner('SPLIT', 'You carry on with the largest piece', 1600);
+        this.cam.punch(1);
+        fx.dust(pos, 1.6, dust);
+        fx.shards(pos, wood, 90);
         break;
-      case 'impact':
-        this.audio.impact(Math.min(1, e.intensity * 1.3) * att, e.material === 'terrain' ? 'granite' : (e.material as 'granite'), pan);
-        if (e.intensity > 0.3) eff.dust(pos, e.intensity * 0.45, e.material === 'wood' ? new Color(0.5, 0.42, 0.32) : e.material === 'snow' ? new Color(0.96, 0.98, 1) : undefined);
-        if (e.intensity > 0.65 && e.material === 'terrain') eff.ring(pos, 4 + e.intensity * 4, new Color(0.92, 0.88, 0.8));
-        if (e.intensity > 0.35) this.cam.shake(e.intensity * 0.45);
+      case 'shatter':
+        this.slow(0.3, 1.2);
+        this.audio.fracture(1, 0);
+        this.audio.shatter();
+        this.ui.doFlash(0.7);
+        this.ui.bigBanner('SHATTERED', 'The boulder couldn’t take any more', 2200);
+        this.cam.shake(1);
+        fx.dust(pos, 1.4, dust);
+        fx.grit(pos, 2);
         break;
-      case 'chip':
-        this.audio.fracture(Math.min(1, e.intensity) * att * 0.7 + 0.1, pan);
-        eff.grit(pos, 0.4 + e.intensity * 0.6);
-        eff.dust(pos, 0.2 + e.intensity * 0.3);
-        break;
-      case 'splash':
-        this.audio.splash(e.intensity * att + 0.2, pan);
-        eff.splash(pos, e.intensity + 0.2);
-        break;
-      case 'tree': {
-        const id = Number((e.objectId ?? 'tree:-1').slice(5));
-        this.w.props.fell(id, e.dir ?? [0, 1]);
-        this.audio.snap();
-        this.audio.impact(0.7 * att, 'wood', pan);
-        eff.shards(pos, new Color(0.25, 0.45, 0.18), 26);
-        eff.shards(pos.clone().add(new Vector3(0, -1, 0)), new Color(0.55, 0.36, 0.2), 14);
-        this.cam.shake(0.35);
-        window.setTimeout(() => {
-          this.audio.impact(0.8 * att, 'wood', pan);
-          eff.dust(pos.clone().add(new Vector3((e.dir?.[0] ?? 0) * 8, -1, (e.dir?.[1] ?? 1) * 8)), 0.5, new Color(0.9, 0.85, 0.72));
-        }, 650);
-        break;
-      }
-      case 'smash':
-        if (e.objectId) this.w.objects.smash(e.objectId, true);
-        this.audio.snap();
-        this.audio.impact(1, 'wood', pan);
-        eff.shards(pos, new Color(0.5, 0.38, 0.25), 60);
-        eff.dust(pos, 0.8, new Color(0.7, 0.62, 0.5));
-        this.cam.shake(0.9);
-        if (live) {
-          this.hitStopUntil = this.now + 0.08;
-          this.slowUntil = this.now + 0.5;
-        }
-        if (fx) this.ui.callout(`Smashed through the ${(e.label ?? '').toLowerCase()}`, 1800);
-        break;
-      case 'bowl':
-        this.audio.impact(0.7 * att, 'granite', pan);
-        eff.dust(pos, 0.4);
-        break;
-      case 'slump':
-        if (e.objectId) this.w.objects.slump(e.objectId, true);
-        eff.earth(pos, 1);
-        this.audio.dig();
-        break;
-      case 'route':
-        if (fx) this.ui.callout(e.label ?? '', 1600);
-        break;
-      case 'finish':
-        if (fx) this.ui.bigBanner(this.level.finish.name.replace(/^the /, '').toUpperCase(), live && this.sim ? `${kg(this.sim.liveMass)} · ${pct(this.sim.liveMass / this.sim.startMass)}` : '', 2200);
-        this.audio.finish(1);
+      case 'end':
         break;
     }
   }
@@ -1256,224 +708,64 @@ export class Game {
     const sim = this.sim!;
     const r = sim.result!;
     this.result = r;
-    this.recording = sim.recording;
-    const lp = levelProgress(this.progress, this.level.id);
     const rec = recordResult(this.progress, LEVELS, this.level, r);
-    lp.lastTrail = r.trajectory.map((p) => [round2(p[0]), round2(p[1]), round2(p[2])] as [number, number, number]);
+    this.records = rec;
+    const lp = levelProgress(this.progress, this.level.id);
+    lp.lastTrail = r.trajectory.filter((_, i) => i % 2 === 0);
     this.progress.tutorial.released = true;
     saveProgress(this.progress);
-    if (!r.finished) this.audio.finish(0);
-    else if (MEDALS.indexOf(r.medal) >= 3) window.setTimeout(() => this.audio.finish(2), 900);
-    const states = this.statesFromSim(sim);
-    this.pieces.sync(states);
-    const lead = sim.leader ? sim.pose(sim.leader).pos : states[0]?.pos;
-    sim.dispose();
-    this.sim = null;
-    this.lastRecords = rec;
-    if (!r.finished) this.ui.bigBanner(r.reason === 'stuck' ? 'STOPPED' : r.reason === 'lost' ? 'LOST' : 'OVER', r.cause, 2000);
-    window.setTimeout(() => this.showAftermath(lead ? [new Vector3(...lead)] : []), r.finished ? 1200 : 1500);
-  }
-  private lastRecords: ReturnType<typeof recordResult> | null = null;
-
-  private showAftermath(finalPositions: Vector3[]) {
-    const r = this.result!;
     this.state = 'results';
     this.ui.hideRun();
-    const end = finalPositions[0];
-    if (end) {
-      this.cam.subject.copy(end);
-      this.cam.subjectYaw = this.courseYawAt(end.x, end.z);
-      this.cam.orbitDist = Math.max(4, Math.min(16, 3 + r.size * 6));
-      this.cam.setMode('orbit');
-    } else {
-      this.cam.setMode('aftermath');
-      this.cam.frameAftermath(r.trajectory.slice(-12).map((p) => new Vector3(...p)));
-    }
-    this.drawTrails();
-    this.addHitMarkers();
+    this.ui.tip(null);
+    if (!r.finished) this.audio.finish(0);
+    else window.setTimeout(() => this.audio.finish(MEDALS.indexOf(rec.medal) >= 3 ? 2 : 1), 300);
+    if (r.finished && r.stats.finaleFlattened) this.ui.bigBanner(`${this.level.finale.name.replace(/^the /, '').toUpperCase()}`, 'FLATTENED', 2000);
+    else if (r.reason === 'stalled') this.ui.bigBanner('STOPPED', r.cause, 2000);
+    // the recap: fly back up the line over everything that came down
+    this.w.trails.clear();
+    this.w.trails.add(r.trajectory, new Color(1, 0.76, 0.42), 0.9, { opacity: 0.45 });
+    const path = r.trajectory.map((p) => new Vector3(...p));
+    window.setTimeout(() => {
+      if (this.state === 'results') this.cam.recap(path);
+    }, 1400);
+    this.resultsShown = false;
+    window.clearTimeout(this.resultsTimer);
+    this.resultsTimer = window.setTimeout(() => this.revealResults(), 3200);
+    this.ui.tip('Tap to see how you did', 0);
+  }
+
+  private revealResults() {
+    if (this.resultsShown || this.state !== 'results' || !this.result || !this.records) return;
+    this.resultsShown = true;
+    window.clearTimeout(this.resultsTimer);
+    this.ui.tip(null);
+    const r = this.result;
     const i = LEVELS.findIndex((l) => l.id === this.level.id);
     const next = LEVELS[i + 1];
     const lp = levelProgress(this.progress, this.level.id);
-    this.ui.showResults(r, this.level, this.lastRecords!, lp, {
+    this.ui.showResults(r, this.level, this.records, lp, {
       hasNext: !!next && levelUnlocked(this.progress, LEVELS, i + 1),
       nextName: next?.name,
       compName: composition(r.composition).name,
-      routeName: this.level.routes.find((q) => q.id === r.route)?.name ?? null,
-      tip: explainRun(r, this.level, this.plan),
+      tip: explainRun(r, this.level, lp.found),
     });
-    if (!this.progress.tutorial.reviewed) {
-      this.progress.tutorial.reviewed = true;
-      saveProgress(this.progress);
-    }
-  }
-
-  private drawTrails() {
-    this.w.trails.clear();
-    const r = this.result;
-    if (!r) return;
-    this.w.trails.add(r.trajectory, new Color(1, 0.7, 0.3), 1.1, { opacity: 0.9 });
-  }
-
-  // ------------------------------------------------------------------ markers
-  private clearMarkers() {
-    for (const m of this.markerEls) m.el.remove();
-    this.markerEls = [];
-  }
-  private addMarker(text: string, pos: Vector3, cls = '') {
-    const el = document.createElement('div');
-    el.className = `marker ${cls}`;
-    el.textContent = text;
-    this.markers.append(el);
-    this.markerEls.push({ el, pos });
-  }
-  /** where the stone lost the most */
-  private addHitMarkers() {
-    this.clearMarkers();
-    const hits = [...(this.result?.collisions ?? [])].filter((c) => c.severity !== 'minor').sort((a, b) => b.kg - a.kg).slice(0, 6);
-    for (const c of hits) this.addMarker(`−${Math.round(c.kg).toLocaleString('en-US')} kg`, new Vector3(c.pos[0], c.pos[1] + 2, c.pos[2]), `hit sev-${c.severity}`);
-  }
-  private addPlanMarkers() {
-    if (this.state !== 'plan') return;
-    const [bx, bz] = this.level.boulder.position;
-    this.addMarker(`${this.comp.name} · ${kg(this.massFor(this.progress.composition))}`, new Vector3(bx, this.data.heightAt(bx, bz) + this.level.boulder.radius * 2 + 2, bz), 'goal stone');
-    const fz = this.level.finish.z + 8;
-    const fx = this.level.finish.x ? (this.level.finish.x[0] + this.level.finish.x[1]) / 2 : this.coursePl ? pathDistance(this.coursePl, 0, fz).px : 0;
-    this.addMarker(`Finish · ${this.level.finish.name}`, new Vector3(fx, this.data.heightAt(fx, fz) + 3, fz), 'goal');
-    for (const o of this.level.objects) {
-      const st = this.plan[o.id] ?? defaultState(o);
-      const a = this.w.objects.anchorOf(o.id);
-      if (!a) continue;
-      if (o.type === 'branches' && st.type === 'branches' && !st.removed) this.addMarker(o.breakMomentum ? `Breakable · ${this.breakSpeed(o.breakMomentum)}` : 'Barrier', a.clone().add(new Vector3(0, 2, 0)), 'blocker');
-    }
-    if (this.routesOn)
-      this.level.routes.forEach((r, i) => {
-        // label the route where it passes its first gate
-        const g = r.gates[0];
-        const gz = g ? (g.z[0] + g.z[1]) / 2 : r.path[Math.floor(r.path.length / 2)][1];
-        let p: [number, number] = r.path[0];
-        for (let k = 0; k < r.path.length - 1; k++) {
-          const a = r.path[k],
-            b = r.path[k + 1];
-          if (a[1] <= gz && b[1] >= gz) {
-            const u = (gz - a[1]) / (b[1] - a[1] || 1);
-            p = [a[0] + (b[0] - a[0]) * u, gz];
-          }
-        }
-        const el = `route r${i % ROUTE_COLORS.length}`;
-        this.addMarker(r.name, new Vector3(p[0], this.data.heightAt(p[0], p[1]) + 1, p[1]), el);
-      });
-  }
-  private updateMarkers() {
-    const c = this.rig.renderer.domElement;
-    const hide = this.cam.surveying;
-    for (const m of this.markerEls) {
-      const v = m.pos.clone().project(this.rig.camera);
-      const vis = !hide && v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 && m.pos.distanceTo(this.rig.camera.position) < 220;
-      m.el.style.opacity = vis ? '1' : '0';
-      m.el.style.left = `${(v.x * 0.5 + 0.5) * c.clientWidth}px`;
-      m.el.style.top = `${(-v.y * 0.5 + 0.5) * c.clientHeight}px`;
-    }
-  }
-
-  // ------------------------------------------------------------------ replay
-  private startReplay() {
-    if (!this.recording) return;
-    this.state = 'replay';
-    this.ui.hideResults();
-    this.ui.showReplay();
-    this.w.trails.clear();
-    this.clearMarkers();
-    this.w.effects.clear();
-    this.replayT = 0;
-    this.replayEventIdx = 0;
-    this.resetObjectsView();
-    this.replayLastF = 0;
-    this.replayPlaying = true;
-    this.replaySpeed = 1;
-    this.cam.setMode('follow');
-    this.applyReplayFrame(0, false);
-  }
-
-  private endReplay() {
-    if (!this.result) return;
-    this.ui.hideReplay();
-    const last = this.recording!.frames - 1;
-    this.applyReplayFrame(last, false);
-    const lead = this.recording!.leader[last];
-    const finals = this.sampleRecording(last).filter((s) => s.id === lead).map((s) => new Vector3(...s.pos));
-    this.showAftermath(finals);
-  }
-
-  private scrub(frac: number) {
-    if (this.state !== 'replay' || !this.recording) return;
-    const f = frac * (this.recording.frames - 1);
-    this.replayT = f;
-    this.replayPlaying = false;
-    const evs = this.recording.events;
-    this.replayEventIdx = evs.findIndex((e) => e.step / RECORD_EVERY > f);
-    if (this.replayEventIdx < 0) this.replayEventIdx = evs.length;
-    this.applyReplayFrame(f, false);
-  }
-
-  private sampleRecording(f: number): PieceState[] {
-    const rec = this.recording!;
-    const out: PieceState[] = [];
-    for (const t of rec.tracks) {
-      const s = sampleTrack(t, f, rec.frames);
-      if (s) out.push(s);
-    }
-    return out;
-  }
-
-  private applyReplayFrame(f: number, withEvents: boolean) {
-    const rec = this.recording!;
-    const states = this.sampleRecording(f);
-    this.pieces.sync(states);
-    const ahead = this.sampleRecording(Math.min(rec.frames - 1, f + 1));
-    const vels = new Map<number, Vector3>();
-    for (const s of states) {
-      const n = ahead.find((a) => a.id === s.id);
-      if (n) vels.set(s.id, new Vector3(n.pos[0] - s.pos[0], n.pos[1] - s.pos[1], n.pos[2] - s.pos[2]).multiplyScalar(60 / RECORD_EVERY));
-    }
-    const leader = rec.leader[Math.min(rec.leader.length - 1, Math.max(0, Math.round(f)))] ?? -1;
-    this.followFrom(states, leader, (id) => vels.get(id) ?? new Vector3());
-    if (f < this.replayLastF - 0.5) this.w.props.reset();
-    this.replayLastF = f;
-    for (const ch of rec.objectChanges) {
-      if (ch.change === 'felled') {
-        if (f >= ch.frame) this.w.props.fell(Number(ch.objectId.slice(5)), ch.dir ?? [0, 1], f - ch.frame > 15);
-      } else if (ch.change === 'smashed') this.w.objects.smash(ch.objectId, f >= ch.frame, f - ch.frame < 2);
-      else this.w.objects.slump(ch.objectId, f >= ch.frame);
-    }
-    if (withEvents) {
-      const evs = rec.events;
-      while (this.replayEventIdx < evs.length && evs[this.replayEventIdx].step / RECORD_EVERY <= f) {
-        this.handleEvent(evs[this.replayEventIdx], false);
-        this.replayEventIdx++;
-      }
-    }
-  }
-
-  private stepReplay(dt: number) {
-    const rec = this.recording!;
-    if (this.replayPlaying && !this.menuOpen) {
-      this.replayT += dt * (60 / RECORD_EVERY) * this.replaySpeed;
-      if (this.replayT >= rec.frames - 1) {
-        this.replayT = rec.frames - 1;
-        this.replayPlaying = false;
-      }
-      this.applyReplayFrame(this.replayT, true);
-    }
-    this.ui.setReplay(this.replayT / Math.max(1, rec.frames - 1), this.replayPlaying, this.replaySpeed);
   }
 
   // ------------------------------------------------------------------ menu & settings
   private openMenu() {
     this.menuOpen = true;
-    this.ui.showMenu(this.progress.settings.sound, this.progress.settings.music, this.state === 'sim');
+    if (this.state === 'run') {
+      this.paused = true;
+      this.ui.setPaused(true);
+    }
+    this.ui.showMenu(this.progress.settings.sound, this.progress.settings.music, this.state === 'run');
   }
   private closeMenu() {
     this.menuOpen = false;
+    if (this.state === 'run') {
+      this.paused = false;
+      this.ui.setPaused(false);
+    }
     this.ui.hideMenu();
   }
   private setSound(on: boolean) {
@@ -1496,39 +788,44 @@ export class Game {
     this.now += dt;
     shared.time.value += dt;
 
-    if (this.state === 'sim' && this.sim) this.stepSim(dt);
-    else if (this.state === 'replay' && this.recording) this.stepReplay(dt);
-    else {
-      this.rolling *= Math.exp(-dt * 4);
-      this.gravel *= Math.exp(-dt * 4);
+    if (this.state === 'run' && this.sim) this.stepRun(dt);
+    else if (this.state === 'results' && this.sim) {
+      // the wreckage keeps settling behind the recap
+      if (!this.sim.debris.active.length && !this.sim.movingTrees.size) {
+        /* at rest */
+      } else {
+        this.sim.settle();
+      }
+      this.w.destruct.update(this.sim);
     }
 
-    const follow = this.state === 'sim' || this.state === 'replay' ? this.followInfo : undefined;
-    this.cam.update(dt, this.now, follow);
+    this.cam.update(dt, this.state === 'run' || this.state === 'results' ? this.chaseInfo() : undefined);
+    // keep the line of sight to the boulder clear of timber
+    const occ = shared.occluder.value;
+    if ((this.cam.mode === 'chase' || this.cam.mode === 'finale') && this.sim && !this.sim.shattered) {
+      occ[0] = this.sim.pos.x;
+      occ[1] = this.sim.pos.y;
+      occ[2] = this.sim.pos.z;
+      occ[3] = this.level.boulder.radius * 2.6;
+    } else if (this.state === 'ready' || this.state === 'title') {
+      const [bx, bz] = this.level.boulder.position;
+      occ[0] = bx;
+      occ[1] = this.w.data.heightAt(bx, bz) + this.level.boulder.radius;
+      occ[2] = bz;
+      occ[3] = this.state === 'ready' ? this.level.boulder.radius * 2.6 : 0;
+    } else occ[3] = 0;
     const look = this.cam.lookTarget;
-    this.rig.focusShadows(look, this.cam.distance * 0.75 + 12);
+    this.rig.focusShadows(look, this.cam.distance * 0.75 + 16);
     this.rig.setAtmosphere(look.z, dt);
-    const w = this.w;
-    w.objects.update(dt);
-    w.props.update(dt);
     this.pieces.update(dt);
-    w.water.update(dt);
-    w.effects.update(dt);
-    this.updateMarkers();
+    this.w.water.update(dt);
+    this.w.effects.update(dt);
 
-    let waterNear = 0;
-    for (const p of w.water.soundPoints()) {
-      const d = p.distanceTo(this.rig.camera.position);
-      waterNear = Math.max(waterNear, clamp(1 - (d - 8) / 60, 0, 1));
-    }
-    const hero = this.sim?.hero;
-    const hv = hero?.body.linvel();
-    const speed = hv && this.state === 'sim' ? Math.hypot(hv.x, hv.y, hv.z) : 0;
-    const heroSize = hero?.size ?? this.level.boulder.radius;
-    this.audio.weight = Math.min(1, Math.sqrt(heroSize / this.level.boulder.radius));
-    const fz = this.level.zones?.find((q) => q.id === 'falls')?.z[0] ?? -1e9;
-    const fallsNear = clamp(1 - (Math.hypot(this.rig.camera.position.x, this.rig.camera.position.z - (fz + 10)) - 10) / 70, 0, 1);
-    this.audio.update(dt, { waterNear, rolling: this.rolling, gravel: this.gravel, wind: 1, speed, size: heroSize, falls: fallsNear, sand: hero?.contactSurface === 'sand' });
+    const sim = this.sim;
+    const speed = sim && this.state === 'run' ? sim.speed : 0;
+    const rolling = sim && this.state === 'run' && sim.grounded && !sim.shattered ? Math.min(1, speed / 10) : 0;
+    this.audio.weight = 1;
+    this.audio.update(dt, { waterNear: 0, rolling, gravel: rolling * (sim?.kind === 'scree' || sim?.kind === 'loose' ? 0.9 : 0.4), wind: 1, speed, size: this.level.boulder.radius });
 
     this.rig.renderer.render(this.rig.scene, this.rig.camera);
     if (!document.hidden && !this.automation) this.rig.adapt(dt);
@@ -1545,44 +842,27 @@ export class Game {
       get result() {
         return game.result;
       },
-      get plan() {
-        return game.plan;
-      },
       get level() {
         return game.level.id;
       },
-      setPlan: (p: Plan) => {
-        this.plan = sanitizePlan(this.level, p);
-        this.w.objects.sync(this.plan, false);
-        this.w.water.setActive(activeWater(this.level, this.plan), true);
-        this.refreshChanges();
+      get decision() {
+        return game.sim?.decision ?? null;
       },
-      release: () => this.release(),
-      fast: () => {
-        this.fast = true;
+      get sim() {
+        return game.sim;
       },
-      select: (id: string | null) => this.select(id),
-      action: (k: string) => this.doAction(k),
       begin: () => {
         this.ui.hideTitle();
-        this.toPlanning();
+        this.toReady();
       },
-      mountains: () => this.showMountains(),
       load: (id: string) => this.pickLevel(id),
+      release: () => this.startRun(),
+      choose: (side: 'left' | 'right' | 'centre') => this.choose(side),
+      fast: (on = true) => {
+        this.fast = on;
+      },
+      results: () => this.revealResults(),
       composition: (id: CompositionId) => this.setComposition(id),
-      survey: () => this.survey(),
-      routes: () => {
-        this.routesOn = !this.routesOn;
-        this.updateRoutes();
-      },
-      replay: () => this.startReplay(),
-      adjust: () => this.toPlanning(),
-      snapCamera: () => this.cam.snap(),
-      camInfo: () => {
-        const h = this.sim?.hero?.body.translation();
-        const c = this.rig.camera.position;
-        return { mode: this.cam.mode, step: this.sim?.step, hero: h && [h.x, h.y, h.z].map((v) => +v.toFixed(1)), cam: [c.x, c.y, c.z].map((v) => +v.toFixed(1)) };
-      },
       unlockAll: () => {
         for (const l of LEVELS) {
           const lp = levelProgress(this.progress, l.id);
@@ -1591,27 +871,18 @@ export class Game {
         }
         saveProgress(this.progress);
       },
-      look: (id: string, pitch = 0.32, dist = 70) => {
-        this.ui.hideTitle();
-        this.state = 'plan';
-        this.cam.setMode('plan');
-        this.goZone(id);
-        this.cam.plan.pitch = pitch;
-        this.cam.plan.dist = dist;
-        this.cam.snap();
-        for (let i = 0; i < 90; i++) this.rig.setAtmosphere(this.cam.lookTarget.z, 0.1);
+      snapCamera: () => this.cam.snap(),
+      camInfo: () => {
+        const c = this.rig.camera.position;
+        const s = this.sim;
+        return { mode: this.cam.mode, hero: s && [s.pos.x, s.pos.y, s.pos.z].map((v) => +v.toFixed(1)), cam: [c.x, c.y, c.z].map((v) => +v.toFixed(1)), seg: s?.seg.seg.id, speed: s && +(s.speed * 3.6).toFixed(0) };
       },
-      finishNow: () => {
-        if (!this.sim) return;
-        while (!this.sim.done) this.sim.stepOnce();
-        this.sim.drainEvents();
+      renderInfo: () => {
+        const i = this.rig.renderer.info;
+        return { calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures };
       },
     };
   }
-}
-
-function round2(v: number) {
-  return Math.round(v * 100) / 100;
 }
 
 /** Free GPU memory held by a subtree. */
@@ -1627,54 +898,15 @@ function disposeTree(root: Object3D) {
   for (const m of mats) m.dispose();
 }
 
-function sampleTrack(t: Track, f: number, frames: number): PieceState | null {
-  const n = t.data.length / FRAME;
-  if (n === 0) return null;
-  const end = t.endFrame ?? frames - 1;
-  if (f < t.startFrame || f > end + 0.001) return null;
-  const local = Math.min(n - 1, Math.max(0, f - t.startFrame));
-  const i = Math.floor(local);
-  const j = Math.min(n - 1, i + 1);
-  const u = local - i;
-  const a = i * FRAME,
-    b = j * FRAME;
-  const d = t.data;
-  const lerp = (k: number) => d[a + k] + (d[b + k] - d[a + k]) * u;
-  let qx = d[b + 3],
-    qy = d[b + 4],
-    qz = d[b + 5],
-    qw = d[b + 6];
-  if (d[a + 3] * qx + d[a + 4] * qy + d[a + 5] * qz + d[a + 6] * qw < 0) {
-    qx = -qx;
-    qy = -qy;
-    qz = -qz;
-    qw = -qw;
-  }
-  const rx = d[a + 3] + (qx - d[a + 3]) * u,
-    ry = d[a + 4] + (qy - d[a + 4]) * u,
-    rz = d[a + 5] + (qz - d[a + 5]) * u,
-    rw = d[a + 6] + (qw - d[a + 6]) * u;
-  const l = Math.hypot(rx, ry, rz, rw) || 1;
-  return { id: t.id, shape: t.shape, kind: t.kind, pos: [lerp(0), lerp(1), lerp(2)], quat: [rx / l, ry / l, rz / l, rw / l], scale: lerp(7), smooth: lerp(8) };
-}
-
-/** What happened, and what to try next. */
-export function explainRun(r: SimResult, level: LevelDef, _plan: Plan): string {
-  if (r.unstable) return 'The physics hiccuped — nothing you did. Go again.';
-  if (!r.finished) {
-    if (/Stopped dead by/.test(r.cause)) return 'It hit that barrier without enough momentum. Clear it as a move, carry more speed into it — or pick a heavier stone.';
-    if (/Wedged/.test(r.cause)) return 'Too big for the gap. Lose a little mass on the way down, or take the long way round.';
-    if (/mud|snow|momentum/.test(r.cause)) return 'Soft ground swallowed its speed. Keep more momentum, or choose a firmer line.';
-    if (r.reason === 'lost') return 'It left the mountain. Lean earlier to hold the line.';
-    return 'It came to rest before the bottom. Look for what stopped it and change the plan.';
-  }
-  const worst = [...r.collisions].sort((a, b) => b.kg - a.kg)[0];
-  const m = level.medals;
-  const next = r.retained < m.silver ? 'silver' : r.retained < m.gold ? 'gold' : r.retained < m.platinum ? 'platinum' : null;
-  const need = next ? `${next[0].toUpperCase()}${next.slice(1)} needs ${pct(m[next])}.` : 'Platinum — the mountain barely touched you.';
-  if (worst && worst.kg > r.massLost * 0.35 && worst.kg > r.startMass * 0.02)
-    return `${worst.split ? 'Splitting on' : 'The hit on'} ${worst.against} cost ${kg(worst.kg)} — ${pct(worst.kg / r.massLost, 0)} of everything you lost. Steer round it, cushion it, or move it. ${need}`;
-  if (r.abrasionLoss > r.massLost * 0.5) return `Most of the loss was wear — rough ground and water grinding at you. A softer line keeps more. ${need}`;
-  const others = level.routes.filter((q) => q.id !== r.route).map((q) => q.name);
-  return `${need}${others.length && next ? ` Have you tried the ${others[0]}?` : ''}`;
+/** One line on what happened, and what to try next. */
+export function explainRun(r: RunResult, level: LevelDef, found: string[]): string {
+  const s = r.stats;
+  const unexplored = level.segments.filter((q) => q.kind !== 'summit' && q.kind !== 'finale' && !found.includes(q.id));
+  if (r.reason === 'shattered') return 'Rock, walls and hard landings wore the boulder down until it broke. Gorges and rubble are rich but punishing — a tougher stone, or a softer way down, gets you to the bottom.';
+  if (r.reason === 'stalled') return 'Too much timber, not enough slope: the boulder ran out of momentum. Dense ground drinks speed — balance it with a fast way down.';
+  if (!s.finaleFlattened) return `You reached the bottom too slowly to flatten ${level.finale.name}. Arrive faster: open slopes and loose ground build speed.`;
+  if (s.finaleSpeed * 3.6 < 60) return `${level.finale.name} came down at ${Math.round(s.finaleSpeed * 3.6)} km/h. Hit it faster for a bigger finish — the last ways down decide your speed.`;
+  if (r.categories.length < 4) return `Variety pays: this run destroyed ${r.categories.length} kinds of thing. Mixing forest, rock, buildings, gorges and slides earns a bigger bonus.`;
+  if (unexplored.length) return `${unexplored.length} way${unexplored.length > 1 ? 's' : ''} down still unexplored — ${unexplored[0].name} among them.`;
+  return 'You have seen every way down this mountain. Now find the route that does the most damage.';
 }

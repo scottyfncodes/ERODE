@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <title>ROCKSLIDE — Keep it together. Get to the bottom.</title>
-    <meta name="description" content="ROCKSLIDE is a physics-driven mountain descent. You are a granite boulder at the summit: plan your descent, break your path, and reach the bottom with as much of yourself intact as you can." />
+    <title>ROCKSLIDE — Unleash a geological catastrophe.</title>
+    <meta name="description" content="ROCKSLIDE is a downhill destruction game. You don't steer the boulder — you choose where it goes at each fork, then watch forests, camps and canyons come apart." />
     <meta name="application-name" content="ROCKSLIDE" />
     <meta name="theme-color" content="#16181b" />
     <meta name="color-scheme" content="dark" />
@@ -22,16 +22,16 @@
     <!-- sharing -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ROCKSLIDE" />
-    <meta property="og:title" content="ROCKSLIDE — Keep it together. Get to the bottom." />
-    <meta property="og:description" content="Plan your descent. Break your path. Survive the mountain. A physics-driven boulder run from summit to sea." />
+    <meta property="og:title" content="ROCKSLIDE — Unleash a geological catastrophe." />
+    <meta property="og:description" content="Choose where the boulder goes at every fork — then watch forests, camps and canyons come apart. A downhill destruction game." />
     <meta property="og:url" content="https://rockslide-game.vercel.app/" />
     <meta property="og:image" content="https://rockslide-game.vercel.app/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="ROCKSLIDE wordmark over a granite boulder perched above a mountain descent at golden hour." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="ROCKSLIDE — Keep it together. Get to the bottom." />
-    <meta name="twitter:description" content="Plan your descent. Break your path. Survive the mountain." />
+    <meta name="twitter:title" content="ROCKSLIDE — Unleash a geological catastrophe." />
+    <meta name="twitter:description" content="Choose the way down. Watch the mountain come apart." />
     <meta name="twitter:image" content="https://rockslide-game.vercel.app/og-image.png" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -40,13 +40,12 @@
   </head>
   <body>
     <canvas id="view" aria-label="The mountain"></canvas>
-    <div id="markers" aria-hidden="true"></div>
     <div id="ui"></div>
 
     <div id="loading" class="screen">
       <div class="loading-inner">
         <div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div>
-        <div class="loading-tag label">Keep it together. Get to the bottom.</div>
+        <div class="loading-tag label">Unleash a geological catastrophe.</div>
         <div class="loading-bar"><div class="loading-fill"></div></div>
         <div class="loading-text label">Loading the mountain…</div>
       </div>

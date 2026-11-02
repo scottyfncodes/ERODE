@@ -1,3 +1,4 @@
+import { banded, fitBounds } from './banded';
 import {
   BufferAttribute,
   BufferGeometry,
@@ -6,7 +7,6 @@ import {
   ConeGeometry,
   IcosahedronGeometry,
   Group,
-  InstancedMesh,
   Matrix4,
   Quaternion,
   Vector3,
@@ -164,7 +164,7 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
   const nearLow = placements.slice(0, farStart).filter(lowland);
   const farLow = placements.slice(farStart).filter(lowland);
   const sets: { list: typeof placements; variants: { trunk: BufferGeometry; crown: BufferGeometry }[]; shadows: boolean }[] = [
-    { list: near, variants: [coniferGeometry(3, 8, 1), coniferGeometry(9, 9, 0.82), coniferGeometry(21, 7, 1.1)], shadows: true },
+    { list: near, variants: [coniferGeometry(3, 7, 1, 10, 2), coniferGeometry(9, 8, 0.82, 10, 2), coniferGeometry(21, 6, 1.1, 10, 2)], shadows: true },
     // distant forest: a cheaper tree, no shadow casting
     { list: farP, variants: [coniferGeometry(5, 5, 1, 8, 1), coniferGeometry(11, 6, 0.85, 8, 1)], shadows: false },
     { list: nearLow, variants: [broadleafGeometry(51), broadleafGeometry(57), broadleafGeometry(63)], shadows: true },
@@ -177,22 +177,26 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
     set.variants.forEach((v, vi) => {
       const mine = set.list.filter((_, i) => i % set.variants.length === vi);
       if (!mine.length) return;
-      const trunks = new InstancedMesh(v.trunk, bark, mine.length);
-      const crowns = new InstancedMesh(v.crown, foliage, mine.length);
+      const band = set.shadows ? 260 : 900;
+      const trunks = banded(v.trunk, bark, mine, band, set.shadows);
+      const crowns = banded(v.crown, foliage, mine, band, set.shadows);
       const tint = new Color();
       mine.forEach((p, i) => {
         q.setFromAxisAngle(up, p.rot);
         // slight lean and squash variety so the forest isn't a field of clones
         m.compose(new Vector3(p.x, p.y - 0.3, p.z), q, new Vector3(p.s * (0.85 + rng() * 0.3), p.s, p.s * (0.85 + rng() * 0.3)));
-        trunks.setMatrixAt(i, m);
-        crowns.setMatrixAt(i, m);
+        trunks.slot[i].mesh.setMatrixAt(trunks.slot[i].index, m);
+        crowns.slot[i].mesh.setMatrixAt(crowns.slot[i].index, m);
         const v = 0.78 + rng() * 0.4;
         tint.setRGB(v * (0.92 + rng() * 0.16), v, v * (0.9 + rng() * 0.12));
-        crowns.setColorAt(i, tint);
+        crowns.slot[i].mesh.setColorAt(crowns.slot[i].index, tint);
       });
-      trunks.castShadow = crowns.castShadow = set.shadows;
-      trunks.receiveShadow = crowns.receiveShadow = set.shadows;
-      group.add(trunks, crowns);
+      fitBounds([...trunks.meshes, ...crowns.meshes], 25);
+      for (const mm of [...trunks.meshes, ...crowns.meshes]) {
+        mm.castShadow = set.shadows;
+        mm.receiveShadow = set.shadows;
+        group.add(mm);
+      }
     });
   }
 
@@ -213,15 +217,18 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
   }
   stoneGeos.forEach((g, gi) => {
     const mine = stones.filter((_, i) => i % stoneGeos.length === gi);
-    const im = new InstancedMesh(g, rockMat, mine.length);
+    const bd = banded(g, rockMat, mine, 300);
     mine.forEach((p, i) => {
       q.setFromAxisAngle(up, p.rot);
       m.compose(new Vector3(p.x, p.y, p.z), q, new Vector3(p.s, p.s * 0.8, p.s));
-      im.setMatrixAt(i, m);
+      bd.slot[i].mesh.setMatrixAt(bd.slot[i].index, m);
     });
-    im.castShadow = true;
-    im.receiveShadow = true;
-    group.add(im);
+    fitBounds(bd.meshes, 3);
+    for (const im of bd.meshes) {
+      im.castShadow = true;
+      im.receiveShadow = true;
+      group.add(im);
+    }
   });
 
   // grass tufts: thin blades as crossed quads around the meadow
@@ -250,7 +257,7 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
     // normals for grass should point up for soft lighting
     const nrm = blade.getAttribute('normal');
     for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, 0, 1, 0);
-    const tufts: Matrix4[] = [];
+    const tufts: { m: Matrix4; x: number; z: number }[] = [];
     for (let i = 0; i < 30000 && tufts.length < 5000 * density; i++) {
       const x = b.x[0] + rng() * (b.x[1] - b.x[0]);
       const z = b.z[0] + rng() * (b.z[1] - b.z[0]);
@@ -260,12 +267,15 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
       const y = data.heightAt(x, z);
       const s = 0.8 + rng() * 1.2;
       q.setFromAxisAngle(up, rng() * 6.28);
-      tufts.push(new Matrix4().compose(new Vector3(x, y - 0.03, z), q, new Vector3(s, s, s)));
+      tufts.push({ m: new Matrix4().compose(new Vector3(x, y - 0.03, z), q, new Vector3(s, s, s)), x, z });
     }
-    const im = new InstancedMesh(blade, foliage, tufts.length);
-    tufts.forEach((mm, i) => im.setMatrixAt(i, mm));
-    im.receiveShadow = true;
-    group.add(im);
+    const bd = banded(blade, foliage, tufts, 300);
+    tufts.forEach((t, i) => bd.slot[i].mesh.setMatrixAt(bd.slot[i].index, t.m));
+    fitBounds(bd.meshes, 2);
+    for (const im of bd.meshes) {
+      im.receiveShadow = true;
+      group.add(im);
+    }
   }
 
   return { group };

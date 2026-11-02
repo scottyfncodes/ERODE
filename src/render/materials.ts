@@ -12,7 +12,50 @@ import { NOISE_GLSL } from './shaderChunks';
 export const shared = {
   time: { value: 0 } as IUniform<number>,
   wind: { value: 1 } as IUniform<number>,
+  /** foliage and trunks closer to the camera than this fade out (start, end in metres), so trees never block the view */
+  nearFade: { value: [7, 15] } as IUniform<number[]>,
+  /** the boulder (xyz) and a radius (w): whatever stands between it and the camera is cut away; w = 0 turns it off */
+  occluder: { value: [0, 0, 0, 0] } as IUniform<number[]>,
 };
+
+/** dithered fade of whatever is too close to the camera, or in the way of the boulder */
+const CAMERA_FADE = /* glsl */ `
+  {
+    float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    float camD = length(vViewPosition);
+    if (camD < uNearFade.y && smoothstep(uNearFade.x, uNearFade.y, camD) < n) discard;
+    if (uOccluder.w > 0.0) {
+      vec3 ab = uOccluder.xyz - cameraPosition;
+      float t = clamp(dot(vFadeWP - cameraPosition, ab) / dot(ab, ab), 0.0, 1.0);
+      if (t < 0.9) {
+        float r = uOccluder.w * (0.45 + 0.75 * t);
+        float d = length(vFadeWP - (cameraPosition + ab * t));
+        if (smoothstep(r * 0.55, r, d) < n) discard;
+      }
+    }
+  }
+`;
+/** patch a standard material so it fades near the camera and clears the line of sight to the boulder */
+export function cameraFade(shader: WebGLProgramParametersWithUniforms) {
+  shader.uniforms.uNearFade = shared.nearFade;
+  shader.uniforms.uOccluder = shared.occluder;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vFadeWP;')
+    .replace(
+      '#include <project_vertex>',
+      `#include <project_vertex>
+      {
+        vec4 fw = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          fw = instanceMatrix * fw;
+        #endif
+        vFadeWP = (modelMatrix * fw).xyz;
+      }`,
+    );
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec2 uNearFade;\nuniform vec4 uOccluder;\nvarying vec3 vFadeWP;')
+    .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${CAMERA_FADE}`);
+}
 
 /** Cartoon look: light falls into a few soft bands and colours get a little punchier. */
 export const TOON_GLSL = /* glsl */ `
@@ -192,6 +235,7 @@ export function createBarkMaterial(base = new Color(0.36, 0.27, 0.2)): MeshStand
   const m = new MeshStandardMaterial({ color: base, roughness: 0.95 });
   m.onBeforeCompile = (shader) => {
     inject(shader, 'varying vec3 vObj;', 'vObj = position;', 'varying vec3 vObj;');
+    cameraFade(shader);
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
@@ -266,6 +310,7 @@ export function createFoliageMaterial(): MeshStandardMaterial {
   const prev = m.onBeforeCompile;
   m.onBeforeCompile = (shader, r) => {
     prev(shader, r);
+    cameraFade(shader);
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <emissivemap_fragment>',
       `#include <emissivemap_fragment>
