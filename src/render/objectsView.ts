@@ -20,7 +20,6 @@ import {
 import type { LevelDef, LevelObject, Plan } from '../levels/types';
 import type { LevelData } from '../sim/levelData';
 import {
-  branchSticks,
   formationShape,
   iceSheet,
   lyingTrunk,
@@ -82,6 +81,7 @@ export class ObjectsView {
   private time = 0;
   private mats = {
     rock: createRockMaterial(),
+    breaker: createRockMaterial({ tint: new Color(0.95, 0.62, 0.48), scale: 1.4 }),
     bark: createBarkMaterial(),
     deadBark: createBarkMaterial(new Color(0.42, 0.36, 0.3)),
     end: createEndGrainMaterial(),
@@ -239,39 +239,89 @@ export class ObjectsView {
         break;
       }
       case 'branches': {
-        const sticks = branchSticks(o, (x, z) => this.h(x, z));
         const g = new Group();
         const rng = mulberry32(o.seed + 1);
-        for (const s of sticks) {
-          const m = new Mesh(new CylinderGeometry(s.radius * 0.6, s.radius, s.length, 6), this.mats.deadBark);
-          m.position.set(...s.pos);
-          m.quaternion.copy(q4(s.quat));
+        const baseY = this.h(o.position[0], o.position[1]);
+        const bh = o.height ?? 2.2;
+        const cy = Math.cos(o.yaw),
+          sy = Math.sin(o.yaw);
+        const place = (along: number, across: number, up: number) => {
+          const x = o.position[0] + along * cy - across * sy;
+          const z = o.position[1] + along * sy + across * cy;
+          return new Vector3(x, Math.max(this.h(x, z), baseY - 1) + up, z);
+        };
+        const addStick = (len: number, rad: number, at: Vector3, yaw: number, pitch: number, mat: MeshStandardMaterial, caps: boolean) => {
+          const m = new Mesh(new CylinderGeometry(rad * 0.85, rad, len, caps ? 12 : 6), mat);
+          m.position.copy(at);
+          m.quaternion.setFromUnitVectors(UP, new Vector3(Math.cos(yaw), Math.sin(pitch), Math.sin(yaw)).normalize());
           m.castShadow = true;
+          m.receiveShadow = true;
           g.add(m);
           outlined.push(m);
-          // twig clusters of dead needles
-          if (rng() < 0.6) {
-            const tuft = new Mesh(new SphereGeometry(0.35 + rng() * 0.35, 6, 5), this.mats.needles);
-            tuft.position.set(s.pos[0] + (rng() - 0.5), s.pos[1] + rng() * 0.4, s.pos[2] + (rng() - 0.5));
-            tuft.scale.set(1.4, 0.6, 1);
-            tuft.castShadow = true;
-            g.add(tuft);
+          if (caps)
+            for (const sg of [-1, 1]) {
+              const cap = new Mesh(new CircleGeometry(rad * 0.84, 12), this.mats.end);
+              cap.rotation.x = sg > 0 ? -Math.PI / 2 : Math.PI / 2;
+              cap.position.y = (sg * len) / 2;
+              m.add(cap);
+            }
+        };
+        const style = o.style ?? 'deadfall';
+        if (style === 'logjam') {
+          // storm-felled trunks stacked across the valley
+          const layers = Math.max(3, Math.round(bh / 1.1));
+          for (let l = 0; l < layers; l++)
+            for (let k = 0; k < 3; k++) {
+              const rad = 0.42 + rng() * 0.28;
+              const len = o.span * (0.45 + rng() * 0.4);
+              addStick(len, rad, place((rng() - 0.5) * o.span * 0.45, (rng() - 0.5) * 1.6, 0.4 + l * 1.0 + rad), o.yaw + (rng() - 0.5) * 0.35, (rng() - 0.5) * 0.12, this.mats.bark, true);
+            }
+          for (let k = 0; k < 10; k++)
+            addStick(1.5 + rng() * 2.5, 0.06 + rng() * 0.08, place((rng() - 0.5) * o.span * 0.9, (rng() - 0.5) * 2.5, rng() * bh), rng() * 6.28, (rng() - 0.5) * 1.2, this.mats.deadBark, false);
+        } else if (style === 'beaver') {
+          const mud = new Mesh(new SphereGeometry(1, 18, 10), this.mats.soil);
+          mud.scale.set(o.span * 0.5, bh * 0.75, 1.8);
+          mud.position.copy(place(0, 0, -0.2));
+          mud.rotation.y = -o.yaw;
+          mud.castShadow = mud.receiveShadow = true;
+          g.add(mud);
+          outlined.push(mud);
+          for (let k = 0; k < 55; k++) {
+            const a = (rng() - 0.5) * o.span * 0.95;
+            const hh = bh * (1 - Math.pow(Math.abs(a) / (o.span * 0.5), 2)) * (0.5 + rng() * 0.6);
+            addStick(1.2 + rng() * 2.8, 0.05 + rng() * 0.08, place(a, (rng() - 0.5) * 2.2, hh), o.yaw + (rng() - 0.5) * 2.4, (rng() - 0.5) * 1.3, this.mats.deadBark, false);
+          }
+        } else {
+          // tangles of branches (and, for river debris, a few trunks) with dead needles
+          const logs = style === 'debris' ? 5 : 0;
+          for (let k = 0; k < logs; k++)
+            addStick(o.span * (0.35 + rng() * 0.35), 0.3 + rng() * 0.2, place((rng() - 0.5) * o.span * 0.5, (rng() - 0.5) * 1.5, 0.3 + rng() * bh * 0.6), o.yaw + (rng() - 0.5) * 0.6, (rng() - 0.5) * 0.3, this.mats.bark, true);
+          const n = style === 'debris' ? 40 : 16;
+          for (let k = 0; k < n; k++) {
+            addStick(o.span * (0.12 + rng() * 0.3), 0.05 + rng() * 0.1, place((rng() - 0.5) * o.span * 0.9, (rng() - 0.5) * 1.6, 0.2 + rng() * bh), o.yaw + (rng() - 0.5) * 1.4, (rng() - 0.5) * 0.9, this.mats.deadBark, false);
+            if (rng() < 0.5) {
+              const tuft = new Mesh(new SphereGeometry(0.35 + rng() * 0.45, 6, 5), this.mats.needles);
+              tuft.position.copy(place((rng() - 0.5) * o.span * 0.85, (rng() - 0.5) * 1.6, rng() * bh));
+              tuft.scale.set(1.4, 0.6, 1);
+              tuft.castShadow = true;
+              g.add(tuft);
+            }
           }
         }
         root.add(g);
-        anchor = new Vector3(o.position[0], this.h(o.position[0], o.position[1]) + 1, o.position[1]);
-        proxyR = o.span * 0.55;
+        anchor = new Vector3(o.position[0], baseY + bh * 0.6, o.position[1]);
+        proxyR = Math.max(3, o.span * 0.5);
         ringXZ = [o.position[0], o.position[1]];
         ringR = o.span * 0.5 + 0.3;
-        const base = g.children.map((c) => ({ p: c.position.clone(), r: c.quaternion.clone(), v: new Vector3((rng() - 0.5) * 6, 4 + rng() * 5, (rng() - 0.5) * 6) }));
-        apply = (s: any, t: number) => {
-          const k = s.removed ? t : 0;
+        const base = g.children.map((c) => ({ p: c.position.clone(), v: new Vector3((rng() - 0.5) * 10, 6 + rng() * 8, (rng() - 0.5) * 10) }));
+        apply = (st: any, t: number) => {
+          const k = st.removed ? t : 0;
           g.children.forEach((c, i) => {
             const b = base[i];
-            c.position.copy(b.p).addScaledVector(b.v, k * 0.6).add(new Vector3(0, -4 * k * k * 0.3, 0));
-            c.scale.setScalar(Math.max(0.001, 1 - k));
+            c.position.copy(b.p).addScaledVector(b.v, k * 0.6).add(new Vector3(0, -9.8 * k * k * 0.3, 0));
+            c.scale.setScalar(Math.max(0.001, 1 - k * k));
           });
-          g.visible = !(s.removed && t >= 1);
+          g.visible = !(st.removed && t >= 1);
         };
         break;
       }
@@ -379,15 +429,18 @@ export class ObjectsView {
         ringXZ = [o.position[0], o.position[1]];
         ringR = Math.max(o.size[0], o.size[2]) * 0.6 + 0.5;
         const yaw0 = new Quaternion().setFromAxisAngle(UP, -o.yaw);
-        const fallenQ = new Quaternion().setFromEuler(new Euler(0, -(o.yaw + 0.9), Math.PI / 2, 'YXZ'));
+        const fallenQ = o.hardness
+          ? new Quaternion().setFromAxisAngle(UP, -(o.yaw + 0.5))
+          : new Quaternion().setFromEuler(new Euler(0, -(o.yaw + 0.9), Math.PI / 2, 'YXZ'));
+        if (o.hardness) for (const m of g.children) (m as Mesh).material = this.mats.breaker;
         apply = (s: any, t: number) => {
           const y0 = this.h(o.position[0], o.position[1]) + o.size[1] * 0.5 - 0.7;
           const [sx, sz] = o.splitTo;
-          const y1 = this.h(sx, sz) + o.size[0] * 0.5 - 0.35;
+          const y1 = o.hardness ? this.h(sx, sz) + o.size[1] * 0.5 - 0.7 : this.h(sx, sz) + o.size[0] * 0.5 - 0.35;
           const k = s.split ? ease(t) : 0;
           g.position.set(
             o.position[0] + (sx - o.position[0]) * k,
-            y0 + (y1 - y0) * k + Math.sin(k * Math.PI) * 1.5,
+            y0 + (y1 - y0) * k + Math.sin(k * Math.PI) * (o.hardness ? 6 : 1.5),
             o.position[1] + (sz - o.position[1]) * k,
           );
           g.quaternion.slerpQuaternions(yaw0, fallenQ, k);

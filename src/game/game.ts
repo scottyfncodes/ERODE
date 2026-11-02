@@ -2,7 +2,7 @@ import { Color, Raycaster, Vector2, Vector3, type Object3D } from 'three';
 import type RAPIER_T from '@dimforge/rapier3d-deterministic-compat';
 import type { LevelDef, LevelObject, ObjectState, Plan } from '../levels/types';
 import { loadLevelData, type LevelData } from '../sim/levelData';
-import { Simulation, RECORD_EVERY, DT, type SimEvent, type SimResult, type Recording, type Track } from '../sim/simulation';
+import { Simulation, RECORD_EVERY, DT, STAGES, stageOf, restingBoulder, type SimEvent, type SimResult, type Recording, type Track } from '../sim/simulation';
 import { activeWater, clonePlan, countInterventions, defaultPlan, defaultState, isModified, sanitizePlan } from '../sim/plan';
 import { createSceneRig, detectQuality, type SceneRig } from '../render/scene';
 import { buildTerrain } from '../render/terrainView';
@@ -15,7 +15,7 @@ import { CameraDirector } from './camera';
 import { attachGestures } from './input';
 import { loadProgress, saveProgress, levelProgress, type Progress } from './progress';
 import { AudioEngine } from '../audio/audio';
-import { UI, type ContextAction } from '../ui/ui';
+import { UI, sizeLabel, type ContextAction } from '../ui/ui';
 import { clamp } from '../sim/geom';
 
 type State = 'title' | 'plan' | 'sim' | 'results' | 'replay';
@@ -130,6 +130,20 @@ export class Game {
         this.ghostOn = !this.ghostOn;
         this.updateGhost();
       },
+      zone: (id) => this.goZone(id),
+      nudge: (d) => this.nudge(d),
+    });
+    // during a run: swipe left/right anywhere to nudge
+    let sw: { x: number; y: number; t: number } | null = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (this.state === 'sim') sw = { x: e.clientX, y: e.clientY, t: performance.now() };
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      if (this.state !== 'sim' || !sw) return;
+      const dx = e.clientX - sw.x,
+        dy = e.clientY - sw.y;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3 && performance.now() - sw.t < 600) this.nudge(Math.sign(dx));
+      sw = null;
     });
 
     attachGestures(canvas, {
@@ -182,26 +196,16 @@ export class Game {
   }
 
   private showRestingBoulder() {
-    // A throwaway simulation gives the exact resting pose and shapes, without stepping.
-    const s = new Simulation(this.R, this.level, this.plan);
+    const b = restingBoulder(this.level);
     this.pieces.clear();
-    this.pieces.sync(this.statesFromSim(s).filter((p) => p.kind === 'stone'));
-    s.dispose();
+    this.pieces.sync([{ id: 1, shape: b.shape, kind: 'stone', pos: b.pos, quat: [0, 0, 0, 1], scale: 1 }]);
   }
 
   private statesFromSim(s: Simulation): PieceState[] {
     const out: PieceState[] = [];
     for (const p of s.pieces.values()) {
-      const t = p.body.translation();
-      const r = p.body.rotation();
-      out.push({
-        id: p.id,
-        shape: p.shape,
-        kind: p.kind,
-        pos: [t.x, t.y, t.z],
-        quat: [r.x, r.y, r.z, r.w],
-        scale: Math.cbrt(Math.max(0.01, p.volume / p.spawnVolume)),
-      });
+      const pose = s.pose(p);
+      out.push({ id: p.id, shape: p.shape, kind: p.kind, pos: pose.pos, quat: pose.quat, scale: pose.scale });
     }
     return out;
   }
@@ -297,7 +301,7 @@ export class Game {
     this.trails.clear();
     this.objects.setPlanning(false);
     this.objects.sync(this.plan, false);
-    this.objects.slump('soil', false);
+    for (const o of this.level.objects) if (o.type === 'soil') this.objects.slump(o.id, false);
     this.showRestingBoulder();
     this.state = 'title';
     this.cam.setMode('intro');
@@ -319,9 +323,6 @@ export class Game {
     this.showRestingBoulder();
     this.cam.setMode('plan');
     this.ui.showPlanning(this.level);
-    const lp = levelProgress(this.progress, this.level.id);
-    this.ui.setObjectives(false, false);
-    if (lp.completed) this.ui.setObjectives(true, true);
     this.refreshChanges();
     this.updateGhost();
     this.addGoalMarker();
@@ -329,11 +330,33 @@ export class Game {
       const touch = window.matchMedia('(pointer: coarse)').matches;
       this.ui.tip(
         touch
-          ? 'Tap a glowing object to change it. Drag to look around, pinch to zoom.'
-          : 'Click a glowing object to change it. Drag to look around, scroll to zoom.',
+          ? 'Tap the glowing objects: red ones block the run, orange ones smash it. Swipe to fly down the mountain.'
+          : 'Click the glowing objects: red ones block the run, orange ones smash it. Drag to fly down the mountain.',
       );
+    } else if (!this.progress.tutorial.released) this.ui.tip('Hit BREAK IT LOOSE and see how far it goes.', 5000);
+  }
+
+  /** Fly the planning camera to a stretch of the course. */
+  private goZone(id: string) {
+    const z = this.level.zones?.find((q) => q.id === id);
+    if (!z) return;
+    const zc = (z.z[0] + z.z[1]) / 2;
+    const course = this.level.terrain.course;
+    let x = 0;
+    if (course) {
+      for (let i = 0; i < course.length - 1; i++)
+        if (course[i][1] <= zc && course[i + 1][1] >= zc) {
+          const u = (zc - course[i][1]) / (course[i + 1][1] - course[i][1]);
+          x = course[i][0] + (course[i + 1][0] - course[i][0]) * u;
+        }
     }
-    else if (!this.progress.tutorial.released) this.ui.tip('When you’re ready, press Release and watch.', 5000);
+    this.audio.click();
+    this.cam.focusOn(new Vector3(x, this.data.heightAt(x, zc), zc), Math.max(55, (z.z[1] - z.z[0]) * 0.55));
+  }
+
+  private zoneAt(z: number): { id: string; name: string } | null {
+    for (const q of this.level.zones ?? []) if (z >= q.z[0] && z < q.z[1]) return q;
+    return null;
   }
 
   private refreshChanges() {
@@ -396,10 +419,11 @@ export class Game {
     let tag = '';
     let text = o.hint;
     let note: string | undefined;
+    let kind: 'smash' | 'block' | 'tweak' = 'tweak';
     switch (o.type) {
       case 'rock': {
         const s = st as Extract<ObjectState, { type: 'rock' }>;
-        tag = 'Move · Remove';
+        tag = 'Tweak · Drag to move';
         acts.push(s.removed ? { key: 'restore', label: 'Put it back', icon: 'undo' } : { key: 'remove', label: 'Remove stone', primary: true, disabled: locked });
         if (!s.removed && modified) acts.push({ key: 'restore', label: 'Return', icon: 'undo' });
         note = s.removed ? undefined : `Drag the stone to move it (within ${o.moveRadius} m).`;
@@ -425,20 +449,22 @@ export class Game {
       }
       case 'branches': {
         const s = st as Extract<ObjectState, { type: 'branches' }>;
-        tag = 'Remove';
-        acts.push(s.removed ? { key: 'restore', label: 'Put it back', icon: 'undo' } : { key: 'remove', label: 'Clear the deadfall', primary: true, disabled: locked });
+        tag = s.removed ? 'Blocker · cleared' : 'Blocker';
+        kind = 'block';
+        acts.push(s.removed ? { key: 'restore', label: 'Put it back', icon: 'undo' } : { key: 'remove', label: o.style === 'logjam' ? 'Blast it clear' : 'Clear it', primary: true, disabled: locked });
         break;
       }
       case 'tree': {
         const s = st as Extract<ObjectState, { type: 'tree' }>;
-        tag = 'Fell';
+        tag = 'Tweak · Fell';
         for (const f of o.fellOptions) acts.push({ key: `fell:${f.id}`, label: f.label, active: s.felled === f.id, disabled: locked && s.felled !== f.id, primary: !s.felled && f.id === o.fellOptions[0].id });
         if (s.felled) acts.push({ key: 'restore', label: 'Let it stand', icon: 'undo' });
         break;
       }
       case 'soil': {
         const s = st as Extract<ObjectState, { type: 'soil' }>;
-        tag = 'Dig';
+        tag = s.dug ? 'Blocker · cleared' : 'Blocker';
+        kind = 'block';
         acts.push(s.dug ? { key: 'restore', label: 'Heap it back', icon: 'undo' } : { key: 'dig', label: 'Dig it out', primary: true, disabled: locked });
         const soaked = o.saturatedBy && activeWater(this.level, this.plan).has(o.saturatedBy);
         if (!s.dug) note = soaked ? 'Water is soaking this bank — it will slump when struck.' : 'Dry and firm. Running water would soften it.';
@@ -446,25 +472,28 @@ export class Game {
       }
       case 'outcrop': {
         const s = st as Extract<ObjectState, { type: 'outcrop' }>;
-        tag = 'Fracture';
-        acts.push(s.split ? { key: 'restore', label: 'Restore', icon: 'undo' } : { key: 'split', label: 'Split the spur', primary: true, disabled: locked });
+        tag = s.split ? 'Smasher · in the line' : 'Smasher';
+        kind = 'smash';
+        acts.push(s.split ? { key: 'restore', label: 'Move it back', icon: 'undo' } : { key: 'split', label: o.actionLabel ?? 'Split it', primary: true, disabled: locked });
         break;
       }
       case 'ice': {
         const s = st as Extract<ObjectState, { type: 'ice' }>;
-        tag = 'Break';
+        tag = 'Tweak · Speed';
         acts.push(s.broken ? { key: 'restore', label: 'Let it freeze', icon: 'undo' } : { key: 'break', label: 'Break the ice', primary: true, disabled: locked });
         break;
       }
       case 'gate': {
         const s = st as Extract<ObjectState, { type: 'gate' }>;
-        tag = 'Redirect';
+        const blocked = o.options.length && s.option === o.initial;
+        tag = blocked ? 'Blocker · water' : 'Water · redirected';
+        kind = blocked ? 'block' : 'tweak';
         for (const op of o.options) acts.push({ key: `gate:${op.id}`, label: op.label, active: s.option === op.id, disabled: locked && s.option !== op.id });
         break;
       }
     }
-    if (locked) note = `You’ve used all ${this.level.budget} changes. Restore one to free it up.`;
-    this.ui.showContext(o.name, tag, text, acts, note);
+    if (locked) note = `You’ve used all ${this.level.budget} moves. Undo one to free it up.`;
+    this.ui.showContext(o.name, tag, text, acts, note, kind);
   }
 
   private setState(id: string, s: ObjectState, animate = true) {
@@ -473,6 +502,11 @@ export class Game {
     this.water.setActive(activeWater(this.level, this.plan));
     this.refreshChanges();
     this.renderContext();
+    window.setTimeout(() => {
+      if (this.state !== 'plan') return;
+      this.clearMarkers();
+      this.addGoalMarker();
+    }, 1300);
   }
 
   private doAction(key: string) {
@@ -645,6 +679,8 @@ export class Game {
       this.release();
     }
     if (this.state === 'sim' && e.key === ' ') this.togglePause();
+    if (this.state === 'sim' && (e.key === 'ArrowLeft' || e.key === 'a')) this.nudge(-1);
+    if (this.state === 'sim' && (e.key === 'ArrowRight' || e.key === 'd')) this.nudge(1);
     if (this.state === 'plan' && this.selected && this.obj(this.selected).type === 'log') {
       if (e.key === 'q' || e.key === 'ArrowLeft') this.doAction('rotL');
       if (e.key === 'e' || e.key === 'ArrowRight') this.doAction('rotR');
@@ -683,10 +719,20 @@ export class Game {
     this.effects.clear();
     this.pieces.clear();
     this.cam.setMode('follow');
-    this.ui.showRun();
+    this.ui.showRun(this.level.zones ?? [], this.sim.nudgesLeft);
     this.audio.release();
-    this.ui.callout('Released', 1400);
+    this.audio.startDrums();
     this.hadFirstRelease = true;
+    this.lastStage = 0;
+  }
+
+  private nudge(dir: number) {
+    if (this.state !== 'sim' || !this.sim || this.paused) return;
+    if (this.sim.nudge(dir)) {
+      this.ui.setNudges(this.sim.nudgesLeft);
+      this.audio.whoosh();
+      this.cam.shake(0.15);
+    }
   }
 
   private togglePause() {
@@ -705,8 +751,9 @@ export class Game {
     const sim = this.sim!;
     if (this.paused || this.menuOpen) return;
     let scale = this.fast ? 4 : 1;
-    if (this.now < this.slowUntil && !this.fast) scale = 0.32;
-    this.timeScale += (scale - this.timeScale) * Math.min(1, dt * 8);
+    if (!this.fast && this.now < this.hitStopUntil) scale = 0.06;
+    else if (this.now < this.slowUntil && !this.fast) scale = 0.3;
+    this.timeScale += (scale - this.timeScale) * Math.min(1, dt * 12);
     this.acc += dt * this.timeScale;
     let steps = 0;
     const maxSteps = this.fast ? 16 : 6;
@@ -724,61 +771,76 @@ export class Game {
     for (const e of sim.drainEvents()) this.handleEvent(e, true);
     const states = this.statesFromSim(sim);
     this.pieces.sync(states);
-    this.followFrom(states, sim);
+    this.followFrom(states, sim.leader?.id ?? -1, (id) => {
+      const p = sim.pieces.get(id);
+      if (!p) return new Vector3();
+      const l = p.body.linvel();
+      return new Vector3(l.x, l.y, l.z);
+    });
     this.runStatusTimer -= dt;
     if (this.runStatusTimer <= 0) {
-      this.runStatusTimer = 0.1;
-      let stones = 0;
-      for (const p of sim.pieces.values()) if (p.kind === 'stone') stones++;
-      this.ui.setRunStatus(sim.step * DT, sim.fractureCount, sim.deliveredSoFar, stones);
+      this.runStatusTimer = 0.05;
+      const lead = sim.leader;
+      const size = lead?.size ?? 0;
+      const st = stageOf(size);
+      const lz = lead?.body.translation().z ?? 0;
+      const z0 = this.level.zones?.[0]?.z[0] ?? 0;
+      const zEnd = this.level.beach?.z[0] ?? 1000;
+      this.ui.setRun({
+        score: sim.liveScore,
+        combo: sim.liveCombo,
+        stage: st,
+        best: Math.max(st, this.lastStage),
+        size,
+        progress: (sim.liveDistance + (restingBoulder(this.level).pos[2] - z0)) / (zEnd - z0),
+        distance: sim.liveDistance,
+        zone: this.zoneAt(lz)?.name ?? '',
+      });
+      this.lastStage = Math.max(this.lastStage, st);
     }
+    // mist at the foot of the falls when the camera is near
+    if (Math.random() < 0.3) this.fallsMist();
     if (sim.done) this.finishRun();
   }
+  private lastStage = 0;
+  private hitStopUntil = 0;
 
-  private lastFocus = new Vector3();
-  private followFrom(states: PieceState[], sim?: Simulation, vels?: Map<number, Vector3>) {
-    // focus on moving stone, weighted by size; follow the primary when everything is still
-    let wsum = 0;
-    const focus = new Vector3();
-    const vel = new Vector3();
-    let primary: PieceState | undefined;
+  private fallsMist() {
+    const falls = this.level.zones?.find((z) => z.id === 'falls');
+    if (!falls) return;
+    const p = new Vector3(0.5, 0, falls.z[0] + 14);
+    p.y = this.data.heightAt(p.x, p.z) + 1.5;
+    if (p.distanceTo(this.rig.camera.position) < 120) this.effects.dust(p, 0.12, new Color(0.92, 0.95, 0.97));
+  }
+
+  private followFrom(states: PieceState[], leaderId: number, velOf: (id: number) => Vector3) {
+    // follow the leading stone; widen the shot when fragments are close around it
+    const lead = states.find((s) => s.id === leaderId) ?? states.find((s) => s.kind === 'stone');
+    if (!lead) return;
+    const focus = new Vector3(...lead.pos);
+    const vel = velOf(lead.id);
+    let spread = 0;
     for (const s of states) {
       if (s.kind !== 'stone') continue;
-      let v: Vector3;
-      if (sim) {
-        const p = sim.pieces.get(s.id)!;
-        const lv = p.body.linvel();
-        v = new Vector3(lv.x, lv.y, lv.z);
-      } else v = vels?.get(s.id) ?? new Vector3();
-      const w = s.shape.volume * (0.2 + Math.min(1, v.length() / 3));
-      if (!primary || s.shape.volume > primary.shape.volume) primary = s;
-      focus.addScaledVector(new Vector3(...s.pos), w);
-      vel.addScaledVector(v, w);
-      wsum += w;
+      const d = focus.distanceTo(new Vector3(...s.pos));
+      if (d < 26) spread = Math.max(spread, d);
     }
-    if (wsum <= 0) return;
-    focus.multiplyScalar(1 / wsum);
-    vel.multiplyScalar(1 / wsum);
-    let spread = 0;
-    for (const s of states) if (s.kind === 'stone') spread = Math.max(spread, Math.min(24, focus.distanceTo(new Vector3(...s.pos))));
-    this.lastFocus.copy(focus);
-    this.followInfo = { focus, vel, spread };
-    // sound of rolling stone
+    const r = lead.shape.radius * lead.scale;
+    this.followInfo = { focus, vel, spread: Math.min(18, spread) + Math.max(0, (r - 1) * 3), small: r < 0.3 };
     let rolling = 0;
     let gravel = 0;
     for (const s of states) {
       if (s.kind !== 'stone') continue;
-      const v = sim ? (() => { const l = sim.pieces.get(s.id)!.body.linvel(); return Math.hypot(l.x, l.y, l.z); })() : vels?.get(s.id)?.length() ?? 0;
+      const v = velOf(s.id).length();
       const ground = this.data.heightAt(s.pos[0], s.pos[2]);
-      const onGround = s.pos[1] - ground < s.shape.radius * 1.4 + 0.3;
-      if (!onGround) continue;
-      rolling += Math.min(1, v / 10) * Math.min(1, s.shape.volume / 4);
-      gravel += Math.min(1, v / 6) * 0.25;
+      if (s.pos[1] - ground > s.shape.radius * 1.4 + 0.3) continue;
+      rolling += Math.min(1, v / 12) * Math.min(1, s.shape.volume / 4);
+      gravel += Math.min(1, v / 8) * 0.25;
     }
     this.rolling = Math.min(1, rolling);
     this.gravel = Math.min(1, gravel);
   }
-  private followInfo: { focus: Vector3; vel: Vector3; spread: number } | undefined;
+  private followInfo: { focus: Vector3; vel: Vector3; spread: number; small?: boolean } | undefined;
   private rolling = 0;
   private gravel = 0;
 
@@ -787,46 +849,88 @@ export class Game {
     return clamp(v.x, -1, 1) * 0.7;
   }
 
+  private screenPos(p: Vector3): { x: number; y: number } {
+    const v = p.clone().project(this.rig.camera);
+    const c = this.rig.renderer.domElement;
+    return { x: clamp((v.x * 0.5 + 0.5) * c.clientWidth, 70, c.clientWidth - 70), y: clamp((-v.y * 0.5 + 0.5) * c.clientHeight, 140, c.clientHeight - 160) };
+  }
+
   private handleEvent(e: SimEvent, live: boolean) {
     const pos = new Vector3(...e.pos);
     const pan = this.screenPan(pos);
     const dist = pos.distanceTo(this.rig.camera.position);
-    const att = clamp(30 / Math.max(10, dist), 0.25, 1);
+    const att = clamp(40 / Math.max(10, dist), 0.3, 1);
+    const fx = live || this.replaySpeed >= 1;
     switch (e.type) {
+      case 'breakoff':
+        this.audio.fracture(1, 0);
+        this.effects.dust(pos.clone().add(new Vector3(0, 1, -2)), 1.2);
+        this.effects.grit(pos, 1);
+        this.cam.shake(1);
+        this.ui.doFlash(0.6);
+        this.ui.bigBanner('IT\'S LOOSE!', '', 1400);
+        if (live) this.slowUntil = this.now + 0.9;
+        break;
       case 'fracture': {
-        this.audio.fracture(e.intensity * att + 0.2, pan);
-        this.effects.dust(pos, 0.5 + e.intensity * 0.7);
-        this.effects.grit(pos, 0.5 + e.intensity * 0.6);
-        this.cam.shake(0.4 + e.intensity * 0.6);
-        if (live || this.replaySpeed >= 1) {
+        this.audio.fracture(e.intensity * att + 0.3, pan);
+        this.effects.dust(pos, 0.9 + e.intensity);
+        this.effects.grit(pos, 1 + e.intensity);
+        this.effects.grit(pos, 0.8);
+        this.cam.shake(0.7 + e.intensity * 0.8);
+        if (fx) {
+          this.ui.doFlash(0.4 + e.intensity * 0.6);
           this.cam.punchIn(this.now);
-          if (live) this.slowUntil = this.now + 0.75;
+          if (live) {
+            this.hitStopUntil = this.now + 0.12;
+            this.slowUntil = this.now + 0.7;
+          }
         }
-        const n = e.pieces?.length ?? 0;
-        this.ui.callout(`Fractured against ${e.label} — ${n} pieces`, 2400);
         break;
       }
+      case 'crack':
+        this.audio.fracture(0.45 * att + 0.15, pan);
+        this.effects.grit(pos, 0.7);
+        this.effects.dust(pos, 0.3);
+        this.cam.shake(0.25);
+        if (fx) this.ui.doFlash(0.25);
+        break;
       case 'impact':
-        this.audio.impact(e.intensity * att, e.material === 'terrain' ? 'granite' : (e.material as 'granite'), pan);
-        if (e.intensity > 0.25) this.effects.dust(pos, e.intensity * 0.5, e.material === 'wood' ? new Color(0.5, 0.42, 0.32) : undefined);
-        if (e.intensity > 0.5) this.cam.shake(e.intensity * 0.3);
+        this.audio.impact(Math.min(1, e.intensity * 1.3) * att, e.material === 'terrain' ? 'granite' : (e.material as 'granite'), pan);
+        if (e.intensity > 0.2) this.effects.dust(pos, e.intensity * 0.7, e.material === 'wood' ? new Color(0.5, 0.42, 0.32) : undefined);
+        if (e.intensity > 0.35) this.cam.shake(e.intensity * 0.5);
         break;
       case 'chip':
-        this.audio.impact(0.4 * att, 'granite', pan);
-        this.effects.grit(pos, 0.25);
+        this.audio.impact(0.5 * att, 'granite', pan);
+        this.effects.grit(pos, 0.35);
         break;
       case 'splash':
-        this.audio.splash(e.intensity * att + 0.15, pan);
-        this.effects.splash(pos, e.intensity);
+        this.audio.splash(e.intensity * att + 0.2, pan);
+        this.effects.splash(pos, e.intensity + 0.2);
         break;
-      case 'deliver':
-        if (e.intensity > 0.08) this.ui.callout(`${Math.round(e.intensity * 100)}% into the stream`, 1600);
+      case 'score': {
+        if (!fx) break;
+        const sp = this.screenPos(pos);
+        const big = (e.points ?? 0) >= 2000;
+        this.ui.pop(sp.x, sp.y, e.label ?? '', e.points ?? 0, `${big ? 'big' : ''} ${(e.label ?? '').startsWith('BIG AIR') ? 'air' : ''}`);
+        if ((e.combo ?? 0) >= 2) this.audio.combo(e.combo ?? 2);
+        break;
+      }
+      case 'stage':
+        if (fx) {
+          this.ui.bigBanner(`${(e.label ?? '').toUpperCase()}!`, `+${(e.points ?? 0).toLocaleString('en-US')}`, 1700);
+          this.audio.stageUp(e.intensity);
+        }
+        break;
+      case 'air':
+        this.audio.impact(0.6, 'granite', pan);
+        break;
+      case 'nudge':
+        if (!live) this.audio.whoosh();
         break;
       case 'slump':
         if (e.objectId) this.objects.slump(e.objectId, true);
         this.effects.earth(pos, 1);
         this.audio.dig();
-        this.ui.callout('The soaked bank gives way', 2000);
         break;
     }
   }
@@ -836,54 +940,53 @@ export class Game {
     const r = sim.result!;
     this.result = r;
     this.recording = sim.recording;
+    this.audio.stopDrums();
     const lp = levelProgress(this.progress, this.level.id);
-    const firstClear = r.success && !lp.completed;
-    if (r.success) lp.completed = true;
-    lp.stars = Math.max(lp.stars, r.stars);
-    lp.bestDelivered = Math.max(lp.bestDelivered, r.success ? r.deliveredFraction : 0);
+    const isBest = r.score > (lp.bestScore ?? 0);
+    if (isBest) {
+      lp.bestScore = r.score;
+      lp.bestGrade = r.grade;
+    }
+    lp.bestStage = Math.max(lp.bestStage ?? 0, r.bestStage);
+    lp.bestDistance = Math.max(lp.bestDistance ?? 0, r.distance);
+    lp.completed = lp.completed || r.landed;
     lp.lastTrail = r.trajectory.map((p) => [round2(p[0]), round2(p[1]), round2(p[2])] as [number, number, number]);
     saveProgress(this.progress);
-    // final positions for the aftermath framing
+    this.lastBest = { score: lp.bestScore ?? r.score, isBest };
     const states = this.statesFromSim(sim);
     this.pieces.sync(states);
+    const lead = sim.leader ? sim.pose(sim.leader).pos : states[0]?.pos;
     sim.dispose();
     this.sim = null;
-    this.showAftermath(states.map((s) => new Vector3(...s.pos)));
-    if (firstClear) window.setTimeout(() => this.ui.callout('The stream has the first of the mountain', 2600), 300);
+    if (r.sand) this.ui.bigBanner('PERFECT EROSION', 'Sand on the beach', 2600);
+    else if (r.landed) this.ui.bigBanner('BEACHED!', `${STAGES[r.stage].name} · ${sizeLabel(r.size)}`, 2000);
+    window.setTimeout(() => this.showAftermath(lead ? [new Vector3(...lead)] : []), r.landed ? 1400 : 600);
   }
+  private lastBest = { score: 0, isBest: false };
 
   private showAftermath(finalPositions: Vector3[]) {
     const r = this.result!;
     this.state = 'results';
     this.ui.hideRun();
     this.cam.setMode('aftermath');
-    const pts = [...finalPositions, ...r.trajectory.map((p) => new Vector3(...p))];
-    this.cam.frameAftermath(pts);
+    // frame the end of the run, with a little of the path that led there
+    const tail = r.trajectory.slice(-12).map((p) => new Vector3(...p));
+    this.cam.frameAftermath([...finalPositions, ...tail]);
     this.drawTrails();
     this.addFractureMarkers();
-    const lp = levelProgress(this.progress, this.level.id);
-    this.ui.setObjectives(r.fractureGoalMet, r.massGoalMet);
-    this.ui.showResults(r, this.level, explain(r, this.level), { stars: lp.stars, delivered: lp.bestDelivered });
+    this.ui.showResults(r, explainRun(r, this.level, this.plan), this.lastBest);
     if (!this.progress.tutorial.reviewed) {
       this.progress.tutorial.reviewed = true;
       this.progress.tutorial.released = true;
       saveProgress(this.progress);
-      window.setTimeout(() => this.ui.tip('The bright line is the stone’s path. Change the mountain and try again.', 6000), 1200);
     }
   }
 
   private drawTrails() {
     this.trails.clear();
-    const rec = this.recording;
     const r = this.result;
-    if (!rec || !r) return;
-    for (const t of rec.tracks) {
-      if (t.kind !== 'stone' || t.shape.radius < 0.35) continue;
-      const pts: [number, number, number][] = [];
-      for (let i = 0; i < t.data.length; i += 8 * 3) pts.push([t.data[i], t.data[i + 1], t.data[i + 2]]);
-      this.trails.add(pts, new Color(0.95, 0.9, 0.82), 0.35, { opacity: 0.45 });
-    }
-    this.trails.add(r.trajectory, new Color(1, 0.8, 0.5), 1.0, { opacity: 0.9 });
+    if (!r) return;
+    this.trails.add(r.trajectory, new Color(1, 0.7, 0.3), 1.2, { opacity: 0.9 });
   }
 
   // ------------------------------------------------------------------ markers
@@ -900,25 +1003,32 @@ export class Game {
   }
   private addFractureMarkers() {
     this.clearMarkers();
-    this.result?.fractures.forEach((f, i) => this.addMarker(String(i + 1), new Vector3(...f.pos)));
-    this.addGoalMarker();
+    this.result?.fractures.slice(0, 30).forEach((f, i) => this.addMarker(String(i + 1), new Vector3(...f.pos)));
   }
   private addGoalMarker() {
-    const w = this.data.water.find((x) => x.spec.goal);
-    if (!w) return;
-    const x = 0;
-    const z = 38.2;
-    this.addMarker('The stream', new Vector3(x, this.data.heightAt(x, z) + 2.4, z), 'goal');
-    if (this.state === 'plan') {
-      const [bx, bz] = this.level.boulder.position;
-      this.addMarker('The boulder', new Vector3(bx, this.data.heightAt(bx, bz) + this.level.boulder.radius * 2 + 1.8, bz), 'goal stone');
+    if (this.state !== 'plan') return;
+    const [bx, bz] = this.level.boulder.position;
+    this.addMarker('The boulder', new Vector3(bx, this.data.heightAt(bx, bz) + this.level.boulder.radius * 2 + 2, bz), 'goal stone');
+    const beach = this.level.beach;
+    if (beach) {
+      const z = beach.z[0] + 20;
+      this.addMarker('The beach', new Vector3(6, this.data.heightAt(6, z) + 3, z), 'goal');
+    }
+    // label every active blocker and every smasher waiting on the sidelines
+    for (const o of this.level.objects) {
+      const st = this.plan[o.id] ?? defaultState(o);
+      const a = this.objects.anchorOf(o.id);
+      if (!a) continue;
+      if ((o.type === 'branches' && st.type === 'branches' && !st.removed) || (o.type === 'soil' && st.type === 'soil' && !st.dug) || (o.type === 'gate' && st.type === 'gate' && st.option === o.initial))
+        this.addMarker('Blocker', a.clone().add(new Vector3(0, 2, 0)), 'blocker');
+      if (o.type === 'outcrop' && o.hardness && st.type === 'outcrop' && !st.split) this.addMarker('Smasher', a.clone().add(new Vector3(0, o.size[1] * 0.6, 0)), 'smasher');
     }
   }
   private updateMarkers() {
     const c = this.rig.renderer.domElement;
     for (const m of this.markerEls) {
       const v = m.pos.clone().project(this.rig.camera);
-      const vis = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+      const vis = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 && m.pos.distanceTo(this.rig.camera.position) < 190;
       m.el.style.opacity = vis ? '1' : '0';
       m.el.style.left = `${(v.x * 0.5 + 0.5) * c.clientWidth}px`;
       m.el.style.top = `${(-v.y * 0.5 + 0.5) * c.clientHeight}px`;
@@ -986,7 +1096,8 @@ export class Game {
       const n = ahead.find((a) => a.id === s.id);
       if (n) vels.set(s.id, new Vector3(n.pos[0] - s.pos[0], n.pos[1] - s.pos[1], n.pos[2] - s.pos[2]).multiplyScalar(60 / RECORD_EVERY));
     }
-    this.followFrom(states, undefined, vels);
+    const leader = rec.leader[Math.min(rec.leader.length - 1, Math.max(0, Math.round(f)))] ?? -1;
+    this.followFrom(states, leader, (id) => vels.get(id) ?? new Vector3());
     // object changes (soil slumps)
     for (const ch of rec.objectChanges) this.objects.slump(ch.objectId, f >= ch.frame);
     if (withEvents) {
@@ -1099,6 +1210,12 @@ export class Game {
       replay: () => this.startReplay(),
       adjust: () => this.toPlanning(),
       snapCamera: () => this.cam.snap(),
+      /** test hook: run the rest of the descent instantly */
+      finishNow: () => {
+        if (!this.sim) return;
+        while (!this.sim.done) this.sim.stepOnce();
+        this.sim.drainEvents();
+      },
     };
   }
 }
@@ -1149,25 +1266,36 @@ function sampleTrack(t: Track, f: number, frames: number): PieceState | null {
   };
 }
 
-/** Plain-language explanation of what happened and why. */
-export function explain(r: SimResult, level: LevelDef): string {
-  if (r.unstable) return 'The simulation became unstable. Nothing you did was wrong — release again.';
-  const parts: string[] = [];
-  const pct = (v: number) => `${Math.round(v * 100)}%`;
-  if (r.success) {
-    parts.push(`${pct(r.deliveredFraction)} of the boulder reached the stream after ${r.fractures.length} fracture${r.fractures.length === 1 ? '' : 's'}.`);
-    if (r.stars < 3) {
-      if (r.deliveredFraction < level.stars.deliveredFraction) parts.push(`Deliver ${pct(level.stars.deliveredFraction)} for another star — look for where fragments got stranded.`);
-      if (r.interventions > level.stars.maxInterventions) parts.push(`Try it with ${level.stars.maxInterventions} changes or fewer.`);
+/** What happened, and what to try next — in arcade terms. */
+export function explainRun(r: SimResult, level: LevelDef, plan: Plan): string {
+  if (r.unstable) return 'The physics hiccuped. Nothing you did — run it again.';
+  const stage = STAGES[r.stage].name.toLowerCase();
+  if (r.sand) return `A grain of sand on the beach after ${Math.round(r.distance)} m and ${r.smashes} smashes. The mountain is complete.`;
+  const tips: string[] = [];
+  const blocked = (id: string) => {
+    const o = level.objects.find((x) => x.id === id);
+    if (!o) return false;
+    const st = plan[id] ?? defaultState(o);
+    return (st.type === 'branches' && !st.removed) || (st.type === 'soil' && !st.dug) || (st.type === 'gate' && o.type === 'gate' && st.option === o.initial);
+  };
+  const smashersIdle = level.objects.filter((o) => o.type === 'outcrop' && o.hardness && !(plan[o.id] as { split?: boolean } | undefined)?.split).length;
+  let lead: string;
+  if (r.landed) lead = `It hit the beach as ${/^[aeiou]/.test(stage) ? 'an' : 'a'} ${stage} — ${sizeLabel(r.size)} across.`;
+  else lead = `It ran ${Math.round(r.distance)} m and stopped at ${r.destination}, ${sizeLabel(r.size)} across.`;
+  if (!r.landed) {
+    const near: [string, string][] = [
+      ['logjam', 'The log jam stopped it — blast it clear.'],
+      ['debris', 'The debris dam above the falls caught it.'],
+      ['beaver', 'The beaver dam held it in the rapids.'],
+      ['sandbar', 'The sandbar choked the sea channel.'],
+      ['weir', 'The weir sent the river into the dead-end marsh — switch the water right.'],
+    ];
+    for (const [id, msg] of near) if (blocked(id)) {
+      tips.push(msg);
+      break;
     }
-    return parts.join(' ');
   }
-  if (!r.fractureGoalMet) {
-    if (r.deliveredFraction > 0) parts.push('The boulder reached the stream whole. It needs to strike something hard on the way — rock, not soil or wood.');
-    else parts.push(`The boulder came to rest at ${r.destination} without breaking.`);
-  } else if (!r.massGoalMet) {
-    parts.push(`It broke, but only ${pct(r.deliveredFraction)} reached the stream. Most of the stone is resting at ${r.destination}.`);
-    parts.push('Clear a way for the fragments, or give them water to ride.');
-  }
-  return parts.join(' ');
+  if (r.stage < STAGES.length - 1 && smashersIdle) tips.push(`${smashersIdle} smasher${smashersIdle > 1 ? 's are' : ' is'} still on the sidelines — drop them in the line to grind it smaller.`);
+  else if (r.stage < STAGES.length - 1) tips.push('Use your nudges to steer it into the hard rocks.');
+  return [lead, ...tips].join(' ');
 }

@@ -96,19 +96,18 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
   const level = data.level;
   const rng = mulberry32(level.forest.seed);
   const keep = level.forest.keepOut.map((k) => ({ pl: makePolyline(k.path), w: k.width }));
-  const treeLine = 42;
+  const treeLine = 175;
+  const sea = level.sea;
   const b = level.terrain.bounds;
 
   const placements: { x: number; y: number; z: number; s: number; rot: number }[] = [];
   const tryPlace = (x: number, z: number, near: boolean) => {
     const y = data.heightAt(x, z);
-    if (y > treeLine || y < -6) return;
+    if (y > treeLine - fbm2(x / 30, z / 30, 2, 4) * 15 || y < (sea ? sea.level + 2.5 : -6)) return;
     const n = data.terrain.normal(x, z);
     if (n[1] < 0.78) return;
     for (const k of keep) if (pathDistance(k.pl, x, z).d < k.w) return;
     for (const a of avoid) if (Math.hypot(a.x - x, a.z - z) < a.r) return;
-    // keep the heart of the puzzle open: forest gathers on the flanks and lower slopes
-    if (near && Math.abs(x) < 23 && z < 30 && z > -60) return;
     // clumped forest: noise decides where trees gather
     const clump = fbm2(x / 26, z / 26, 3, 77) * 0.5 + 0.5;
     if (clump < (near ? 0.4 : 0.36)) return;
@@ -119,11 +118,11 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
   for (let i = 0; i < nearCount * 4 && placements.length < nearCount; i++) {
     tryPlace(b.x[0] - 25 + rng() * (b.x[1] - b.x[0] + 50), b.z[0] - 10 + rng() * (b.z[1] - b.z[0] + 30), true);
   }
-  const farTarget = Math.round(1400 * density);
+  const farTarget = Math.round(1800 * density);
   const farStart = placements.length;
   for (let i = 0; i < farTarget * 5 && placements.length - farStart < farTarget; i++) {
-    const x = (rng() * 2 - 1) * 380;
-    const z = -200 + rng() * 620;
+    const x = (rng() * 2 - 1) * 420;
+    const z = b.z[0] - 150 + rng() * (b.z[1] - b.z[0] + 300);
     if (x > b.x[0] - 26 && x < b.x[1] + 26 && z > b.z[0] - 12 && z < b.z[1] + 22) continue;
     tryPlace(x, z, false);
   }
@@ -167,7 +166,7 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
   const rockMat = createRockMaterial({ scale: 1.3 });
   const stoneGeos = [0, 1, 2].map((k) => pieceGeometry(generateStone(1, 400 + k, 0.7)));
   const stones: { x: number; y: number; z: number; s: number; rot: number }[] = [];
-  for (let i = 0; i < 900 && stones.length < 240 * density + 40; i++) {
+  for (let i = 0; i < 4000 && stones.length < 700 * density + 80; i++) {
     const x = b.x[0] - 20 + rng() * (b.x[1] - b.x[0] + 40);
     const z = b.z[0] - 8 + rng() * (b.z[1] - b.z[0] + 16);
     let blocked = false;
@@ -218,7 +217,7 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
     const nrm = blade.getAttribute('normal');
     for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, 0, 1, 0);
     const tufts: Matrix4[] = [];
-    for (let i = 0; i < 9000 && tufts.length < 2400 * density; i++) {
+    for (let i = 0; i < 30000 && tufts.length < 5000 * density; i++) {
       const x = b.x[0] + rng() * (b.x[1] - b.x[0]);
       const z = b.z[0] + rng() * (b.z[1] - b.z[0]);
       const kind = data.terrain.surface(x, z);

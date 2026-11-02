@@ -1,5 +1,5 @@
-import type { LevelDef } from '../levels/types';
-import type { SimResult } from '../sim/simulation';
+import type { LevelDef, Zone } from '../levels/types';
+import { STAGES, type SimResult } from '../sim/simulation';
 import type { Progress } from '../game/progress';
 import './style.css';
 
@@ -15,11 +15,11 @@ export const ICONS = {
   undo: '<svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
   hand: '<svg viewBox="0 0 24 24"><path d="M8 13V6a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v7a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L3 13a1.5 1.5 0 0 1 2.5-1.6L8 14"/></svg>',
   eye: '<svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>',
-  sound: '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
   replay: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/><path d="M10 9v6l5-3z"/></svg>',
+  left: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
+  right: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
 };
-
-const STAR = '<svg class="star" viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg>';
 
 export interface ContextAction {
   key: string;
@@ -28,7 +28,6 @@ export interface ContextAction {
   primary?: boolean;
   active?: boolean;
   disabled?: boolean;
-  /** repeat while held (rotation) */
   repeat?: boolean;
 }
 
@@ -52,6 +51,8 @@ export interface UIHandlers {
   toTitle(): void;
   resumeFromMenu(): void;
   toggleGhost(): void;
+  zone(id: string): void;
+  nudge(dir: number): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
@@ -61,7 +62,14 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
   return e;
 }
 
-const pct = (v: number) => `${Math.round(v * 100)}`;
+const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
+
+export function sizeLabel(r: number): string {
+  const d = r * 2;
+  if (d >= 1) return `${d.toFixed(1)} m`;
+  if (d >= 0.01) return `${(d * 100).toFixed(d >= 0.1 ? 0 : 1)} cm`;
+  return `${(d * 1000).toFixed(1)} mm`;
+}
 
 export class UI {
   private root: HTMLElement;
@@ -77,21 +85,44 @@ export class UI {
   private calloutEl!: HTMLElement;
   private pipsEl!: HTMLElement;
   private changesLabel!: HTMLElement;
-  private runStatus!: HTMLElement;
+  private zonesEl!: HTMLElement;
   private range!: HTMLInputElement;
   private speedEl!: HTMLElement;
   private playBtn!: HTMLButtonElement;
   private pauseBtn!: HTMLButtonElement;
   private ghostBtn!: HTMLButtonElement;
-  private objectivesEl!: HTMLElement;
+  private scoreEl!: HTMLElement;
+  private comboEl!: HTMLElement;
+  private chainEl!: HTMLElement;
+  private sizeEl!: HTMLElement;
+  private distFill!: HTMLElement;
+  private distMarker!: HTMLElement;
+  private distLabel!: HTMLElement;
+  private nudgeDots!: HTMLElement;
+  private nudgeBtns: HTMLButtonElement[] = [];
+  private popLayer!: HTMLElement;
+  private banner!: HTMLElement;
+  private flash!: HTMLElement;
   private calloutTimer = 0;
   private tipTimer = 0;
+  private bannerTimer = 0;
   private scrubbing = false;
+  private shownScore = 0;
+  private targetScore = 0;
+  private lastStage = -1;
 
   constructor(root: HTMLElement, handlers: UIHandlers) {
     this.root = root;
     this.h = handlers;
     this.build();
+    const tick = () => {
+      requestAnimationFrame(tick);
+      if (Math.abs(this.targetScore - this.shownScore) > 0.5) {
+        this.shownScore += (this.targetScore - this.shownScore) * 0.18;
+        this.scoreEl.textContent = fmt(this.shownScore);
+      }
+    };
+    requestAnimationFrame(tick);
   }
 
   private btn(cls: string, html: string, fn: () => void, label?: string): HTMLButtonElement {
@@ -104,63 +135,88 @@ export class UI {
     return b;
   }
 
+  private chain(): HTMLElement {
+    const c = el('div', 'chain');
+    STAGES.forEach((s, i) => {
+      if (i) c.append(el('span', 'chain-sep', '›'));
+      c.append(el('span', 'chain-item', s.name));
+    });
+    return c;
+  }
+
   private build() {
-    // title
+    // ---------------- title
     this.title = el('div', 'title hidden');
-    const top = el('div');
+    const top = el('div', 'title-top');
     top.append(
-      el('div', 'wordmark', 'ERODE'),
-      el(
-        'div',
-        'journey',
-        '<span>Boulder → Fragments → Rocks →</span> <span>Pebbles → Gravel → Sand</span>',
-      ),
+      el('div', 'arcade-mark', 'ERODE'),
+      el('div', 'title-tag', 'One boulder. One mountain.<br><b>How small can you grind it?</b>'),
     );
     const bottom = el('div', 'title-bottom');
-    const begin = this.btn('btn-primary interactive', 'Begin', () => this.h.begin());
+    const best = el('div', 'title-best');
+    best.id = 'title-best';
+    const begin = this.btn('btn-go interactive', 'Start', () => this.h.begin());
     begin.id = 'begin';
-    const stages = el('div', 'stages');
-    stages.id = 'stages';
-    bottom.append(begin, stages);
+    const ch = this.chain();
+    ch.id = 'title-chain';
+    bottom.append(ch, best, begin);
     this.title.append(top, bottom);
 
-    // planning HUD
+    // ---------------- planning
     this.plan = el('div', 'hud hidden');
     const card = el('div', 'level-card');
-    card.innerHTML = '<div class="stage-label"></div><h1></h1>';
-    this.objectivesEl = el('ul', 'objectives');
+    card.innerHTML = '<div class="stage-label"></div><h1></h1><div class="plan-goal"></div>';
     const changes = el('div', 'changes');
-    this.changesLabel = el('span', '', 'Changes');
+    this.changesLabel = el('span', '', 'Moves');
     this.pipsEl = el('div', 'pips');
     changes.append(this.changesLabel, this.pipsEl);
-    card.append(this.objectivesEl, changes);
+    card.append(changes);
     const tr = el('div', 'top-right');
     this.ghostBtn = this.btn('icon-btn interactive', ICONS.eye, () => this.h.toggleGhost(), 'Show last path');
-    tr.append(
-      this.ghostBtn,
-      this.btn('icon-btn interactive', ICONS.reset, () => this.h.reset(), 'Reset the mountain'),
-      this.btn('icon-btn interactive', ICONS.menu, () => this.h.menu(), 'Menu'),
-    );
+    tr.append(this.ghostBtn, this.btn('icon-btn interactive', ICONS.reset, () => this.h.reset(), 'Reset the mountain'), this.btn('icon-btn interactive', ICONS.menu, () => this.h.menu(), 'Menu'));
+    this.zonesEl = el('div', 'zones interactive');
     const rw = el('div', 'release-wrap');
-    const rel = this.btn('release interactive', 'Release', () => this.h.release());
+    const rel = this.btn('release interactive', 'Break it loose', () => this.h.release());
     rel.id = 'release';
     rw.append(rel);
     this.context = el('div', 'context interactive');
-    this.plan.append(card, tr, this.context, rw);
+    this.plan.append(card, tr, this.context, this.zonesEl, rw);
 
-    // live run HUD
-    this.run = el('div', 'hud hidden');
-    this.runStatus = el('div', 'run-status');
+    // ---------------- run
+    this.run = el('div', 'hud hidden run');
+    const scoreBox = el('div', 'score-box');
+    this.scoreEl = el('div', 'score', '0');
+    this.comboEl = el('div', 'combo');
+    scoreBox.append(this.scoreEl, this.comboEl);
+    const sizeBox = el('div', 'size-box');
+    this.chainEl = this.chain();
+    this.sizeEl = el('div', 'size-readout');
+    sizeBox.append(this.chainEl, this.sizeEl);
     const rtr = el('div', 'top-right');
     this.pauseBtn = this.btn('icon-btn interactive', ICONS.pause, () => this.h.pause(), 'Pause');
     rtr.append(this.pauseBtn, this.btn('icon-btn interactive', ICONS.ff, () => this.h.skip(), 'Fast forward'));
+    const dist = el('div', 'dist');
+    const track = el('div', 'dist-track');
+    this.distFill = el('div', 'dist-fill');
+    this.distMarker = el('div', 'dist-marker');
+    track.append(this.distFill, this.distMarker);
+    this.distLabel = el('div', 'dist-label');
+    dist.append(track, this.distLabel);
+    const nudge = el('div', 'nudge');
+    const nl = this.btn('nudge-btn interactive', ICONS.left, () => this.h.nudge(-1), 'Nudge left');
+    const nr = this.btn('nudge-btn interactive', ICONS.right, () => this.h.nudge(1), 'Nudge right');
+    this.nudgeBtns = [nl, nr];
+    this.nudgeDots = el('div', 'nudge-dots');
+    nudge.append(nl, this.nudgeDots, nr);
     this.calloutEl = el('div', 'callout');
-    this.run.append(this.runStatus, rtr, this.calloutEl);
+    this.popLayer = el('div', 'pops');
+    this.banner = el('div', 'banner');
+    this.flash = el('div', 'flash');
+    this.run.append(this.flash, scoreBox, sizeBox, rtr, dist, nudge, this.calloutEl, this.banner);
 
-    // results
+    // ---------------- results / replay / menu / tip
     this.results = el('div', 'results interactive');
-
-    // replay bar
+    this.results.style.display = 'none';
     this.replayBar = el('div', 'hud hidden');
     const bar = el('div', 'replay-bar interactive');
     this.playBtn = this.btn('icon-btn', ICONS.pause, () => this.h.replayToggle(), 'Play or pause');
@@ -177,30 +233,30 @@ export class UI {
     this.speedEl = this.btn('speed', '1×', () => this.h.replaySpeed(), 'Replay speed');
     bar.append(this.playBtn, this.range, this.speedEl, this.btn('icon-btn', ICONS.close, () => this.h.exitReplay(), 'Close replay'));
     this.replayBar.append(bar);
-
-    // menu
     this.menuEl = el('div', 'menu interactive');
     this.menuEl.style.display = 'none';
-
     this.tipEl = el('div', 'tip');
+    this.root.append(this.title, this.plan, this.run, this.popLayer, this.results, this.replayBar, this.tipEl, this.menuEl);
+  }
 
-    this.root.append(this.title, this.plan, this.run, this.results, this.replayBar, this.tipEl, this.menuEl);
+  private lightChain(c: HTMLElement, upTo: number, current = -1) {
+    c.querySelectorAll('.chain-item').forEach((n, i) => {
+      n.classList.toggle('lit', i <= upTo);
+      n.classList.toggle('now', i === current);
+    });
   }
 
   // ---------------------------------------------------------- title
   showTitle(progress: Progress, level: LevelDef) {
-    const stages = ['The Mountain', 'The Foothills', 'The River', 'The Gorge', 'The Valley', 'The Delta', 'The Beach'];
     const lp = progress.levels[level.id];
-    const s = this.title.querySelector('#stages')!;
-    s.innerHTML = '';
-    stages.forEach((name, i) => {
-      const d = el('div', `stage${i === 0 ? ' open' : ''}`, `${name}${i === 0 && lp?.stars ? `<span class="stars">${'★'.repeat(lp.stars)}</span>` : ''}`);
-      if (i > 0) d.title = 'Further down the mountain — coming in time';
-      s.append(d);
-    });
-    (this.title.querySelector('#begin') as HTMLElement).textContent = lp?.attempts ? 'Continue' : 'Begin';
+    const best = this.title.querySelector('#title-best')!;
+    best.innerHTML = lp?.bestScore
+      ? `<span>Best</span> <b>${fmt(lp.bestScore)}</b> <i class="grade g-${lp.bestGrade}">${lp.bestGrade}</i>`
+      : '<span>Summit → Sea · 1.1 km of mountain</span>';
+    this.lightChain(this.title.querySelector('#title-chain')!, lp?.bestStage ?? -1);
+    (this.title.querySelector('#begin') as HTMLElement).textContent = lp?.attempts ? 'Play again' : 'Start';
     this.title.classList.remove('hidden');
-    this.title.style.pointerEvents = '';
+    this.title.querySelectorAll('button').forEach((b) => ((b as HTMLElement).style.pointerEvents = ''));
   }
   hideTitle() {
     this.title.classList.add('hidden');
@@ -209,11 +265,15 @@ export class UI {
 
   // ---------------------------------------------------------- planning
   showPlanning(level: LevelDef) {
-    this.plan.querySelector('.stage-label')!.textContent = `${level.stage} · I`;
+    this.plan.querySelector('.stage-label')!.textContent = level.stage;
     this.plan.querySelector('h1')!.textContent = level.name;
-    this.objectivesEl.innerHTML = `
-      <li data-k="fracture"><span class="dot"></span><span>Break the boulder at least once</span></li>
-      <li data-k="mass"><span class="dot"></span><span>Deliver ${pct(level.objective.minMassFraction)}% of its stone to the stream</span></li>`;
+    this.plan.querySelector('.plan-goal')!.innerHTML = 'Clear the <b class="t-block">blockers</b>. Line up the <b class="t-smash">smashers</b>.';
+    this.zonesEl.innerHTML = '';
+    for (const z of level.zones ?? []) {
+      const b = this.btn('zone-chip', z.name.replace(/^The /, ''), () => this.h.zone(z.id));
+      b.dataset.zone = z.id;
+      this.zonesEl.append(b);
+    }
     this.plan.classList.remove('hidden');
     this.plan.querySelectorAll('button').forEach((b) => ((b as HTMLElement).style.pointerEvents = ''));
   }
@@ -221,30 +281,27 @@ export class UI {
     this.plan.classList.add('hidden');
     this.hideContext();
   }
-  setObjectives(fracture: boolean, mass: boolean) {
-    for (const li of this.objectivesEl.querySelectorAll('li')) {
-      const k = (li as HTMLElement).dataset.k;
-      li.classList.toggle('met', k === 'fracture' ? fracture : mass);
-    }
+  setZone(id: string | null) {
+    this.zonesEl.querySelectorAll('.zone-chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.zone === id));
   }
   setChanges(n: number, budget: number) {
     this.pipsEl.innerHTML = '';
     for (let i = 0; i < budget; i++) this.pipsEl.append(el('div', `pip${i < n ? ' used' : ''}`));
-    this.changesLabel.textContent = `Changes ${n}/${budget}`;
+    this.changesLabel.textContent = `Moves ${n}/${budget}`;
   }
   setGhost(on: boolean, available: boolean) {
     this.ghostBtn.classList.toggle('on', on && available);
     this.ghostBtn.style.display = available ? '' : 'none';
   }
 
-  showContext(title: string, tag: string, text: string, actions: ContextAction[], note?: string) {
+  showContext(title: string, tag: string, text: string, actions: ContextAction[], note?: string, kind: 'smash' | 'block' | 'tweak' = 'tweak') {
     const c = this.context;
     c.innerHTML = '';
+    c.dataset.kind = kind;
     const head = el('div', 'head');
     const left = el('div');
     left.append(el('div', 'tag', tag), el('h2', '', title));
     head.append(left, this.btn('close-x', '×', () => this.h.closeContext(), 'Close'));
-    const p = el('p', '', text);
     const row = el('div', 'actions');
     for (const a of actions) {
       const b = el('button', `act${a.primary ? ' primary' : ''}${a.active ? ' active' : ''}`, `${a.icon ? ICONS[a.icon] : ''}<span>${a.label}</span>`);
@@ -265,18 +322,17 @@ export class UI {
         b.addEventListener('pointerup', stop);
         b.addEventListener('pointerleave', stop);
         b.addEventListener('pointercancel', stop);
-      } else {
+      } else
         b.addEventListener('click', (e) => {
           e.stopPropagation();
           if (!a.disabled) this.h.action(a.key);
         });
-      }
       row.append(b);
     }
-    c.append(head, p, row);
+    c.append(head, el('p', '', text), row);
     if (note) c.append(el('div', 'note', note));
     c.classList.add('show');
-    this.tipEl.classList.add('lift');
+    this.tip(null);
   }
   hideContext() {
     this.context.classList.remove('show');
@@ -294,25 +350,57 @@ export class UI {
     if (ms) this.tipTimer = window.setTimeout(() => this.tipEl.classList.remove('show'), ms);
   }
 
-  // ---------------------------------------------------------- live run
-  showRun() {
+  // ---------------------------------------------------------- run
+  showRun(zones: Zone[], nudges: number) {
     this.run.classList.remove('hidden');
     this.run.querySelectorAll('button').forEach((b) => ((b as HTMLElement).style.pointerEvents = ''));
+    this.targetScore = 0;
+    this.shownScore = 0;
+    this.scoreEl.textContent = '0';
+    this.lastStage = -1;
+    this.comboEl.className = 'combo';
     this.setPaused(false);
+    this.setNudges(nudges);
+    // zone ticks along the distance bar
+    const track = this.run.querySelector('.dist-track')!;
+    track.querySelectorAll('.dist-tick').forEach((t) => t.remove());
+    const z0 = zones[0]?.z[0] ?? 0;
+    const z1 = zones[zones.length - 1]?.z[0] ?? 1;
+    for (const z of zones.slice(1)) {
+      const t = el('div', 'dist-tick');
+      t.style.left = `${((z.z[0] - z0) / (z1 - z0)) * 100}%`;
+      t.title = z.name;
+      track.append(t);
+    }
   }
   hideRun() {
     this.run.classList.add('hidden');
     this.calloutEl.classList.remove('show');
+    this.banner.classList.remove('show');
   }
   setPaused(p: boolean) {
     this.pauseBtn.innerHTML = p ? ICONS.play : ICONS.pause;
   }
-  setRunStatus(time: number, fractures: number, delivered: number, pieces: number) {
-    this.runStatus.innerHTML = `
-      <div><b>${time.toFixed(1)}s</b>time</div>
-      <div><b>${fractures}</b>fractures</div>
-      <div><b>${pieces}</b>pieces</div>
-      <div><b>${pct(delivered)}%</b>in stream</div>`;
+  setNudges(n: number) {
+    this.nudgeDots.innerHTML = '';
+    for (let i = 0; i < n; i++) this.nudgeDots.append(el('i'));
+    for (const b of this.nudgeBtns) b.toggleAttribute('disabled', n <= 0);
+  }
+  setRun(s: { score: number; combo: number; stage: number; best: number; size: number; progress: number; distance: number; zone: string }) {
+    this.targetScore = s.score;
+    if (s.combo >= 2) {
+      this.comboEl.textContent = `×${s.combo} combo`;
+      this.comboEl.className = `combo show c${Math.min(5, s.combo)}`;
+    } else this.comboEl.className = 'combo';
+    if (s.stage !== this.lastStage) {
+      this.lastStage = s.stage;
+      this.lightChain(this.chainEl, s.best, s.stage);
+    }
+    this.sizeEl.innerHTML = `<b>${sizeLabel(s.size)}</b> ${STAGES[s.stage].name}`;
+    const pct = Math.max(0, Math.min(1, s.progress)) * 100;
+    this.distFill.style.width = `${pct}%`;
+    this.distMarker.style.left = `${pct}%`;
+    this.distLabel.innerHTML = `<b>${Math.round(s.distance)} m</b> ${s.zone}`;
   }
   callout(text: string, ms = 2200) {
     window.clearTimeout(this.calloutTimer);
@@ -320,65 +408,77 @@ export class UI {
     this.calloutEl.classList.add('show');
     this.calloutTimer = window.setTimeout(() => this.calloutEl.classList.remove('show'), ms);
   }
+  /** Floating arcade score text at a screen position. */
+  pop(x: number, y: number, text: string, points: number, kind = '') {
+    const p = el('div', `pop ${kind}`, `<span>${text}</span>${points ? `<b>+${fmt(points)}</b>` : ''}`);
+    p.style.left = `${x}px`;
+    p.style.top = `${y}px`;
+    this.popLayer.append(p);
+    window.setTimeout(() => p.remove(), 1500);
+    while (this.popLayer.childElementCount > 7) this.popLayer.firstElementChild?.remove();
+  }
+  bigBanner(text: string, sub = '', ms = 1600) {
+    window.clearTimeout(this.bannerTimer);
+    this.banner.innerHTML = `<div>${text}</div>${sub ? `<small>${sub}</small>` : ''}`;
+    this.banner.classList.remove('show');
+    void this.banner.offsetWidth;
+    this.banner.classList.add('show');
+    this.bannerTimer = window.setTimeout(() => this.banner.classList.remove('show'), ms);
+  }
+  doFlash(strength = 1) {
+    this.flash.style.setProperty('--f', String(Math.min(1, strength)));
+    this.flash.classList.remove('go');
+    void this.flash.offsetWidth;
+    this.flash.classList.add('go');
+  }
 
   // ---------------------------------------------------------- results
-  showResults(r: SimResult, level: LevelDef, why: string, best: { stars: number; delivered: number }) {
-    const verdict = r.unstable ? 'The mountain shrugged' : r.success ? 'Objective complete' : 'Not yet';
-    const title = r.unstable
-      ? 'Something slipped'
-      : r.success
-        ? r.stars === 3
-          ? 'A perfect descent'
-          : 'The stream has it'
-        : r.fractureGoalMet
-          ? 'Broken, but stranded'
-          : r.deliveredFraction > 0
-            ? 'Whole, but unbroken'
-            : 'The mountain held';
-    const stars = [0, 1, 2].map((i) => STAR.replace('class="star"', `class="star${i < r.stars ? ' on' : ''}"`)).join('');
-    const resting = Math.max(0, r.remainingFraction - (r.deliveredFraction - r.sedimentFraction));
-    const fr = r.fractures
-      .map(
-        (f, i) =>
-          `<li><span class="n">${i + 1}</span><span>${f.time.toFixed(1)}s — against ${f.against}, ${f.pieces} pieces</span></li>`,
-      )
+  showResults(r: SimResult, why: string, best: { score: number; isBest: boolean }) {
+    const rows = r.breakdown
+      .filter((b) => b.points !== 0)
+      .map((b) => `<li><span>${b.label}</span><b>${b.points > 0 ? '+' : ''}${fmt(b.points)}</b></li>`)
       .join('');
+    const headline = r.unstable
+      ? 'Something slipped'
+      : r.sand
+        ? 'PERFECT EROSION'
+        : r.landed
+          ? 'Beached!'
+          : r.reason === 'lost'
+            ? 'Lost to the mountain'
+            : 'It stopped';
     this.results.innerHTML = `
       <div class="scroll">
-        <div class="verdict">${verdict}</div>
-        <h2>${title}</h2>
-        <div class="star-row">${stars}</div>
+        <div class="res-top">
+          <div class="grade big g-${r.grade}">${r.grade}</div>
+          <div>
+            <div class="verdict">${headline}</div>
+            <div class="res-score">${fmt(r.score)}</div>
+            ${best.isBest ? '<div class="newbest">New best!</div>' : `<div class="bestline">Best ${fmt(best.score)}</div>`}
+          </div>
+        </div>
         <p class="why">${why}</p>
-        <div class="section-label">Where the stone went</div>
-        <div class="mass-bar">
-          <div class="delivered" style="width:${pct(r.deliveredFraction)}%"></div>
-          <div class="resting" style="width:${pct(resting)}%"></div>
-          <div class="lost" style="width:${pct(r.lostFraction)}%"></div>
-        </div>
-        <div class="mass-legend">
-          <span><i style="background:var(--water)"></i>Stream ${pct(r.deliveredFraction)}%</span>
-          <span><i style="background:rgba(244,239,230,.55)"></i>On the slope ${pct(resting)}%</span>
-          <span><i style="background:var(--bad)"></i>Dust & chips ${pct(r.lostFraction)}%</span>
-        </div>
+        <div class="res-chain"></div>
         <div class="stats">
-          <div class="stat"><div class="k">Distance</div><div class="v">${r.distance.toFixed(0)}<small>m</small></div></div>
-          <div class="stat"><div class="k">Fragments</div><div class="v">${r.stoneCount}</div></div>
-          <div class="stat"><div class="k">Remaining mass</div><div class="v">${pct(r.remainingFraction)}<small>%</small></div></div>
-          <div class="stat"><div class="k">Largest piece</div><div class="v">${pct(r.largestFraction)}<small>%</small></div></div>
-          <div class="stat"><div class="k">Water exposure</div><div class="v">${r.waterExposure.toFixed(1)}<small>s</small></div></div>
-          <div class="stat"><div class="k">Changes made</div><div class="v">${r.interventions}<small>/ ${level.budget}</small></div></div>
-          <div class="stat" style="grid-column:1/-1"><div class="k">Final destination</div><div class="v" style="font-size:19px">${cap(r.destination)}</div></div>
+          <div class="stat"><div class="k">Distance</div><div class="v">${Math.round(r.distance)}<small>m</small></div></div>
+          <div class="stat"><div class="k">Final size</div><div class="v">${sizeLabel(r.size)}</div></div>
+          <div class="stat"><div class="k">Smashes</div><div class="v">${r.smashes}</div></div>
+          <div class="stat"><div class="k">Best combo</div><div class="v">×${Math.max(1, r.maxCombo)}</div></div>
+          <div class="stat"><div class="k">Air time</div><div class="v">${r.airTime.toFixed(1)}<small>s</small></div></div>
+          <div class="stat"><div class="k">Ended at</div><div class="v small">${cap(r.destination)}</div></div>
         </div>
-        ${r.fractures.length ? `<div class="section-label">Fracture history</div><ul class="fractures">${fr}</ul>` : ''}
-        <div class="section-label">Best</div>
-        <div style="font-size:12.5px;color:var(--ink-dim)">${'★'.repeat(best.stars)}${'☆'.repeat(3 - best.stars)} · ${pct(best.delivered)}% delivered · 3★ needs ${pct(level.stars.deliveredFraction)}% with ≤${level.stars.maxInterventions} changes</div>
+        <div class="section-label">Score</div>
+        <ul class="breakdown">${rows}</ul>
       </div>
       <div class="buttons"></div>`;
+    const ch = this.chain();
+    this.lightChain(ch, r.bestStage, r.stage);
+    this.results.querySelector('.res-chain')!.append(ch);
     const b = this.results.querySelector('.buttons')!;
     b.append(
-      this.actBtn('Adjust the mountain', 'primary', () => this.h.adjust(), 'hand'),
+      this.actBtn('Run it back', 'primary', () => this.h.adjust(), 'hand'),
       this.actBtn('Replay', '', () => this.h.replay(), 'replay'),
-      this.actBtn('Reset level', '', () => this.h.reset(), 'reset'),
+      this.actBtn('Reset mountain', '', () => this.h.reset(), 'reset'),
     );
     this.results.style.display = '';
     requestAnimationFrame(() => this.results.classList.add('show'));
