@@ -8,6 +8,10 @@ export interface LevelProgress {
   lastPlan?: Plan;
   /** primary trajectory of the previous attempt, for the ghost line */
   lastTrail?: [number, number, number][];
+  bestScore?: number;
+  bestGrade?: string;
+  bestStage?: number;
+  bestDistance?: number;
 }
 
 export interface Progress {
@@ -17,7 +21,7 @@ export interface Progress {
   tutorial: { selected: boolean; released: boolean; reviewed: boolean };
 }
 
-const KEY = 'erode.progress.v1';
+const KEY = 'erode.progress.v2';
 
 const fresh = (): Progress => ({
   v: 1,

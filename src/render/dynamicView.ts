@@ -128,7 +128,7 @@ export class Effects {
         void main() {
           vColor = aColor;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * uScale / max(1.0, -mvPosition.z);
+          gl_PointSize = min(220.0, aSize * uScale / max(1.0, -mvPosition.z));
           gl_Position = projectionMatrix * mvPosition;
           #include <fog_vertex>
         }
@@ -158,7 +158,7 @@ export class Effects {
   }
 
   setViewportHeight(px: number) {
-    ((this.group.children[0] as Points).material as ShaderMaterial).uniforms.uScale.value = px * 0.9;
+    ((this.group.children[0] as Points).material as ShaderMaterial).uniforms.uScale.value = px * 0.5;
   }
 
   private spawn(p: Partial<Particle> & { pos: Vector3; vel: Vector3 }) {

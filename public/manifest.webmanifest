@@ -1,7 +1,7 @@
 {
   "name": "ERODE",
   "short_name": "ERODE",
-  "description": "Guide a granite boulder from the summit to the sea by reshaping the mountain around it.",
+  "description": "A boulder snaps off the summit. Smash it, steer it, grind it to sand before it hits the beach.",
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "any",

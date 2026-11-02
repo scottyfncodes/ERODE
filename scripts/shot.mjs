@@ -20,7 +20,7 @@ await page.evaluate(() => window.erode.snapCamera());
 await page.waitForTimeout(Number(process.env.PLANWAIT ?? 2000));
 await page.screenshot({ path: `${out}-plan.png`, timeout: 120000 });
 if (steps.includes('select')) {
-  await page.evaluate(() => window.erode.select('log-a'));
+  await page.evaluate(() => window.erode.select('tooth-1'));
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${out}-select.png`, timeout: 120000 });
   await page.evaluate(() => window.erode.select(null));
@@ -32,10 +32,10 @@ if (steps.includes('run')) {
     await page.waitForTimeout(Number(process.env.RUNWAIT ?? 3000));
     await page.screenshot({ path: `${out}-run${t}.png`, timeout: 120000 });
   }
-  await page.evaluate(() => window.erode.fast());
+  await page.evaluate(() => window.erode.finishNow());
   await page.waitForFunction(() => window.erode.result !== null || false, null, { timeout: 180000 }).catch(() => {});
   for (let i = 0; i < 60; i++) { const st = await page.evaluate(() => document.querySelector('.results.show') ? 1 : 0); if (st) break; await page.waitForTimeout(1000); }
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(6000);
   await page.screenshot({ path: `${out}-results.png`, timeout: 120000 });
   console.log('result', JSON.stringify(await page.evaluate(() => { const r = window.erode.result; return r && { success: r.success, delivered: r.deliveredFraction, fractures: r.fractures.length, dest: r.destination }; })));
   if (steps.includes('replay')) {

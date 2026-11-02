@@ -6,6 +6,8 @@ import { shared } from './materials';
 
 const vert = /* glsl */ `
   attribute float aDepth;
+  attribute float aSteep;
+  varying float vSteep;
   varying vec2 vUv;
   varying float vDepth;
   varying vec3 vWorld;
@@ -13,6 +15,7 @@ const vert = /* glsl */ `
   void main() {
     vUv = uv;
     vDepth = aDepth;
+    vSteep = aSteep;
     vec4 wp = modelMatrix * vec4(position, 1.0);
     vWorld = wp.xyz;
     vec4 mvPosition = viewMatrix * wp;
@@ -35,6 +38,7 @@ const frag = /* glsl */ `
   varying vec2 vUv;
   varying float vDepth;
   varying vec3 vWorld;
+  varying float vSteep;
   #include <fog_pars_fragment>
   float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float n(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f*f*(3.0-2.0*f);
@@ -61,9 +65,14 @@ const frag = /* glsl */ `
     float edge = 1.0 - smoothstep(0.05, 0.35, vDepth);
     float streak = smoothstep(0.62, 0.8, wave(vec2(vUv.x * uWidth * 2.2, along * 0.6 - uTime * uFlow * 1.3)));
     float foam = clamp(edge * (0.5 + 0.5 * streak) + streak * 0.25 * (uRill + 0.3), 0.0, 1.0);
+    // white water: falls and steep rapids churn to foam
+    float churn = smoothstep(0.05, 0.6, vSteep);
+    foam = max(foam, churn * (0.65 + 0.35 * wave(vec2(vUv.x * uWidth * 3.0, along * 2.0 - uTime * uFlow * 3.0))));
     col = mix(col, vec3(0.93, 0.95, 0.95), foam * 0.7);
     float alpha = mix(0.35, 0.9, depthT) + foam * 0.3 + fres * 0.1;
     alpha *= smoothstep(0.0, 0.08, vDepth + 0.04);
+    // springs rise out of the ground rather than starting at a hard edge
+    alpha *= smoothstep(0.0, 8.0, along);
     // fade the leading edge as water runs in
     alpha *= smoothstep(uReveal * uLength, uReveal * uLength - 2.0, along);
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.95));
@@ -84,13 +93,15 @@ function ribbon(data: LevelData, w: WaterBody): BufferGeometry {
   const isStream = w.spec.kind === 'stream';
   const width = isStream ? w.spec.width + 4 : w.spec.width;
   const across = isStream ? 12 : 5;
-  const step = 0.75;
+  const step = isStream ? 1.0 : 0.75;
   const n = Math.max(2, Math.ceil(w.pl.length / step) + 1);
   const pos: number[] = [];
   const uv: number[] = [];
   const depth: number[] = [];
+  const steep: number[] = [];
   for (let i = 0; i < n; i++) {
     const s = (i / (n - 1)) * w.pl.length;
+    const slope = Math.max(0, (bedAt(w, Math.max(0, s - 1.5)) - bedAt(w, Math.min(w.pl.length, s + 1.5))) / 3);
     const pt = pathPointAt(w.pl, s);
     const nx = -pt.tz,
       nz = pt.tx;
@@ -115,6 +126,7 @@ function ribbon(data: LevelData, w: WaterBody): BufferGeometry {
       pos.push(x, y, z);
       uv.push(u, s);
       depth.push(d);
+      steep.push(slope);
     }
   }
   const idx: number[] = [];
@@ -130,6 +142,7 @@ function ribbon(data: LevelData, w: WaterBody): BufferGeometry {
   g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2));
   g.setAttribute('aDepth', new BufferAttribute(new Float32Array(depth), 1));
+  g.setAttribute('aSteep', new BufferAttribute(new Float32Array(steep), 1));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;

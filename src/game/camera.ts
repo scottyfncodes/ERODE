@@ -43,7 +43,7 @@ export class CameraDirector {
     const c = level.camera;
     this.plan = { target: new Vector3(...c.target), yaw: c.yaw, pitch: c.pitch, dist: c.distance };
     this.desired = this.cloneRig(this.plan);
-    this.cur = { target: new Vector3(0, 30, -34), yaw: Math.PI, pitch: 0.2, dist: 120 };
+    this.cur = { target: new Vector3(0, 296, 4), yaw: 0.55, pitch: 0.16, dist: 46 };
   }
 
   private cloneRig(r: Rig): Rig {
@@ -76,8 +76,8 @@ export class CameraDirector {
     this.plan.target.x = clamp(this.plan.target.x, b.x[0] + 4, b.x[1] - 4);
     this.plan.target.z = clamp(this.plan.target.z, b.z[0] + 6, b.z[1] - 4);
     this.plan.yaw = clamp(this.plan.yaw, -0.75, 0.75);
-    this.plan.pitch = clamp(this.plan.pitch, 0.32, 1.22);
-    this.plan.dist = clamp(this.plan.dist, 12, 120);
+    this.plan.pitch = clamp(this.plan.pitch, 0.22, 1.22);
+    this.plan.dist = clamp(this.plan.dist, 14, 160);
   }
 
   pan(dxPx: number, dyPx: number, viewH: number) {
@@ -130,17 +130,17 @@ export class CameraDirector {
     this.desired = { target: c, yaw: 0, pitch: 0.9, dist: clamp(fit * 0.85, 22, 110) };
   }
 
-  update(dt: number, now: number, follow?: { focus: Vector3; vel: Vector3; spread: number }) {
+  update(dt: number, now: number, follow?: { focus: Vector3; vel: Vector3; spread: number; small?: boolean }) {
     this.time += dt;
     let k = 3;
     if (this.mode === 'intro') {
-      // from the valley side, looking up the mountain at the boulder
+      // the summit spire and its boulder, the whole run falling away below
       const t = this.time;
       this.desired = {
-        target: new Vector3(Math.sin(t * 0.05) * 5, 44, -50 + Math.sin(t * 0.03) * 4),
-        yaw: Math.PI + Math.sin(t * 0.045) * 0.3,
-        pitch: 0.1 + Math.sin(t * 0.04) * 0.03,
-        dist: 125,
+        target: new Vector3(Math.sin(t * 0.07) * 3, 296, 4 + Math.sin(t * 0.05) * 3),
+        yaw: 0.55 + Math.sin(t * 0.06) * 0.35,
+        pitch: 0.16 + Math.sin(t * 0.045) * 0.05,
+        dist: 46,
       };
       k = 0.8;
     } else if (this.mode === 'plan') {
@@ -156,11 +156,11 @@ export class CameraDirector {
         const yawTarget = clamp(Math.atan2(this.focusVel.x, this.focusVel.z), -0.7, 0.7);
         this.followYaw += (yawTarget - this.followYaw) * damp(0.7, dt);
       }
-      let dist = 19 + follow.spread * 0.9 + Math.min(10, sp * 0.4);
-      let pitch = 0.5;
+      let dist = (follow.small ? 9 : 17) + follow.spread * 0.8 + Math.min(12, sp * 0.45);
+      let pitch = 0.42;
       if (now < this.closeUntil) {
-        dist = 12 + follow.spread * 0.4;
-        pitch = 0.42;
+        dist = (follow.small ? 7 : 11) + follow.spread * 0.4;
+        pitch = 0.34;
       } else if (now < this.pullBackUntil) {
         dist = 26 + follow.spread * 1.1;
         pitch = 0.62;

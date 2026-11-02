@@ -1,50 +1,39 @@
 # ERODE
 
-An environmental physics puzzle. A granite boulder sits on a summit; a stream runs far below.
-You don't steer the stone — you change the mountain around it, release it, and watch.
+An over-the-top physics arcade run. A granite boulder snaps off a summit spire and goes over the edge.
+How far can it travel — and how small can you grind it — before it lands on the beach?
 
-**Boulder → Fragments → Rocks → Pebbles → Gravel → Sand**
+**Boulder → Fragment → Rock → Pebble → Gravel → Sand**
 
-## Play
+## The Long Fall
 
-- **Tap** a glowing object to see what you can do with it. **Drag** stones and logs to move them.
-- **One finger** pans the mountain, **pinch** zooms, **two-finger twist / vertical drag** rotates and tilts.
-  On desktop: drag to pan, right-drag (or shift-drag) to orbit, scroll to zoom, `Q`/`E` rotate a selected log.
-- **Release** starts the descent. The camera follows the stone; fractures slow time for a moment.
-- Afterwards, read the results, scrub the **replay**, and **adjust** — your plan and last path are kept.
+One 1.1 km course: the summit, the Face, the Scree Field, the Forest, a 25 m waterfall, the Rapids, the Delta, the Beach.
 
-### Level 1 — The First Descent
+- **Blockers** (red) stop the run: a log jam, a debris dam above the falls, a beaver dam, a sandbar, and a weir that
+  sends the river into a dead-end marsh. Clear them to get further.
+- **Smashers** (orange) make it smaller: granite teeth you drop into the line on the face, crusher rocks you roll into the rapids.
+- You have **8 moves**. Every blocker you clear is a move you can't spend on a smasher.
+- During the run, swipe (or tap the arrows / press ←→) for **3 nudges** to steer into the rocks.
 
-Break the boulder at least once and deliver 40% of its stone to the stream.
-Stars for delivering 70% and for doing it with three changes or fewer. Several routes work:
-open the chute and clear the deadfall; fell the old pine to send the boulder left past the tor;
-dig out (or soak) the soil bank; angle the spruce on the slab so fragments don't strand in the hollow.
+Scoring: distance, smash points with combos, big-air bonuses, a bonus for each new size class, a beach bonus,
+then a size multiplier. Grind it to sand on the beach for **PERFECT EROSION** and an S.
 
 ## How it works
 
-| Area | Where | Notes |
-| --- | --- | --- |
-| Level data | `src/levels/` | Terrain features, water, objects and objective are plain data. |
-| Terrain | `src/sim/terrain.ts` | One height function drives physics, rendering and the far landscape. |
-| Physics | `src/sim/simulation.ts` | Rapier (deterministic build), fixed 60 Hz step, contact-force driven impacts. |
-| Fracture | `src/sim/fracture.ts` | Real Voronoi fracture of convex hulls; every fragment is its own rigid body with its own geometry, and can break again. |
-| Water | `src/sim/simulation.ts` | Buoyancy, current drag, lubrication and abrasion (erosion) in the stream and rills. |
-| Objects | `src/sim/objects.ts` | Each interactive object resolves to colliders from the plan; the same transforms drive the visuals. |
-| Rendering | `src/render/` | Three.js; procedural granite / bark / soil / water shaders, instanced forest, particles, trails. |
-| Camera | `src/game/camera.ts` | Planning, follow (punches in on fractures), and aftermath framing. |
-| UI / audio | `src/ui/`, `src/audio/` | DOM overlay; fully synthesised Web Audio (no assets). |
-
-The simulation is deterministic: the same plan gives the same descent, so you can learn from each attempt.
-Fragment counts are capped (30 stones) and tiny pieces become dust to keep phones smooth.
+| Area | Where |
+| --- | --- |
+| Course data | `src/levels/summitToSea.ts` — terrain profile, valley, rivers, blockers, smashers, zones |
+| Physics | `src/sim/simulation.ts` — deterministic Rapier, leader tracking, size stages, scoring, nudges |
+| Fracture | `src/sim/fracture.ts` — Voronoi fracture; fragments are real bodies; below 24 cm stone cracks and grinds virtually |
+| Rendering | `src/render/` — chunked terrain, river with waterfall foam, sea with surf, forest, particles |
+| UI / audio | `src/ui/`, `src/audio/` — arcade HUD, synthesised drums, combo blips, fanfares |
 
 ## Develop
 
 ```bash
 npm install
-npm run dev        # local server
-npm test           # physics + puzzle rules
-npm run build      # type-check + production build
+npm run dev
+npm test
+npm run build
+npx tsx scripts/run.ts     # headless runs of the course with different setups
 ```
-
-Tuning tools (headless): `npx tsx scripts/robust.ts` runs every known solution with small perturbations;
-`scripts/maps.sh` draws top-down trajectory maps.

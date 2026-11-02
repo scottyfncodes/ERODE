@@ -141,6 +141,7 @@ export class AudioEngine {
   setMusic(on: boolean) {
     this.musicOn = on;
     if (!this.ctx) return;
+    if (this.drumGain) this.drumGain.gain.setTargetAtTime(on ? 0.9 : 0, this.ctx.currentTime, 0.1);
     this.music.gain.setTargetAtTime(on ? 0.5 : 0, this.ctx.currentTime, 0.4);
   }
 
@@ -273,7 +274,7 @@ export class AudioEngine {
         this.thump(110, 0.3 * i, 0.2, pan);
         break;
       default:
-        this.thump(62 + Math.random() * 15, 0.9 * i, 0.4 + i * 0.3, pan);
+        this.thump(55 + Math.random() * 15, 1.2 * i, 0.45 + i * 0.4, pan);
         this.burst({ dur: 0.18, gain: 0.35 * i, type: 'lowpass', freq: 900 + i * 600, pan });
         this.burst({ dur: 0.05, gain: 0.25 * i * i, type: 'bandpass', freq: 2800, q: 1.2, pan });
         for (let k = 0; k < 3 + i * 6; k++)
@@ -287,7 +288,8 @@ export class AudioEngine {
     // the crack, the body of the break, and the rubble that follows
     this.burst({ dur: 0.07, gain: 0.9 * i, type: 'highpass', freq: 1800, pan });
     this.burst({ dur: 0.5, gain: 0.5 * i, type: 'bandpass', freq: 1400, freqEnd: 300, q: 0.6, pan });
-    this.thump(48, 1.1 * i, 0.9, pan);
+    this.thump(42, 1.5 * i, 1.1, pan);
+    this.burst({ dur: 0.9, gain: 0.45 * i, type: 'lowpass', freq: 400, pan });
     this.thump(95, 0.5 * i, 0.4, pan, 0.02);
     for (let k = 0; k < 14; k++)
       this.burst({ dur: 0.03, gain: 0.12 * i, type: 'highpass', freq: 2500 + Math.random() * 2000, pan: pan + (Math.random() - 0.5) * 0.4, delay: 0.08 + Math.random() * 1.2 });
@@ -373,6 +375,161 @@ export class AudioEngine {
     if (!this.ctx || !this.soundOn) return;
     this.grind();
     this.thump(45, 0.8, 1.2, 0, 0.1);
+  }
+
+  // ------------------------------------------------------------ arcade layer
+  private drumTimer = 0;
+  private drumStep = 0;
+  private drumNext = 0;
+  private drumGain: GainNode | null = null;
+
+  /** A driving percussion loop while the stone is running. */
+  startDrums() {
+    if (!this.ctx) return;
+    this.stopDrums();
+    const ctx = this.ctx;
+    this.drumGain = ctx.createGain();
+    this.drumGain.gain.value = this.musicOn ? 0.9 : 0;
+    this.drumGain.connect(this.master);
+    this.drumStep = 0;
+    this.drumNext = ctx.currentTime + 0.1;
+    const bpm = 132;
+    const sixteenth = 60 / bpm / 4;
+    const bass = [55, 55, 0, 55, 0, 65.4, 0, 49, 55, 55, 0, 73.4, 0, 65.4, 0, 49];
+    const schedule = () => {
+      if (!this.ctx || !this.drumGain) return;
+      while (this.drumNext < ctx.currentTime + 0.15) {
+        const st = this.drumStep % 16;
+        const t = this.drumNext;
+        const out = this.drumGain;
+        if (st % 4 === 0) this.kick(t, out);
+        if (st === 4 || st === 12) this.snare(t, out);
+        if (st % 2 === 0) this.hat(t, out, st % 4 === 2 ? 0.07 : 0.035);
+        if (bass[st]) this.bassNote(t, bass[st], sixteenth * 1.6, out);
+        this.drumStep++;
+        this.drumNext += sixteenth;
+      }
+    };
+    schedule();
+    this.drumTimer = window.setInterval(schedule, 40);
+  }
+
+  stopDrums() {
+    window.clearInterval(this.drumTimer);
+    this.drumTimer = 0;
+    if (this.drumGain && this.ctx) {
+      const g = this.drumGain;
+      g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
+      window.setTimeout(() => g.disconnect(), 1500);
+    }
+    this.drumGain = null;
+  }
+
+  private kick(t: number, out: AudioNode) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.55, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 0.3);
+  }
+  private snare(t: number, out: AudioNode) {
+    const ctx = this.ctx!;
+    const s = ctx.createBufferSource();
+    s.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 1800;
+    f.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.32, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    s.connect(f).connect(g).connect(out);
+    s.start(t, Math.random());
+    s.stop(t + 0.2);
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(220, t);
+    o.frequency.exponentialRampToValueAtTime(120, t + 0.08);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.18, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    o.connect(og).connect(out);
+    o.start(t);
+    o.stop(t + 0.12);
+  }
+  private hat(t: number, out: AudioNode, level: number) {
+    const ctx = this.ctx!;
+    const s = ctx.createBufferSource();
+    s.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'highpass';
+    f.frequency.value = 7000;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(level, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    s.connect(f).connect(g).connect(out);
+    s.start(t, Math.random());
+    s.stop(t + 0.06);
+  }
+  private bassNote(t: number, freq: number, dur: number, out: AudioNode) {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = freq;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(900, t);
+    f.frequency.exponentialRampToValueAtTime(160, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f).connect(g).connect(out);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+
+  private blip(freq: number, at: number, dur: number, gain: number, type: OscillatorType = 'square') {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + at;
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 3200;
+    o.connect(f).connect(g).connect(this.sfx);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+
+  /** Rising blips: the higher the combo, the higher the pitch. */
+  combo(n: number) {
+    if (!this.ctx || !this.soundOn) return;
+    const base = 440 * Math.pow(2, Math.min(12, (n - 2) * 2) / 12);
+    this.blip(base, 0, 0.09, 0.08);
+    this.blip(base * 1.5, 0.07, 0.12, 0.08);
+  }
+
+  /** Fanfare when the stone drops to a smaller size class. */
+  stageUp(stage: number) {
+    if (!this.ctx || !this.soundOn) return;
+    const root = 330 * Math.pow(2, stage / 12);
+    [1, 1.25, 1.5, 2].forEach((m, i) => this.blip(root * m, i * 0.08, 0.22, 0.09, 'sawtooth'));
+    this.blip(root * 2, 0.32, 0.5, 0.07, 'square');
+  }
+
+  whoosh() {
+    if (!this.ctx || !this.soundOn) return;
+    this.burst({ dur: 0.35, gain: 0.35, type: 'bandpass', freq: 500, freqEnd: 2500, q: 1.2 });
   }
 
   /** Continuous state, called every frame. */

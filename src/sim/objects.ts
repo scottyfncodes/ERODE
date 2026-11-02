@@ -232,14 +232,16 @@ export function resolveObjects(level: LevelDef, plan: Plan, h: HeightFn): Resolv
       case 'branches': {
         if (st.type !== 'branches' || st.removed) break;
         const y = h(o.position[0], o.position[1]);
+        const bh = o.height ?? 2.2;
+        const mat = o.style === 'logjam' ? { ...MATERIALS.log, label: 'the log jam' } : o.style === 'beaver' ? { ...MATERIALS.branches, label: 'the beaver dam' } : o.style === 'debris' ? { ...MATERIALS.branches, label: 'the debris dam' } : MATERIALS.branches;
         r.parts.push({
           part: {
             shape: 'box',
-            half: [o.span / 2, 1.1, 0.7],
-            pos: [o.position[0], y + 0.8, o.position[1]],
+            half: [o.span / 2, bh / 2, o.style === 'logjam' ? 1.4 : 1.0],
+            pos: [o.position[0], y + bh / 2 - 0.5, o.position[1]],
             quat: quatYaw(o.yaw),
           },
-          material: MATERIALS.branches,
+          material: mat,
         });
         break;
       }
@@ -291,20 +293,22 @@ export function resolveObjects(level: LevelDef, plan: Plan, h: HeightFn): Resolv
       case 'outcrop': {
         if (st.type !== 'outcrop') break;
         const piece = cached(`outcrop:${o.id}`, () => generateBlock(o.size, o.seed, 0.3));
+        const mat: Material = o.hardness
+          ? { hardness: o.hardness, friction: 0.7, restitution: 0.15, label: `the ${o.name.toLowerCase()}`, kind: 'granite' }
+          : MATERIALS.spur;
         if (!st.split) {
           const y = h(o.position[0], o.position[1]) + o.size[1] * 0.5 - 0.7;
-          r.parts.push({
-            part: { shape: 'hull', piece, pos: [o.position[0], y, o.position[1]], quat: quatYaw(o.yaw) },
-            material: MATERIALS.spur,
-          });
+          r.parts.push({ part: { shape: 'hull', piece, pos: [o.position[0], y, o.position[1]], quat: quatYaw(o.yaw) }, material: mat });
+        } else if (o.hardness) {
+          // a breaker stands upright in the line
+          const [sx, sz] = o.splitTo;
+          const y = h(sx, sz) + o.size[1] * 0.5 - 0.7;
+          r.parts.push({ part: { shape: 'hull', piece, pos: [sx, y, sz], quat: quatYaw(o.yaw + 0.5) }, material: mat });
         } else {
-          // the slab topples over: lying on its side in the right gully mouth
+          // the slab topples over, lying on its side
           const [sx, sz] = o.splitTo;
           const y = h(sx, sz) + o.size[0] * 0.5 - 0.35;
-          r.parts.push({
-            part: { shape: 'hull', piece, pos: [sx, y, sz], quat: quatYaw(o.yaw + 0.9, 0, Math.PI / 2) },
-            material: MATERIALS.spur,
-          });
+          r.parts.push({ part: { shape: 'hull', piece, pos: [sx, y, sz], quat: quatYaw(o.yaw + 0.9, 0, Math.PI / 2) }, material: mat });
         }
         break;
       }

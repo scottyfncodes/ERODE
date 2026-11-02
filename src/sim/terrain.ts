@@ -9,6 +9,7 @@ export const SURFACE_HARDNESS: Record<SurfaceKind, number> = {
   bedrock: 1.0,
   streambed: 0.55,
   snow: 0.25,
+  sand: 0.2,
 };
 
 export const SURFACE_FRICTION: Record<SurfaceKind, number> = {
@@ -18,6 +19,7 @@ export const SURFACE_FRICTION: Record<SurfaceKind, number> = {
   bedrock: 0.7,
   streambed: 0.55,
   snow: 0.4,
+  sand: 0.9,
 };
 
 interface CompiledFeature {
@@ -29,8 +31,8 @@ interface CompiledFeature {
 export interface Terrain {
   spec: TerrainSpec;
   height(x: number, z: number): number;
-  /** dominant surface kind at a point */
-  surface(x: number, z: number): SurfaceKind;
+  /** dominant surface kind at a point (pass a known normal.y / height to save work) */
+  surface(x: number, z: number, ny?: number, h?: number): SurfaceKind;
   normal(x: number, z: number): [number, number, number];
   inBounds(x: number, z: number): boolean;
 }
@@ -51,6 +53,9 @@ export function createTerrain(spec: TerrainSpec): Terrain {
   });
   const [bx0, bx1] = spec.bounds.x;
   const [bz0, bz1] = spec.bounds.z;
+  const coursePl = spec.course ? makePolyline(spec.course) : null;
+  const valleyK = spec.valley ? makeMonotoneCubic(spec.valley.k) : null;
+  const courseHit: PathHit = { d: 0, t: 0, s: 0, px: 0, pz: 0, tx: 1, tz: 0 };
 
   function featureAmount(cf: CompiledFeature, x: number, z: number): number {
     const f = cf.f;
@@ -104,25 +109,41 @@ export function createTerrain(spec: TerrainSpec): Terrain {
 
   function height(x: number, z: number): number {
     let y = profile(z);
-    const bowlW = 1 - smoothstep(spec.bowl.fade[0], spec.bowl.fade[1], z);
-    const bx = Math.min(Math.abs(x), bx1 + 6);
-    y += spec.bowl.k * bx * bx * bowlW;
+    if (coursePl && valleyK && spec.valley) {
+      // a valley shaped around the run's centreline
+      pathDistance(coursePl, x, z, courseHit);
+      const d = Math.min(courseHit.d, spec.valley.cap);
+      y += Math.max(0, valleyK(z)) * d * d;
+    } else {
+      const bowlW = 1 - smoothstep(spec.bowl.fade[0], spec.bowl.fade[1], z);
+      const bx = Math.min(Math.abs(x), bx1 + 6);
+      y += spec.bowl.k * bx * bx * bowlW;
+    }
     const tiltW = smoothstep(spec.tilt.z[0], spec.tilt.z[0] + 6, z) * (1 - smoothstep(spec.tilt.z[1] - 6, spec.tilt.z[1], z));
     y += spec.tilt.amount * x * tiltW;
     for (const n of spec.noise) y += fbm2(x / n.scale, z / n.scale, 3, Math.round(n.scale * 10)) * n.amp;
-    for (const cf of compiled) y += featureAmount(cf, x, z);
+    // carves that overlap (river junctions) take the deepest, rather than adding up into pits
+    let carve = 0;
+    for (const cf of compiled) {
+      const a = featureAmount(cf, x, z);
+      if (cf.f.type === 'carve') carve = Math.min(carve, a);
+      else y += a;
+    }
+    y += carve;
     y += macro(x, z);
     return y;
   }
 
-  function surface(x: number, z: number): SurfaceKind {
+  function surface(x: number, z: number, ny?: number, hh?: number): SurfaceKind {
     // Later features override earlier ones where they are strong.
     let best: SurfaceKind = 'meadow';
-    const h = height(x, z);
+    const h = hh ?? height(x, z);
     if (h > spec.snowLine) best = 'snow';
     // steep ground reads as scree
-    const n = normal(x, z);
-    if (n[1] < 0.74) best = 'scree';
+    const n1 = ny ?? normal(x, z)[1];
+    if (n1 < 0.74) best = 'scree';
+    // per-zone ground on the long run
+    for (const zs of spec.zoneSurfaces ?? []) if (z >= zs.z[0] && z < zs.z[1] && best === 'meadow') best = zs.surface;
     for (const cf of compiled) {
       const f = cf.f;
       if (!f.surface) continue;

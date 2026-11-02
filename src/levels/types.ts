@@ -1,7 +1,7 @@
 import type { Vec2 } from '../sim/geom';
 
 /** Surface materials. Hardness scales how violently an impact loads the rock. */
-export type SurfaceKind = 'meadow' | 'soil' | 'scree' | 'bedrock' | 'streambed' | 'snow';
+export type SurfaceKind = 'meadow' | 'soil' | 'scree' | 'bedrock' | 'streambed' | 'snow' | 'sand';
 
 export interface CarveFeature {
   type: 'carve' | 'ridge';
@@ -56,6 +56,12 @@ export interface TerrainSpec {
   profile: [number, number][];
   /** lateral bowl: y += k * x^2, faded out between fade[0]..fade[1] in z */
   bowl: { k: number; fade: [number, number] };
+  /** the run's centreline; when present the bowl is shaped around it instead of x = 0 */
+  course?: Vec2[];
+  /** (z, k) valley steepness along the course: y += k * min(d, cap)^2 */
+  valley?: { k: [number, number][]; cap: number };
+  /** default ground per stretch of the course */
+  zoneSurfaces?: { z: [number, number]; surface: SurfaceKind }[];
   /** lateral tilt near the stream so it flows: y += tilt * x, active between z range */
   tilt: { amount: number; z: [number, number] };
   noise: { amp: number; scale: number }[];
@@ -114,6 +120,10 @@ export interface BranchesObject extends BaseObject {
   yaw: number;
   span: number;
   seed: number;
+  /** how it looks: a tangle of branches, a stack of trunks, or a beaver dam */
+  style?: 'deadfall' | 'logjam' | 'beaver' | 'debris';
+  /** barrier height (m) */
+  height?: number;
 }
 
 export interface TreeObject extends BaseObject {
@@ -138,6 +148,10 @@ export interface SoilObject extends BaseObject {
 }
 
 export interface OutcropObject extends BaseObject {
+  /** a breaker: harder granite that smashes stone */
+  hardness?: number;
+  /** label used for the action button */
+  actionLabel?: string;
   type: 'outcrop';
   position: Vec2;
   size: [number, number, number];
@@ -194,7 +208,19 @@ export interface Region {
   z: [number, number];
 }
 
+export interface Zone {
+  id: string;
+  name: string;
+  z: [number, number];
+}
+
 export interface LevelDef {
+  zones?: Zone[];
+  sea?: { level: number; shoreZ: number };
+  /** the beach: landing here finishes the run */
+  beach?: { z: [number, number] };
+  /** live nudges available during a run */
+  nudges?: number;
   id: string;
   stage: string;
   name: string;
