@@ -5,19 +5,19 @@ import { smoothstep } from '../sim/geom';
 import { createTerrainMaterial, shared } from './materials';
 
 const C = {
-  meadow: new Color(0.24, 0.32, 0.11),
-  meadowDry: new Color(0.44, 0.4, 0.18),
-  forest: new Color(0.12, 0.17, 0.1),
-  forestFloor: new Color(0.17, 0.2, 0.1),
-  scree: new Color(0.4, 0.37, 0.33),
-  bedrock: new Color(0.44, 0.43, 0.41),
-  soil: new Color(0.3, 0.22, 0.14),
-  streambed: new Color(0.22, 0.21, 0.18),
-  snow: new Color(0.88, 0.91, 0.95),
-  rock: new Color(0.35, 0.34, 0.32),
-  valley: new Color(0.3, 0.34, 0.16),
-  sand: new Color(0.82, 0.74, 0.56),
-  wetSand: new Color(0.55, 0.48, 0.36),
+  meadow: new Color(0.3, 0.52, 0.13),
+  meadowDry: new Color(0.58, 0.6, 0.2),
+  forest: new Color(0.1, 0.3, 0.12),
+  forestFloor: new Color(0.2, 0.32, 0.12),
+  scree: new Color(0.58, 0.48, 0.38),
+  bedrock: new Color(0.6, 0.55, 0.5),
+  soil: new Color(0.45, 0.3, 0.17),
+  streambed: new Color(0.35, 0.3, 0.24),
+  snow: new Color(0.95, 0.97, 1.0),
+  rock: new Color(0.5, 0.45, 0.42),
+  valley: new Color(0.34, 0.55, 0.16),
+  sand: new Color(0.98, 0.85, 0.56),
+  wetSand: new Color(0.72, 0.58, 0.38),
 };
 
 function surfaceColor(kind: string, x: number, z: number, out: Color): Color {

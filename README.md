@@ -14,7 +14,11 @@ a 25 m waterfall, the Rapids, the Delta and the Beach.
 - **Crash it into the rock** — granite teeth, scree blocks, crusher rocks. Every hard hit knocks real chips off
   and the stone shrinks; brutal hits split it, and the camera stays with the **largest piece**.
 - **Ride the water and the sand** — they wear the stone down and polish it from jagged granite to a smooth pebble.
-- **Smaller is faster.** The camera pulls in as it shrinks and the lens widens with speed.
+- **Smaller is faster.** The camera zooms right in as it shrinks — a wide shot for the boulder, macro for a pebble — and the lens widens with speed.
+- **Bowl it all over** — a big stone flattens the pines along the line (TIMBER!) and scatters loose boulders.
+  Small stones just bounce off.
+- **Cartoon physics** — squash-and-stretch on every hit, comic BAM!/KRAK! pops, ink outlines and cel shading;
+  a stall anywhere but a blocker gets a BOING! kick back into the run.
 - **Steer through the gaps** in the log jam, the debris dam and the beaver dam, and take the right-hand channel
   at the delta — the left one dies in a marsh.
 

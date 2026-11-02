@@ -70,11 +70,11 @@ export function createSceneRig(canvas: HTMLCanvasElement, level: LevelDef, quali
   const sunDir = new Vector3(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).normalize();
 
   // Late-afternoon light: warm sun, cool sky fill.
-  const horizon = new Color(0.74, 0.78, 0.82);
-  const zenith = new Color(0.27, 0.45, 0.72);
-  const fogColor = new Color(0.66, 0.72, 0.78);
+  const horizon = new Color(0.78, 0.9, 1.0);
+  const zenith = new Color(0.2, 0.52, 0.98);
+  const fogColor = new Color(0.74, 0.86, 0.97);
   scene.background = fogColor.clone();
-  scene.fog = new FogExp2(fogColor.getHex(), 0.0026);
+  scene.fog = new FogExp2(fogColor.getHex(), 0.0016);
 
   const skyMat = new ShaderMaterial({
     side: BackSide,
@@ -122,10 +122,10 @@ export function createSceneRig(canvas: HTMLCanvasElement, level: LevelDef, quali
   sky.renderOrder = -1;
   scene.add(sky);
 
-  const hemi = new HemisphereLight(new Color(0.6, 0.72, 0.9), new Color(0.3, 0.25, 0.18), 0.75);
+  const hemi = new HemisphereLight(new Color(0.7, 0.82, 1.0), new Color(0.42, 0.34, 0.22), 1.05);
   scene.add(hemi);
 
-  const sun = new DirectionalLight(new Color(1.0, 0.88, 0.72), 2.3);
+  const sun = new DirectionalLight(new Color(1.0, 0.94, 0.8), 2.6);
   sun.position.copy(sunDir).multiplyScalar(120);
   sun.castShadow = quality.shadows;
   sun.shadow.mapSize.set(quality.shadowSize, quality.shadowSize);

@@ -10,6 +10,8 @@ import { buildVegetation } from '../render/vegetation';
 import { buildWater, type WaterView } from '../render/waterView';
 import { ObjectsView } from '../render/objectsView';
 import { Effects, PiecesView, Trails, type PieceState } from '../render/dynamicView';
+import { PropsView } from '../render/propsView';
+import { layoutProps } from '../sim/props';
 import { shared } from '../render/materials';
 import { CameraDirector } from './camera';
 import { attachGestures } from './input';
@@ -30,6 +32,8 @@ export class Game {
   private water: WaterView;
   private objects: ObjectsView;
   private pieces = new PiecesView();
+  private props!: PropsView;
+  private replayLastF = 0;
   private effects: Effects;
   private trails: Trails;
   private ghost: Trails;
@@ -89,6 +93,8 @@ export class Game {
     scene.add(this.water.group);
     this.objects = new ObjectsView(this.data);
     scene.add(this.objects.group);
+    this.props = new PropsView(layoutProps(level, this.data));
+    scene.add(this.props.group);
     scene.add(this.pieces.group);
     this.effects = new Effects(this.data.heightAt);
     scene.add(this.effects.group);
@@ -715,6 +721,7 @@ export class Game {
     this.steerKeys = { left: false, right: false };
     this.steerTouch = 0;
     this.steerButtons = 0;
+    this.props.reset();
     this.select(null);
     this.ui.tip(null);
     this.ui.hidePlanning();
@@ -864,7 +871,7 @@ export class Game {
       const h = pathDistance(this.coursePl, focus.x, focus.z);
       courseYaw = Math.atan2(h.tx, h.tz);
     }
-    this.followInfo = { focus, vel, spread: Math.min(18, spread), small: r < 0.3, size: r, courseYaw };
+    this.followInfo = { focus: focus.add(new Vector3(0, r * 0.4, 0)), vel, spread: Math.min(18, spread), small: r < 0.3, size: r, courseYaw };
     let rolling = 0;
     let gravel = 0;
     for (const s of states) {
@@ -886,6 +893,11 @@ export class Game {
   }
   private rolling = 0;
   private gravel = 0;
+
+  private squashHero(amount: number, live: boolean) {
+    const id = live ? this.sim?.hero?.id : this.recording?.leader[Math.min(this.recording.leader.length - 1, Math.max(0, Math.round(this.replayT)))];
+    if (id !== undefined) this.pieces.squash(id, amount);
+  }
 
   private screenPan(p: Vector3): number {
     const v = p.clone().project(this.rig.camera);
@@ -916,6 +928,11 @@ export class Game {
         if (live) this.slowUntil = this.now + 0.9;
         break;
       case 'fracture': {
+        this.squashHero(0.45, live);
+        if (fx) {
+          const sp = this.screenPos(pos);
+          this.ui.pop(sp.x, sp.y - 50, 'KA-BOOM!', 0, 'comic big');
+        }
         this.audio.fracture(e.intensity * att + 0.3, pan);
         this.effects.dust(pos, 0.6 + e.intensity * 0.6);
         this.effects.grit(pos, 1 + e.intensity);
@@ -939,11 +956,18 @@ export class Game {
         if (fx) this.ui.doFlash(0.25);
         break;
       case 'impact':
+        if (e.intensity > 0.25) this.squashHero(e.intensity * 0.35, live);
         this.audio.impact(Math.min(1, e.intensity * 1.3) * att, e.material === 'terrain' ? 'granite' : (e.material as 'granite'), pan);
         if (e.intensity > 0.3) this.effects.dust(pos, e.intensity * 0.45, e.material === 'wood' ? new Color(0.5, 0.42, 0.32) : undefined);
         if (e.intensity > 0.35) this.cam.shake(e.intensity * 0.5);
         break;
       case 'chip':
+        this.squashHero(0.2 + e.intensity * 0.3, live);
+        if (fx && e.intensity > 0.35) {
+          const sp = this.screenPos(pos);
+          const words = ['BAM!', 'KRAK!', 'WHAM!', 'CRUNCH!', 'POW!', 'KA-CHUNK!'];
+          this.ui.pop(sp.x + 40, sp.y - 30, words[(e.step * 7) % words.length], 0, 'comic');
+        }
         this.audio.fracture(Math.min(1, e.intensity) * att * 0.8 + 0.15, pan);
         this.effects.grit(pos, 0.5 + e.intensity * 0.6);
         this.effects.dust(pos, 0.25 + e.intensity * 0.3);
@@ -974,8 +998,34 @@ export class Game {
       case 'air':
         this.audio.impact(0.6, 'granite', pan);
         break;
-      case 'nudge':
-        if (!live) this.audio.whoosh();
+      case 'nudge': {
+        this.audio.whoosh();
+        this.squashHero(0.35, live);
+        if (e.label && fx) {
+          const sp = this.screenPos(pos);
+          this.ui.pop(sp.x, sp.y, e.label, 0, 'comic boing');
+        }
+        break;
+      }
+      case 'tree': {
+        const id = Number((e.objectId ?? 'tree:-1').slice(5));
+        this.props.fell(id, e.dir ?? [0, 1]);
+        this.audio.snap();
+        this.audio.impact(0.7 * att, 'wood', pan);
+        this.effects.shards(pos, new Color(0.25, 0.45, 0.18), 26);
+        this.effects.shards(pos.clone().add(new Vector3(0, -1, 0)), new Color(0.55, 0.36, 0.2), 14);
+        this.cam.shake(0.35);
+        this.squashHero(0.25, live);
+        window.setTimeout(() => {
+          this.audio.impact(0.8 * att, 'wood', pan);
+          this.effects.dust(pos.clone().add(new Vector3((e.dir?.[0] ?? 0) * 8, -1, (e.dir?.[1] ?? 1) * 8)), 0.5, new Color(0.9, 0.85, 0.72));
+        }, 650);
+        break;
+      }
+      case 'bowl':
+        this.audio.impact(0.7 * att, 'granite', pan);
+        this.effects.dust(pos, 0.4);
+        this.effects.grit(pos, 0.5);
         break;
       case 'slump':
         if (e.objectId) this.objects.slump(e.objectId, true);
@@ -1096,6 +1146,8 @@ export class Game {
     this.effects.clear();
     this.replayT = 0;
     this.replayEventIdx = 0;
+    this.props.reset();
+    this.replayLastF = 0;
     this.replayPlaying = true;
     this.replaySpeed = 1;
     for (const o of this.level.objects) if (o.type === 'soil') this.objects.slump(o.id, false);
@@ -1148,8 +1200,14 @@ export class Game {
     }
     const leader = rec.leader[Math.min(rec.leader.length - 1, Math.max(0, Math.round(f)))] ?? -1;
     this.followFrom(states, leader, (id) => vels.get(id) ?? new Vector3());
-    // object changes (soil slumps)
-    for (const ch of rec.objectChanges) this.objects.slump(ch.objectId, f >= ch.frame);
+    // object changes: soaked banks slump, trees fall
+    if (f < this.replayLastF - 0.5) this.props.reset();
+    this.replayLastF = f;
+    for (const ch of rec.objectChanges) {
+      if (ch.change === 'felled') {
+        if (f >= ch.frame) this.props.fell(Number(ch.objectId.slice(5)), ch.dir ?? [0, 1], f - ch.frame > 15);
+      } else this.objects.slump(ch.objectId, f >= ch.frame);
+    }
     if (withEvents) {
       const evs = rec.events;
       while (this.replayEventIdx < evs.length && evs[this.replayEventIdx].step / RECORD_EVERY <= f) {
@@ -1213,6 +1271,8 @@ export class Game {
     const look = this.cam.lookTarget;
     this.rig.focusShadows(look, this.cam.distance * 0.75 + 12);
     this.objects.update(dt);
+    this.props.update(dt);
+    this.pieces.update(dt);
     this.water.update(dt);
     this.effects.update(dt);
     this.updateMarkers();

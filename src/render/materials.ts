@@ -14,11 +14,27 @@ export const shared = {
   wind: { value: 1 } as IUniform<number>,
 };
 
+/** Cartoon look: light falls into a few soft bands and colours get a little punchier. */
+export const TOON_GLSL = /* glsl */ `
+  {
+    float lumE = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+    float bands = 3.0;
+    float x = lumE * bands;
+    float lq = (floor(x) + smoothstep(0.42, 0.58, fract(x))) / bands;
+    lq = mix(lq, lumE, 0.18);
+    outgoingLight *= lq / max(lumE, 0.0005);
+    float l2 = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+    outgoingLight = mix(vec3(l2), outgoingLight, 1.3);
+  }
+`;
+
 function inject(shader: WebGLProgramParametersWithUniforms, vertexDecl: string, vertexBody: string, fragDecl: string) {
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>\n${vertexDecl}`)
     .replace('#include <begin_vertex>', `#include <begin_vertex>\n${vertexBody}`);
-  shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${NOISE_GLSL}\n${fragDecl}`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>\n${NOISE_GLSL}\n${fragDecl}`)
+    .replace('#include <opaque_fragment>', `${TOON_GLSL}\n#include <opaque_fragment>`);
 }
 
 /** Granite. Pattern lives in the original boulder's material space, so fragments match. */
@@ -62,10 +78,9 @@ export function createRockMaterial(opts: { tint?: Color; scale?: number; uniform
         float n2 = eNoise3(rp * 8.0);
         float n3 = eNoise3(rp * 21.0 + 3.1);
         float n4 = eNoise3(rp * 15.0 + 7.7);
-        vec3 base = mix(vec3(0.40, 0.39, 0.38), vec3(0.55, 0.49, 0.46), smoothstep(0.3, 0.7, n1));
-        base = mix(base, vec3(0.66, 0.55, 0.5), smoothstep(0.6, 0.8, n2) * 0.35);
-        base = mix(base, vec3(0.16, 0.15, 0.15), smoothstep(0.8, 0.9, n3) * 0.5);
-        base = mix(base, vec3(0.82, 0.81, 0.78), smoothstep(0.84, 0.94, n4) * 0.35);
+        vec3 base = mix(vec3(0.38, 0.35, 0.33), vec3(0.56, 0.47, 0.4), smoothstep(0.35, 0.65, n1));
+        base = mix(base, vec3(0.72, 0.58, 0.5), smoothstep(0.55, 0.62, n2) * 0.3);
+        base = mix(base, vec3(0.28, 0.25, 0.24), smoothstep(0.86, 0.9, n3) * 0.45);
         float lich = smoothstep(0.52, 0.68, eFbm3(rp * 1.6 + 3.0));
         vec3 weathered = base * vec3(0.74, 0.73, 0.70);
         weathered = mix(weathered, vec3(0.60, 0.60, 0.46), lich * 0.5);

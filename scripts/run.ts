@@ -23,7 +23,7 @@ for (const mode of ['none', 'line', 'aim'] as const) {
   }
   const r = sim.result!;
   console.log(`\n== ${mode} [${(performance.now() - t0).toFixed(0)}ms, ${r.duration.toFixed(0)}s] ${r.reason} @ ${r.destination}`);
-  console.log(`  score=${r.score} grade=${r.grade} dist=${r.distance.toFixed(0)}m size=${sizeLabel(r.size)} stage=${STAGES[r.stage].name} smashes=${r.smashes} chips=${r.chips} combo=${r.maxCombo} top=${r.topSpeed.toFixed(0)}m/s water=${r.waterTime.toFixed(0)}s`);
+  console.log(`  score=${r.score} grade=${r.grade} dist=${r.distance.toFixed(0)}m size=${sizeLabel(r.size)} stage=${STAGES[r.stage].name} smashes=${r.smashes} chips=${r.chips} trees=${r.trees} combo=${r.maxCombo} top=${r.topSpeed.toFixed(0)}m/s water=${r.waterTime.toFixed(0)}s`);
   console.log('  ' + trace.join(' '));
   sim.dispose();
 }
