@@ -223,7 +223,11 @@ export class UI {
     const nl = hold(-1, 'Steer left', ICONS.left);
     const nr = hold(1, 'Steer right', ICONS.right);
     this.nudgeBtns = [nl, nr];
-    this.nudgeDots = el('div', 'steer-hint', 'Drag to steer · aim for the rocks');
+    this.nudgeDots = el('div', 'steer-mid');
+    this.steerBar = el('div', 'steer-bar');
+    this.steerKnob = el('div', 'steer-knob');
+    this.steerBar.append(this.steerKnob);
+    this.nudgeDots.append(this.steerBar, el('div', 'steer-hint', 'Drag left / right to steer'));
     nudge.append(nl, this.nudgeDots, nr);
     this.calloutEl = el('div', 'callout');
     this.popLayer = el('div', 'pops');
@@ -378,7 +382,7 @@ export class UI {
     this.comboEl.className = 'combo';
     this.setPaused(false);
     this.setNudges(nudges);
-    const hint = this.nudgeDots;
+    const hint = this.nudgeDots.querySelector('.steer-hint') as HTMLElement;
     hint.style.animation = 'none';
     void hint.offsetWidth;
     hint.style.animation = '';
@@ -401,6 +405,13 @@ export class UI {
   }
   setPaused(p: boolean) {
     this.pauseBtn.innerHTML = p ? ICONS.play : ICONS.pause;
+  }
+  private steerBar!: HTMLElement;
+  private steerKnob!: HTMLElement;
+  /** live steering indicator, -1 … 1 */
+  setSteer(v: number) {
+    this.steerKnob.style.left = `${(50 + v * 50).toFixed(1)}%`;
+    this.steerKnob.style.opacity = String(0.45 + Math.abs(v) * 0.55);
   }
   setNudges(_n: number) {
     for (const b of this.nudgeBtns) b.classList.remove('held');

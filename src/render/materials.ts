@@ -20,11 +20,12 @@ export const TOON_GLSL = /* glsl */ `
     float lumE = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
     float bands = 3.0;
     float x = lumE * bands;
-    float lq = (floor(x) + smoothstep(0.42, 0.58, fract(x))) / bands;
-    lq = mix(lq, lumE, 0.18);
+    float lq = (floor(x) + smoothstep(0.3, 0.7, fract(x))) / bands;
+    // a hint of banding, mostly natural light
+    lq = mix(lq, lumE, 0.7);
     outgoingLight *= lq / max(lumE, 0.0005);
     float l2 = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
-    outgoingLight = mix(vec3(l2), outgoingLight, 1.3);
+    outgoingLight = mix(vec3(l2), outgoingLight, 1.12);
   }
 `;
 
