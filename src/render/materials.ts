@@ -12,7 +12,27 @@ import { NOISE_GLSL } from './shaderChunks';
 export const shared = {
   time: { value: 0 } as IUniform<number>,
   wind: { value: 1 } as IUniform<number>,
+  /** foliage and trunks closer to the camera than this fade out (start, end in metres), so trees never block the view */
+  nearFade: { value: [5, 12] } as IUniform<number[]>,
 };
+
+/** dithered fade of whatever is too close to the camera */
+const NEAR_FADE = /* glsl */ `
+  {
+    float camD = length(vViewPosition);
+    if (camD < uNearFade.y) {
+      float f = smoothstep(uNearFade.x, uNearFade.y, camD);
+      float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+      if (f < n) discard;
+    }
+  }
+`;
+function nearFade(shader: WebGLProgramParametersWithUniforms) {
+  shader.uniforms.uNearFade = shared.nearFade;
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec2 uNearFade;')
+    .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>\n${NEAR_FADE}`);
+}
 
 /** Cartoon look: light falls into a few soft bands and colours get a little punchier. */
 export const TOON_GLSL = /* glsl */ `
@@ -192,6 +212,7 @@ export function createBarkMaterial(base = new Color(0.36, 0.27, 0.2)): MeshStand
   const m = new MeshStandardMaterial({ color: base, roughness: 0.95 });
   m.onBeforeCompile = (shader) => {
     inject(shader, 'varying vec3 vObj;', 'vObj = position;', 'varying vec3 vObj;');
+    nearFade(shader);
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <color_fragment>',
@@ -266,6 +287,7 @@ export function createFoliageMaterial(): MeshStandardMaterial {
   const prev = m.onBeforeCompile;
   m.onBeforeCompile = (shader, r) => {
     prev(shader, r);
+    nearFade(shader);
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <emissivemap_fragment>',
       `#include <emissivemap_fragment>

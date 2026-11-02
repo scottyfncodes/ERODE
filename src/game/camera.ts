@@ -1,8 +1,8 @@
 import { PerspectiveCamera, Vector3 } from 'three';
 import type { LevelDef } from '../levels/types';
-import { clamp, makePolyline, pathPointAt, type Polyline } from '../sim/geom';
+import { clamp, smoothstep } from '../sim/geom';
 
-export type CamMode = 'intro' | 'plan' | 'follow' | 'aftermath' | 'release' | 'orbit' | 'survey';
+export type CamMode = 'intro' | 'summit' | 'chase' | 'finale' | 'recap' | 'orbit';
 
 interface Rig {
   target: Vector3;
@@ -12,262 +12,190 @@ interface Rig {
 }
 
 const damp = (k: number, dt: number) => 1 - Math.exp(-k * dt);
+function angDiff(a: number, b: number) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+export interface ChaseInfo {
+  pos: Vector3;
+  /** a point on the route ahead (where the boulder is going) */
+  ahead: Vector3;
+  speed: number;
+  /** seconds to the next fork and where it is */
+  fork: { t: number; at: Vector3 } | null;
+  /** the boulder is in the air */
+  air: boolean;
+}
 
 /**
- * Camera direction for planning, the live descent and the aftermath.
- * The rig is described by a ground target + yaw/pitch/distance; the actual camera
- * eases toward the desired rig so transitions never cut.
+ * The camera rides behind and above the boulder, looking down the route it is committed to.
+ * Approaching a fork it rises and pulls back so every way down can be read; once a way is chosen
+ * it swings smoothly onto it. Transitions always ease — the camera never cuts mid-run.
  */
 export class CameraDirector {
   mode: CamMode = 'intro';
   readonly cam: PerspectiveCamera;
   private level: LevelDef;
   private ground: (x: number, z: number) => number;
-  /** what the player has set while planning */
-  plan: Rig;
   private desired: Rig;
   private cur: Rig;
   private shakeAmt = 0;
   private time = 0;
-  private closeUntil = 0;
-  private pullBackUntil = 0;
-  private followYaw = 0;
-  /** smoothed focus during follow */
+  private yaw = 0;
+  private forkF = 0;
+  private fovKick = 0;
   private focus = new Vector3();
-  private focusVel = new Vector3();
+  private snapNext = false;
+  /** the lens chosen for this screen; speed widens it */
+  baseFov = 50;
+  /** the finale shot: where the set piece stands and which way the boulder came */
+  finaleAt = new Vector3();
+  finaleYaw = 0;
+  private finaleT = 0;
+  /** recap: the path to fly back over */
+  private recapPath: Vector3[] = [];
+  private recapT = 0;
+  subject = new Vector3();
+  subjectYaw = 0;
+  orbitDist = 26;
 
   constructor(cam: PerspectiveCamera, level: LevelDef, ground: (x: number, z: number) => number) {
     this.cam = cam;
     this.level = level;
     this.ground = ground;
-    const c = level.camera;
-    this.plan = { target: new Vector3(...c.target), yaw: c.yaw, pitch: c.pitch, dist: c.distance };
-    this.desired = this.cloneRig(this.plan);
-    this.cur = { target: new Vector3(0, 296, 4), yaw: -0.5, pitch: 0.16, dist: 46 };
+    const [bx, bz] = level.boulder.position;
+    this.desired = { target: new Vector3(bx, ground(bx, bz), bz + 30), yaw: 0, pitch: 0.3, dist: 30 };
+    this.cur = { target: this.desired.target.clone(), yaw: 0.3, pitch: 0.3, dist: 40 };
   }
 
-  private cloneRig(r: Rig): Rig {
-    return { target: r.target.clone(), yaw: r.yaw, pitch: r.pitch, dist: r.dist };
-  }
-
-  /** where the release shot and the beach orbit look */
-  subject = new Vector3();
-  /** the course direction at the subject (yaw) */
-  subjectYaw = 0;
-
-  setMode(m: CamMode, blend = false) {
-    if (m !== 'follow' && this.mode === 'follow') {
-      this.cam.fov = this.baseFov;
-      this.cam.updateProjectionMatrix();
-    }
-    this.mode = m;
-    if (m === 'follow') {
-      this.snapNext = !blend;
-      this.followYaw = this.cur.yaw;
-      this.closeUntil = 0;
-      this.pullBackUntil = 0;
-    }
-  }
-
-  /** move to another mountain */
   setLevel(level: LevelDef, ground: (x: number, z: number) => number) {
     this.level = level;
     this.ground = ground;
-    this.resetPlan();
-    this.desired = this.cloneRig(this.plan);
   }
 
-  private surveyPath: Polyline | null = null;
-  private surveyT = 0;
-  /** true while a survey flyover is running */
-  get surveying() {
-    return this.mode === 'survey';
-  }
-  /** fly down a path (a route or the course), then hand back to planning */
-  survey(path: [number, number][]) {
-    this.surveyPath = makePolyline(path);
-    this.surveyT = 0;
-    this.mode = 'survey';
-  }
-  onSurveyEnd: (() => void) | null = null;
-
-  resetPlan() {
-    const c = this.level.camera;
-    this.plan = { target: new Vector3(...c.target), yaw: c.yaw, pitch: c.pitch, dist: c.distance };
+  setMode(m: CamMode, snap = false) {
+    if (m !== this.mode && (m === 'chase' || m === 'summit')) this.forkF = 0;
+    if (m === 'finale') this.finaleT = 0;
+    if (m === 'recap') this.recapT = 0;
+    this.mode = m;
+    this.snapNext = snap;
   }
 
-  /** Frame a point of interest while planning (e.g. a selected object). */
-  focusOn(p: Vector3, dist?: number) {
-    this.plan.target.copy(p);
-    if (dist !== undefined) this.plan.dist = dist;
-    this.clampPlan();
-  }
-
-  private clampPlan() {
-    const b = this.level.terrain.bounds;
-    this.plan.target.x = clamp(this.plan.target.x, b.x[0] + 4, b.x[1] - 4);
-    this.plan.target.z = clamp(this.plan.target.z, b.z[0] + 6, b.z[1] - 4);
-    this.plan.yaw = clamp(this.plan.yaw, -0.75, 0.75);
-    this.plan.pitch = clamp(this.plan.pitch, 0.22, 1.22);
-    this.plan.dist = clamp(this.plan.dist, 14, 160);
-  }
-
-  pan(dxPx: number, dyPx: number, viewH: number) {
-    const k = (this.plan.dist * 1.25) / Math.max(300, viewH);
-    const fx = Math.sin(this.plan.yaw),
-      fz = Math.cos(this.plan.yaw);
-    const rx = -Math.cos(this.plan.yaw),
-      rz = Math.sin(this.plan.yaw);
-    // grab the ground: content follows the finger
-    this.plan.target.x -= rx * dxPx * k;
-    this.plan.target.z -= rz * dxPx * k;
-    this.plan.target.x += fx * dyPx * k / Math.max(0.4, Math.sin(this.plan.pitch));
-    this.plan.target.z += fz * dyPx * k / Math.max(0.4, Math.sin(this.plan.pitch));
-    this.clampPlan();
-  }
-
-  zoom(factor: number) {
-    this.plan.dist *= factor;
-    this.clampPlan();
-  }
-
-  rotate(dYaw: number, dPitch: number) {
-    this.plan.yaw += dYaw;
-    this.plan.pitch += dPitch;
-    this.clampPlan();
-  }
-
-  /** Gentle, capped shake: small knocks are ignored, big ones give a short rumble. */
+  /** Small knocks are ignored; big ones give a short, capped rumble. */
   shake(amount: number) {
-    if (amount < 0.3) return;
-    this.shakeAmt = Math.min(0.5, Math.max(this.shakeAmt, amount * 0.35));
+    if (amount < 0.25) return;
+    this.shakeAmt = Math.min(0.55, Math.max(this.shakeAmt, amount * 0.4));
+  }
+  /** a quick widening of the lens on a big hit */
+  punch(amount: number) {
+    this.fovKick = Math.max(this.fovKick, Math.min(9, amount * 9));
   }
 
-  /** Called on a fracture during the live run: move in, then pull back to show the spread. */
-  punchIn(now: number) {
-    this.closeUntil = now + 0.9;
-    this.pullBackUntil = now + 2.6;
+  recap(path: Vector3[]) {
+    this.recapPath = path;
+    this.setMode('recap');
   }
 
-  frameAftermath(points: Vector3[]) {
-    if (!points.length) return;
-    const min = points[0].clone(),
-      max = points[0].clone();
-    for (const p of points) {
-      min.min(p);
-      max.max(p);
-    }
-    const c = min.clone().add(max).multiplyScalar(0.5);
-    const r = Math.max(10, min.distanceTo(max) * 0.5);
-    const fov = (this.cam.fov * Math.PI) / 180;
-    const fit = r / Math.tan(fov / 2) / Math.min(1, this.cam.aspect);
-    this.desired = { target: c, yaw: 0, pitch: 0.9, dist: clamp(fit * 0.85, 22, 110) };
-  }
-
-  private snapNext = false;
-  /** the lens the scene rig chose for this screen; the follow camera widens it with speed */
-  baseFov = 50;
-
-  orbitDist = 10;
-
-  update(dt: number, now: number, follow?: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number; wet?: boolean }) {
+  update(dt: number, chase?: ChaseInfo) {
     this.time += dt;
     let k = 3;
+    const [bx, bz] = this.level.boulder.position;
     if (this.mode === 'intro') {
-      // the summit spire and its boulder, the whole run falling away below
       // over the boulder's shoulder: the stone in the foreground, the whole run falling away below
       const t = this.time;
-      const [bx, bz] = this.level.boulder.position;
       const by = this.ground(bx, bz) + this.level.boulder.radius;
-      const yaw = 0.32 + Math.sin(t * 0.06) * 0.08;
-      const pitch = 0.3 + Math.sin(t * 0.045) * 0.025;
-      const dist = 70;
-      const back = 6 + this.level.boulder.radius * 7;
-      const cam = new Vector3(bx - Math.sin(yaw) * back, by + 2.5 + this.level.boulder.radius * 2.6, bz - Math.cos(yaw) * back);
+      const yaw = 0.3 + Math.sin(t * 0.06) * 0.1;
+      const pitch = 0.26 + Math.sin(t * 0.045) * 0.025;
+      const dist = 80;
+      const back = 9 + this.level.boulder.radius * 5;
+      const cam = new Vector3(bx - Math.sin(yaw) * back, by + 4 + this.level.boulder.radius * 2, bz - Math.cos(yaw) * back);
       this.desired = {
         target: new Vector3(cam.x + Math.sin(yaw) * Math.cos(pitch) * dist, cam.y - Math.sin(pitch) * dist, cam.z + Math.cos(yaw) * Math.cos(pitch) * dist),
         yaw,
         pitch,
         dist,
       };
-      k = 0.8;
-    } else if (this.mode === 'plan') {
-      this.desired = this.cloneRig(this.plan);
-      this.desired.target.y = this.ground(this.plan.target.x, this.plan.target.z);
-      k = 6;
-    } else if (this.mode === 'follow' && follow) {
-      // high and behind, looking down the course; never inside the dust
-      this.focus.lerp(follow.focus, damp(8, dt));
-      this.focusVel.lerp(follow.vel, damp(2, dt));
-      const sp = this.focusVel.length();
-      if (follow.courseYaw !== undefined) {
-        let dy = follow.courseYaw - this.followYaw;
-        while (dy > Math.PI) dy -= Math.PI * 2;
-        while (dy < -Math.PI) dy += Math.PI * 2;
-        this.followYaw += dy * damp(1.2, dt);
+      k = 0.9;
+    } else if (this.mode === 'summit') {
+      // poised: low behind the boulder, the drop and the first fork below
+      const by = this.ground(bx, bz) + this.level.boulder.radius;
+      this.desired = { target: new Vector3(bx, by - 4, bz + 26), yaw: Math.sin(this.time * 0.25) * 0.05, pitch: 0.34, dist: 36 };
+      k = 2;
+    } else if (this.mode === 'chase' && chase) {
+      this.focus.lerp(chase.pos, damp(10, dt));
+      const want = Math.atan2(chase.ahead.x - chase.pos.x, chase.ahead.z - chase.pos.z);
+      this.yaw += angDiff(this.yaw, want) * damp(2.4, dt);
+      const sp = chase.speed;
+      // approaching a fork: rise and pull back so the choices read
+      const f = chase.fork ? smoothstep(5.5, 2.4, chase.fork.t) : 0;
+      this.forkF += (f - this.forkF) * damp(f > this.forkF ? 2.2 : 1.1, dt);
+      const ff = this.forkF;
+      const r = this.level.boulder.radius;
+      let dist = 6 + r * 4 + Math.min(8, sp * 0.22) + ff * 12;
+      let pitch = 0.36 + ff * 0.22;
+      if (chase.air) {
+        dist += 2;
+        pitch += 0.04;
       }
-      // distance scales with the stone: a boulder fills a big frame, a pebble a tight one
-      // the frame shrinks with the stone: a wide shot for the boulder, macro for a pebble
-      const r = Math.max(0.03, follow.size ?? 1);
-      let dist = 1.1 + r * 6.5 + Math.min(r * 4, sp * 0.12) + Math.min(6, sp * 0.06);
-      let pitch = 0.42 + Math.min(0.26, r * 0.13);
-      // riding the river: lower and closer, with the water racing past
-      if (follow.wet) {
-        pitch -= 0.1;
-        dist *= 0.85;
-      }
-      if (now < this.closeUntil) {
-        dist *= 0.8;
-        pitch = 0.6;
-      } else if (now < this.pullBackUntil) {
-        dist *= 1.25;
-        pitch = 0.74;
-      }
-      const lead = this.focusVel.clone().multiplyScalar(0.28);
-      lead.y = 0;
-      this.desired = { target: this.focus.clone().add(lead), yaw: this.followYaw, pitch, dist };
-      // speed reads as a wider lens
-      const fovTarget = this.baseFov + Math.min(16, sp * 0.45);
-      this.cam.fov += (fovTarget - this.cam.fov) * damp(2, dt);
+      const target = this.focus.clone().add(new Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(6 + sp * 0.3 + ff * 10));
+      target.y += r * 0.6;
+      if (chase.fork && ff > 0.01) target.lerp(new Vector3(chase.fork.at.x, chase.fork.at.y, chase.fork.at.z), 0.16 * ff);
+      this.desired = { target, yaw: this.yaw, pitch, dist };
+      const fovTarget = this.baseFov + Math.min(14, sp * 0.4) + ff * 4;
+      this.cam.fov += (fovTarget + this.fovKick - this.cam.fov) * damp(3, dt);
       this.cam.updateProjectionMatrix();
-      k = 3.2;
+      k = 4.2;
       if (this.snapNext) {
-        // hard cut into the chase camera: never drag the lens through the ground
         this.snapNext = false;
-        this.focus.copy(follow.focus);
-        this.desired.target.copy(follow.focus);
-        this.cur = this.cloneRig(this.desired);
+        this.yaw = want;
+        this.focus.copy(chase.pos);
+        this.cur = { target: this.desired.target.clone(), yaw: this.desired.yaw, pitch: this.desired.pitch, dist: this.desired.dist };
       }
-    } else if (this.mode === 'release') {
-      // the break-off, seen from the side: the boulder tips and goes over
-      this.desired = { target: this.subject.clone(), yaw: this.subjectYaw + 0.45, pitch: 0.42, dist: 10 };
-      k = 3.5;
+    } else if (this.mode === 'finale' && chase) {
+      // the set piece from three-quarters on, then lift to take in the wreck
+      this.finaleT += dt;
+      this.focus.lerp(chase.pos, damp(6, dt));
+      const lift = smoothstep(1.2, 4, this.finaleT);
+      const target = this.finaleAt.clone().lerp(this.focus, 0.35);
+      target.y += 2;
+      this.desired = { target, yaw: this.finaleYaw + 0.95 - lift * 0.4, pitch: 0.2 + lift * 0.25, dist: 26 + lift * 14 };
+      this.cam.fov += (this.baseFov + this.fovKick - this.cam.fov) * damp(2, dt);
+      this.cam.updateProjectionMatrix();
+      k = 2.6;
+    } else if (this.mode === 'recap' && this.recapPath.length > 1) {
+      // fly back up the line: the whole trail of wreckage, end to start
+      this.recapT += dt;
+      const path = this.recapPath;
+      const u = Math.min(1, this.recapT / 7.5);
+      const e = u * u * (3 - 2 * u);
+      const f = (1 - e) * (path.length - 1);
+      const i = Math.min(path.length - 2, Math.floor(f));
+      const p = path[i].clone().lerp(path[i + 1], f - i);
+      const back = path[Math.min(path.length - 1, i + 6)];
+      const yaw = Math.atan2(back.x - p.x, back.z - p.z);
+      this.desired = { target: p, yaw: yaw + 0.5, pitch: 0.55, dist: 38 };
+      k = 1.8;
+      if (this.recapT > 8.2) {
+        this.subject.copy(path[path.length - 1]);
+        this.subjectYaw = yaw;
+        this.setMode('orbit');
+      }
     } else if (this.mode === 'orbit') {
-      // the arrival: a slow turn around the stone where it came to rest
-      this.desired = { target: this.subject.clone(), yaw: this.subjectYaw + this.time * 0.18, pitch: 0.32, dist: this.orbitDist };
+      this.desired = { target: this.subject.clone(), yaw: this.subjectYaw + this.time * 0.08, pitch: 0.42, dist: this.orbitDist };
       k = 1.2;
-    } else if (this.mode === 'survey' && this.surveyPath) {
-      // a steady glide down the line, looking ahead
-      const pl = this.surveyPath;
-      this.surveyT += dt;
-      const s = Math.min(pl.length, this.surveyT * 26);
-      const p = pathPointAt(pl, s);
-      const ahead = pathPointAt(pl, Math.min(pl.length, s + 30));
-      const yaw = Math.atan2(ahead.x - p.x, ahead.z - p.z);
-      this.desired = { target: new Vector3(ahead.x, this.ground(ahead.x, ahead.z), ahead.z), yaw, pitch: 0.5, dist: 46 };
-      k = this.surveyT < 0.2 ? 1.5 : 2.2;
-      if (s >= pl.length) {
-        this.plan.target.set(p.x, 0, p.z);
-        this.mode = 'plan';
-        this.onSurveyEnd?.();
-      }
-    } else if (this.mode === 'aftermath') {
-      k = 1.4;
     }
+    if (this.mode !== 'chase' && this.mode !== 'finale' && Math.abs(this.cam.fov - this.baseFov) > 0.05) {
+      this.cam.fov += (this.baseFov - this.cam.fov) * damp(2, dt);
+      this.cam.updateProjectionMatrix();
+    }
+    this.fovKick *= Math.exp(-dt * 5);
 
     const a = damp(k, dt);
     this.cur.target.lerp(this.desired.target, a);
-    this.cur.yaw += (this.desired.yaw - this.cur.yaw) * a;
+    this.cur.yaw += angDiff(this.cur.yaw, this.desired.yaw) * a;
     this.cur.pitch += (this.desired.pitch - this.cur.pitch) * a;
     this.cur.dist += (this.desired.dist - this.cur.dist) * a;
 
@@ -277,31 +205,31 @@ export class CameraDirector {
       this.cur.target.y + Math.sin(this.cur.pitch) * this.cur.dist,
       this.cur.target.z - Math.cos(this.cur.yaw) * cp * this.cur.dist,
     );
-    // never dip under the ground (closer allowed when the shot is tight)
-    const g = this.ground(pos.x, pos.z) + Math.max(0.35, Math.min(2.5, this.cur.dist * 0.18));
+    // never below the ground (or inside a ravine wall)
+    const g = Math.max(this.ground(pos.x, pos.z), this.ground(pos.x * 0.7 + this.cur.target.x * 0.3, pos.z * 0.7 + this.cur.target.z * 0.3)) + 2.2;
     if (pos.y < g) pos.y = g;
     const look = this.cur.target.clone();
     if (this.shakeAmt > 0.001) {
-      // translate camera and target together (no swinging), scaled to the shot size
-      const s = this.shakeAmt * 0.035 * this.cur.dist;
+      const s = this.shakeAmt * 0.03 * clamp(this.cur.dist, 8, 40);
       const off = new Vector3(Math.sin(this.time * 23) * s, Math.sin(this.time * 29 + 1) * s * 0.7, Math.sin(this.time * 19 + 2) * s * 0.5);
       pos.add(off);
-      look.add(off);
-      this.shakeAmt *= Math.exp(-dt * 9);
+      look.add(off.multiplyScalar(0.6));
+      this.shakeAmt *= Math.exp(-dt * 8);
     }
     this.cam.position.copy(pos);
     this.cam.lookAt(look);
-    const near = Math.max(0.04, Math.min(0.3, this.cur.dist * 0.04));
-    if (Math.abs(this.cam.near - near) > 0.005) {
+    const near = clamp(this.cur.dist * 0.02, 0.15, 0.5);
+    if (Math.abs(this.cam.near - near) > 0.01) {
       this.cam.near = near;
       this.cam.updateProjectionMatrix();
     }
   }
 
-  /** jump straight to the desired framing (used by tests and after loads) */
+  /** jump straight to the desired framing */
   snap() {
-    this.update(0.0001, 0);
-    this.cur = this.cloneRig(this.desired);
+    this.update(0.0001);
+    this.cur = { target: this.desired.target.clone(), yaw: this.desired.yaw, pitch: this.desired.pitch, dist: this.desired.dist };
+    this.update(0.0001);
   }
 
   get lookTarget(): Vector3 {

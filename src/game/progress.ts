@@ -1,25 +1,31 @@
-import type { LevelDef, Plan } from '../levels/types';
-import type { Medal, SimResult } from '../sim/simulation';
-import { MEDALS } from '../sim/simulation';
+import type { LevelDef } from '../levels/types';
+import type { RunResult } from '../run/runner';
 import { COMPOSITIONS, type CompositionId, type UnlockStats } from '../sim/composition';
+
+export type Medal = 'none' | 'bronze' | 'silver' | 'gold' | 'platinum';
+export const MEDALS: Medal[] = ['none', 'bronze', 'silver', 'gold', 'platinum'];
 
 export interface LevelProgress {
   attempts: number;
   finished: boolean;
   medal: Medal;
-  /** best fraction of starting mass retained on a finished descent */
-  bestRetained: number;
-  /** most kilograms brought to the bottom */
-  bestMass: number;
+  /** best total score */
+  bestScore: number;
+  /** best destruction (before bonuses) */
+  bestDestruction: number;
+  /** longest chain reaction */
+  bestChain: number;
   /** fastest finished descent (s) */
   bestTime: number | null;
   bestComposition?: CompositionId;
-  /** optional objectives ever completed */
-  objectives: string[];
-  /** routes ever finished */
+  /** every stretch of mountain ever ridden (segment ids) */
+  found: string[];
+  /** complete routes ever finished (segment ids joined by '>') */
   routes: string[];
-  lastPlan?: Plan;
-  /** trajectory of the previous attempt, for the ghost line */
+  /** from earlier versions of the game: kept so old saves load intact */
+  bestRetained?: number;
+  bestMass?: number;
+  objectives?: string[];
   lastTrail?: [number, number, number][];
 }
 
@@ -27,7 +33,7 @@ export interface Progress {
   v: 3;
   levels: Record<string, LevelProgress>;
   settings: { sound: boolean; music: boolean };
-  tutorial: { selected: boolean; released: boolean; reviewed: boolean };
+  tutorial: { selected: boolean; released: boolean; reviewed: boolean; decided?: boolean };
   composition: CompositionId;
   lastLevel?: string;
 }
@@ -59,6 +65,8 @@ const fresh = (): Progress => ({
   composition: 'granite',
 });
 
+const blank = (): LevelProgress => ({ attempts: 0, finished: false, medal: 'none', bestScore: 0, bestDestruction: 0, bestChain: 0, bestTime: null, found: [], routes: [] });
+
 export function loadProgress(): Progress {
   migrate();
   try {
@@ -67,7 +75,14 @@ export function loadProgress(): Progress {
     const p = JSON.parse(raw) as Progress;
     if (p.v !== 3) return fresh();
     const out = { ...fresh(), ...p, settings: { ...fresh().settings, ...p.settings }, tutorial: { ...fresh().tutorial, ...p.tutorial } };
-    for (const id of Object.keys(out.levels)) out.levels[id] = { ...blank(), ...out.levels[id] };
+    for (const id of Object.keys(out.levels)) {
+      const lp = { ...blank(), ...out.levels[id] };
+      // older saves stored route ids of a different kind: keep only complete routes from this version
+      lp.routes = (lp.routes ?? []).filter((r) => r.includes('>'));
+      lp.found ??= [];
+      out.levels[id] = lp;
+    }
+    if (!COMPOSITIONS.some((c) => c.id === out.composition)) out.composition = 'granite';
     return out;
   } catch {
     return fresh();
@@ -82,8 +97,6 @@ export function saveProgress(p: Progress) {
   }
 }
 
-const blank = (): LevelProgress => ({ attempts: 0, finished: false, medal: 'none', bestRetained: 0, bestMass: 0, bestTime: null, objectives: [], routes: [] });
-
 export function levelProgress(p: Progress, id: string): LevelProgress {
   p.levels[id] ??= blank();
   return p.levels[id];
@@ -91,6 +104,13 @@ export function levelProgress(p: Progress, id: string): LevelProgress {
 
 export function medalRank(m: Medal): number {
   return MEDALS.indexOf(m);
+}
+
+export function medalFor(level: LevelDef, r: RunResult): Medal {
+  if (!r.finished) return 'none';
+  const t = r.score.total;
+  const m = level.medals;
+  return t >= m.platinum ? 'platinum' : t >= m.gold ? 'gold' : t >= m.silver ? 'silver' : 'bronze';
 }
 
 export function unlockStats(p: Progress): UnlockStats {
@@ -116,68 +136,67 @@ export function levelUnlocked(p: Progress, levels: LevelDef[], i: number): boole
 }
 
 export interface Records {
-  bestRetained: boolean;
-  bestMass: boolean;
-  bestTime: boolean;
-  medalUp: boolean;
   firstFinish: boolean;
-  newObjectives: string[];
+  bestScore: boolean;
+  bestChain: boolean;
+  medal: Medal;
+  medalUp: boolean;
+  /** stretches of mountain ridden for the first time */
+  newSegments: string[];
   newRoute: boolean;
-  /** compositions and mountains this result opened up */
   unlockedCompositions: string[];
   unlockedLevel: string | null;
-  previous: { retained: number; time: number | null; medal: Medal };
+  previous: { score: number; medal: Medal };
 }
 
-/** Fold a finished run into the save and report what's new. */
-export function recordResult(p: Progress, levels: LevelDef[], level: LevelDef, r: SimResult): Records {
+/** Fold a run into the save and report what's new. */
+export function recordResult(p: Progress, levels: LevelDef[], level: LevelDef, r: RunResult): Records {
   const lp = levelProgress(p, level.id);
   const beforeComps = COMPOSITIONS.filter((c) => c.unlock.check(unlockStats(p))).map((c) => c.id);
   const idx = levels.findIndex((l) => l.id === level.id);
   const nextWasLocked = idx >= 0 && idx + 1 < levels.length && !levelUnlocked(p, levels, idx + 1);
-  const previous = { retained: lp.bestRetained, time: lp.bestTime, medal: lp.medal };
+  const medal = medalFor(level, r);
   const rec: Records = {
-    bestRetained: false,
-    bestMass: false,
-    bestTime: false,
-    medalUp: false,
     firstFinish: false,
-    newObjectives: [],
+    bestScore: false,
+    bestChain: false,
+    medal,
+    medalUp: false,
+    newSegments: [],
     newRoute: false,
     unlockedCompositions: [],
     unlockedLevel: null,
-    previous,
+    previous: { score: lp.bestScore, medal: lp.medal },
   };
+  for (const s of r.route)
+    if (!lp.found.includes(s)) {
+      lp.found.push(s);
+      rec.newSegments.push(s);
+    }
+  if (r.stats.longestChain > lp.bestChain) {
+    rec.bestChain = lp.bestChain > 0;
+    lp.bestChain = r.stats.longestChain;
+  }
+  if (r.score.total > lp.bestScore) {
+    rec.bestScore = lp.bestScore > 0;
+    lp.bestScore = r.score.total;
+    lp.bestDestruction = r.score.destruction;
+    lp.bestComposition = r.composition;
+  }
   if (r.finished) {
     rec.firstFinish = !lp.finished;
     lp.finished = true;
-    if (r.retained > lp.bestRetained + 1e-6) {
-      rec.bestRetained = lp.bestRetained > 0;
-      lp.bestRetained = r.retained;
-      lp.bestComposition = r.composition;
-    }
-    if (r.mass > lp.bestMass + 0.5) {
-      rec.bestMass = lp.bestMass > 0;
-      lp.bestMass = r.mass;
-    }
-    if (lp.bestTime === null || r.duration < lp.bestTime - 0.05) {
-      rec.bestTime = lp.bestTime !== null;
-      lp.bestTime = r.duration;
-    }
-    if (medalRank(r.medal) > medalRank(lp.medal)) {
-      rec.medalUp = true;
-      lp.medal = r.medal;
-    }
-    if (r.route && !lp.routes.includes(r.route)) {
+    if (lp.bestTime === null || r.duration < lp.bestTime - 0.05) lp.bestTime = r.duration;
+    const key = r.route.join('>');
+    if (!lp.routes.includes(key)) {
       rec.newRoute = lp.routes.length > 0;
-      lp.routes.push(r.route);
+      lp.routes.push(key);
+    }
+    if (medalRank(medal) > medalRank(lp.medal)) {
+      rec.medalUp = true;
+      lp.medal = medal;
     }
   }
-  for (const o of r.objectives)
-    if (o.done && !lp.objectives.includes(o.id)) {
-      lp.objectives.push(o.id);
-      rec.newObjectives.push(o.id);
-    }
   const afterComps = COMPOSITIONS.filter((c) => c.unlock.check(unlockStats(p))).map((c) => c.id);
   rec.unlockedCompositions = afterComps.filter((c) => !beforeComps.includes(c)).map((c) => COMPOSITIONS.find((q) => q.id === c)!.name);
   if (nextWasLocked && levelUnlocked(p, levels, idx + 1)) rec.unlockedLevel = levels[idx + 1].name;

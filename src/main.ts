@@ -1,4 +1,3 @@
-import { loadRapier } from './sim/rapier';
 import { Game } from './game/game';
 import { BRAND, wordmark } from './ui/brand';
 
@@ -35,10 +34,9 @@ async function boot() {
     return;
   }
   progress(0.05, 'Loosening the boulder…');
-  const R = await loadRapier();
   await nextFrame();
   const canvas = document.getElementById('view') as HTMLCanvasElement;
-  const game = new Game(canvas, document.getElementById('ui')!, document.getElementById('markers')!, R, progress);
+  const game = new Game(canvas, document.getElementById('ui')!, progress);
   await nextFrame();
   progress(1, 'Ready');
   game.start();

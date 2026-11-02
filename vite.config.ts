@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -6,4 +7,5 @@ export default defineConfig({
     chunkSizeWarningLimit: 4000,
   },
   server: { host: true },
+  test: { testTimeout: 120000 },
 });
