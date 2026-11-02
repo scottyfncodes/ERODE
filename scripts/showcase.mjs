@@ -58,10 +58,18 @@ await P(() => {
   window.patrol.accept('survey');
   window.patrol.teleport(-20.5, 292, Math.PI / 2);
 });
-await page.waitForTimeout(600);
-await page.keyboard.down('KeyE');
-await page.waitForTimeout(100);
-await page.keyboard.up('KeyE');
+// E acts on the nearest interactable; retry until we are actually aboard (the hangar locker is close by)
+for (let i = 0; i < 4 && (await P(() => window.patrol.state().mode)) !== 'heli'; i++) {
+  await P((k) => {
+    window.patrol.closePanel();
+    window.patrol.teleport(-20.5 - k * 0.6, 292 + k * 0.4, Math.PI / 2);
+  }, i);
+  await page.waitForTimeout(700);
+  await page.keyboard.down('KeyE');
+  await page.waitForTimeout(100);
+  await page.keyboard.up('KeyE');
+  await page.waitForTimeout(300);
+}
 await P(() => {
   window.patrol.closePanel();
   window.patrol.heliTo(-150, -260, 420);

@@ -124,6 +124,39 @@ button {
   clip-path: polygon(0 0, 100% 0, 100% 38%, 0 58%);
   display: block;
 }
+.emblem {
+  /* the Kessel Patrol patch (art/brand, VectorCraft): clipped to its rim, so the square tile drops away */
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin: 0 0 14px -4px;
+  clip-path: circle(40.5% at 50% 50%);
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+  animation: emblem-in 0.9s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+}
+.loading-inner .emblem {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 18px;
+  animation: emblem-in 0.9s cubic-bezier(0.2, 0.9, 0.25, 1.15) both, emblem-breathe 2.6s ease-in-out 0.9s infinite;
+}
+@keyframes emblem-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.86) rotate(-8deg);
+  }
+}
+@keyframes emblem-breathe {
+  50% {
+    transform: scale(1.04);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .emblem,
+  .loading-inner .emblem {
+    animation: none;
+  }
+}
 .wordmark.sm {
   font-size: 30px;
 }

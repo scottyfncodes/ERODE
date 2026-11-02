@@ -1,80 +1,134 @@
 {
  "items": [
   {
-   "path": "../../rockslide-production/3d/rs_lantern/exports/rs_lantern.three-web-toon.collision.glb",
-   "bytes": 4460,
-   "tools": "MeshCraft (Blender)",
-   "status": "game-ready",
-   "notes": "three-web-toon collision (convex hull)",
-   "sha256": "d50ab4b50c0375eb988f081c456ed69d7b76dcc8f42d116fef149c3dd121a334",
-   "triangles": 56
+   "path": "../public/icons/apple-touch-icon.png",
+   "bytes": 20751,
+   "tools": "PhotoCraft",
+   "status": "shipped",
+   "notes": "apple touch 180 (PhotoCraft)",
+   "sha256": "6efb8a0b5bb45fc1c75b672bf0e001ac4d54a48a71e62db6a789f1a6bedd088b"
   },
   {
-   "path": "../../rockslide-production/3d/rs_lantern/exports/rs_lantern.three-web-toon.glb",
+   "path": "../public/icons/favicon-32.png",
+   "bytes": 2385,
+   "tools": "PhotoCraft",
+   "status": "shipped",
+   "notes": "favicon 32 (PhotoCraft)",
+   "sha256": "4b2bfa0336517a21e9c963e24b94118b6eeddba4bc7c17adff94b7da481f4c46"
+  },
+  {
+   "path": "../public/icons/icon-192.png",
+   "bytes": 22513,
+   "tools": "PhotoCraft",
+   "status": "shipped",
+   "notes": "icon 192 (PhotoCraft)",
+   "sha256": "5d158dd9a98b691c07c86ed8b1e25569790f7ae714633e06f7f0a604bedf4e7f"
+  },
+  {
+   "path": "../public/icons/icon-512.png",
+   "bytes": 61588,
+   "tools": "PhotoCraft resample",
+   "status": "shipped",
+   "notes": "icon 512 (PhotoCraft resample)",
+   "sha256": "7a516871233c6c59c047945088c22826de8c05f78b6cb0761e27cec26a1c2193"
+  },
+  {
+   "path": "../public/icons/icon.svg",
+   "bytes": 1598,
+   "tools": "VectorCraft",
+   "status": "shipped",
+   "notes": "Kessel Patrol emblem (VectorCraft)",
+   "sha256": "9318f399f875a7c9331d2b3f9af36a10616461101bbd7b4644d5f745a5901c55"
+  },
+  {
+   "path": "../public/models/rs_akja.glb",
+   "bytes": 39588,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
+   "status": "game-ready",
+   "notes": "rescue toboggan (akja)",
+   "sha256": "f17835fa0aae16059d17dda99f47dfab5f747eee63ed3f53aed47f494c8cf63f"
+  },
+  {
+   "path": "../public/models/rs_boulder_a.glb",
+   "bytes": 14472,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
+   "status": "game-ready",
+   "notes": "snow-capped boulder",
+   "sha256": "246ab0962e06f3648f887b040930e6cf050bbd4c4c975a6ff0bbed6ffb87c03a"
+  },
+  {
+   "path": "../public/models/rs_boulder_b.glb",
+   "bytes": 16512,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
+   "status": "game-ready",
+   "notes": "small snow-capped boulder",
+   "sha256": "836a74d896495c851082b7ea56752a770bf748243c3976f193e5260b3ec37acf"
+  },
+  {
+   "path": "../public/models/rs_cache.glb",
+   "bytes": 48936,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
+   "status": "game-ready",
+   "notes": "patrol rescue cache",
+   "sha256": "2cc0f2e3af6508e9cc25ec4902d8777ed67a24becea5d6be656d7934d2d0d863"
+  },
+  {
+   "path": "../public/models/rs_crag_a.glb",
+   "bytes": 17512,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
+   "status": "game-ready",
+   "notes": "granite tor, three blocks",
+   "sha256": "d81e707b04a8a25464211b415a9342489295cbc70f352c720461ae3e82df7c98"
+  },
+  {
+   "path": "../public/models/rs_crag_b.glb",
+   "bytes": 15404,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
+   "status": "game-ready",
+   "notes": "tall granite tor",
+   "sha256": "e87eb5d606e43e1a7ab17da2a76edcb147c643a6d88adb34433b82213fe0ef63"
+  },
+  {
+   "path": "../public/models/rs_crag_c.glb",
+   "bytes": 19536,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
+   "status": "game-ready",
+   "notes": "broken granite tor",
+   "sha256": "430836f7746662ee4c2d552fe3d03b1b623f44ad93a54dec8eac82e837faab36"
+  },
+  {
+   "path": "../public/models/rs_deadfall.glb",
+   "bytes": 31796,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
+   "status": "game-ready",
+   "notes": "fallen trunk with snow",
+   "sha256": "6a52a5551e386179fed17a46c60d20bb357488728bd45eed57ec56346027460a"
+  },
+  {
+   "path": "../public/models/rs_lantern.glb",
    "bytes": 36820,
-   "tools": "MeshCraft (Blender)",
+   "tools": "MeshCraft run_pipeline (lantern template)",
    "status": "game-ready",
-   "notes": "three-web-toon export (Three.js (GLTFLoader) \u2014 vertex-colour toon pipeline)",
-   "sha256": "29ba1aaa02bf089116cb8a98d5412b454fd2f07bf9be5f02d5aba0250ab449c7",
-   "triangles": 396,
-   "profile": "three-web-toon",
-   "format": "glb",
-   "engine": "Three.js (GLTFLoader) \u2014 vertex-colour toon pipeline",
-   "clips": [
-    "swing"
-   ]
+   "notes": "hanging lantern (MeshCraft lantern template, swing clip)",
+   "sha256": "29ba1aaa02bf089116cb8a98d5412b454fd2f07bf9be5f02d5aba0250ab449c7"
   },
   {
-   "path": "../../rockslide-production/3d/rs_lantern/exports/rs_lantern.three-web-toon.lod25.glb",
-   "bytes": 14152,
-   "tools": "MeshCraft (Blender)",
+   "path": "../public/models/rs_stump.glb",
+   "bytes": 24620,
+   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
    "status": "game-ready",
-   "notes": "three-web-toon lod (25% triangles)",
-   "sha256": "e50e507e89e7acf1646d8c97512d25e56cb1c6e029e92694b3d1aeb20a7e03d5",
-   "triangles": 90
+   "notes": "snowy spruce stump",
+   "sha256": "f6b4d30cb98209e6e885eb208ed91e4be3ea6c74925f5d2063e47532e50cff91"
   },
   {
-   "path": "../../rockslide-production/3d/rs_lantern/exports/rs_lantern.three-web-toon.lod50.glb",
-   "bytes": 23012,
-   "tools": "MeshCraft (Blender)",
-   "status": "game-ready",
-   "notes": "three-web-toon lod (50% triangles)",
-   "sha256": "5c63e4d32dabda691e2b16bb71c7df857850daa8d5fb731146fa30ce43a992a0",
-   "triangles": 198
-  },
-  {
-   "path": "../../rockslide-production/3d/rs_lantern/previews/rs_lantern_front.png",
-   "bytes": 73159,
-   "tools": "MeshCraft (Blender)",
-   "status": "preview",
-   "notes": "MeshCraft preview render",
-   "sha256": "0fd223c98a1bb39f3147ede3bdc212b8ffb036e4a94de08abb3d4e58b6303229"
-  },
-  {
-   "path": "../../rockslide-production/3d/rs_lantern/previews/rs_lantern_sheet.png",
-   "bytes": 92680,
-   "tools": "MeshCraft (Blender)",
-   "status": "preview",
-   "notes": "MeshCraft preview render",
-   "sha256": "704aa00f1799c7294bbce81e08df5ac12b0c2b87d0628c00513ce3382d5138a2"
-  },
-  {
-   "path": "../../rockslide-production/3d/rs_lantern/previews/rs_lantern_three_quarter.png",
-   "bytes": 79212,
-   "tools": "MeshCraft (Blender)",
-   "status": "preview",
-   "notes": "MeshCraft preview render",
-   "sha256": "9f9a4e69b0ca6050388769f1dd57e7efea62559b5f68dcab6c07d75bafb797c7"
-  },
-  {
-   "path": "../../rockslide-production/3d/rs_lantern/source/rs_lantern.blend",
-   "bytes": 101965,
-   "tools": "MeshCraft (Blender)",
-   "status": "source",
-   "notes": "Editable Blender source",
-   "sha256": "2e5676bd582d42fa123537e0fd4fa0a54ab8a4d0334d18b1eacc7a2a481d4aea"
+   "path": "../public/og-image.jpg",
+   "bytes": 140680,
+   "tools": "DesignCraft layout, PhotoCraft JPEG",
+   "status": "shipped",
+   "notes": "share card (DesignCraft layout, PhotoCraft JPEG)",
+   "sha256": "f2c222aad1fbb293f2060e75e69267afa0d53dce2c5366395ebda9fef13331db"
   }
  ],
- "files": 8,
+ "files": 16,
  "updated": "2026-11-02"
 }

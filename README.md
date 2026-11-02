@@ -77,6 +77,10 @@ Kessel Bowl carries a slab of blocks over a weak layer. A charge on a loaded slo
 - **The station** grows with funds and rank, and each building is a real building in the yard that opens new gear: kennel run (Koda's gear, Koda smells further), garage workshop (sled paint, engines, tracks), equipment room (skis, skins, helmet), helicopter hangar (paint, thermal scanner, searchlight), radio mast (shows the badges on the map), lodge wing (night shift bonus when you sleep), yard lights and the patrol flag.
 - **Gear** with real effects where it says so: engines (faster sled), deep lug track (floats on powder), race skis (quicker turns), mohair skins (climb on skis), thermal scanner, searchlight at night. The rest is how you, your sled, your helicopter and Koda look: jackets, hats, goggles, paint, collars, harnesses, bandanas.
 
+## Art and assets
+
+The valley is mostly built in code from a miniature kit of chunky primitives. Its natural detail and the patrol's own gear come from [GITCRAFT](https://github.com/scottyfncodes/GITCRAFT), the shared production toolchain: granite tors on the steeps, boulders, stumps and fallen trunks, rescue toboggans, red rescue caches and swinging lanterns, all modelled in Blender through MeshCraft from the ROCKSLIDE palette, validated, engine-checked and versioned through ForgeCraft (`public/models/`). Tors, boulders, stumps, caches and lantern posts are solid. The Kessel Patrol emblem, icons and share card come from VectorCraft, PhotoCraft and DesignCraft. How it all fits together, and how to regenerate it: [`art/README.md`](art/README.md).
+
 ## Saving
 
 Everything persists in `localStorage` (`rockslide.patrol.v1`): missions done and in progress (down to which slopes are charged and whether Nils is on your sled), funds, rank, gear owned and worn, buildings, badges, the day, time and weather, where you, the sled and the helicopter are, and settings. It saves every 12 seconds, on every mission event, and when the page is hidden or closed. A damaged or older save is repaired with defaults rather than lost. A mission interrupted mid-avalanche finishes the release on load.
@@ -102,6 +106,7 @@ Plain TypeScript, Vite and Three.js, no backend. The rules are pure and tested; 
 
 - **From ROCKSLIDE:** the Voronoi fracture (`sim/fracture.ts`, now cutting snow slab blocks), the rigid debris sim (`sim/debris.ts`, now the logs of a sawn tree), the conifer and toon/foliage/bark shaders with near-camera dithering, deterministic noise and path geometry, the synthesised audio approach, dynamic resolution and instancing.
 - **From SKYTRACE:** the miniature-world look (chunky primitives, flat Lambert colour, clear silhouettes), the rescue helicopter, the recon scanner and its readout, recon pins, the floating touch stick idea, the radio subtitles, Mission Control's briefing style.
+- **From GITCRAFT:** the Kessel kit (MeshCraft/ForgeCraft GLBs), the Kessel Patrol emblem, icons and share card. See [`art/README.md`](art/README.md).
 - The old boulder-run game (routes, forks, mountains) is retired; it is in the git history.
 
 ## Develop
@@ -111,6 +116,8 @@ npm install
 npm run dev
 npm run check        # typecheck, tests, build
 node scripts/play.mjs http://localhost:5173/ out/patrol [portrait]   # screenshot tour in a real browser
+node scripts/showcase.mjs http://localhost:4173/ out/show [portrait]  # fixed-camera views, for before/after comparisons
+node scripts/perf.mjs http://localhost:4173/ low|high                 # draw calls, triangles, frame time per view
 ```
 
 `window.patrol` in the browser is a debug handle (teleport, accept missions, set the time) used by the tour script.

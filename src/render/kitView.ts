@@ -213,7 +213,7 @@ export class KitView {
    * follow the slope under them, blending back to the rigid shape higher up, so a tor on a steep
    * face is neither buried uphill nor floating downhill.
    */
-  constructor(kit: Kit, list: readonly Placed[], ground?: (x: number, z: number) => number) {
+  constructor(kit: Kit, list: readonly Placed[], ground?: (x: number, z: number) => number, castShadows = true) {
     const tiles = new Map<string, THREE.BufferGeometry[]>();
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -241,7 +241,8 @@ export class KitView {
     }
     for (const parts of tiles.values()) {
       const mesh = new THREE.Mesh(mergeColored(parts), this.material);
-      mesh.castShadow = true;
+      // a tile is 500 m across, so casting puts all of it in the shadow pass: desktop only
+      mesh.castShadow = castShadows;
       mesh.receiveShadow = true;
       this.group.add(mesh);
       for (const g of parts) g.dispose();

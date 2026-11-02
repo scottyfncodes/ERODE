@@ -134,7 +134,7 @@ export class Game {
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
     scene.add(new ForestView(this.trees).group);
-    this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z));
+    this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z), this.rig.quality.tier === 'high');
     scene.add(this.kitView.group);
     progress(0.7, 'Lighting the stove');
     this.station = new StationView(this.terrain, this.topo);
@@ -263,7 +263,7 @@ export class Game {
     const el = document.createElement('div');
     el.className = 'title-screen';
     const when = has ? `Day ${this.p.weather.day}, ${clock(this.p.weather.minute)} · ${RANKS[rank(this.p)].name} · ${this.p.funds} funds` : '';
-    el.innerHTML = `<div class="inner"><div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div><div class="subbrand">Mountain Patrol</div><p>The Kessel valley is yours to look after: its slopes, its roads, its people. You have a log station, a snowmobile, a borrowed helicopter, a pair of old skis, and Koda.</p><div class="row">${has ? '<button class="btn red" data-a="cont">Continue</button><button class="btn ghost" data-a="new">New patrol</button>' : '<button class="btn red" data-a="new">Start your patrol</button>'}</div>${has ? `<div class="meta">${when}</div>` : ''}</div>`;
+    el.innerHTML = `<div class="inner"><img class="emblem" src="${import.meta.env.BASE_URL}icons/icon.svg" alt="" width="72" height="72"><div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div><div class="subbrand">Mountain Patrol</div><p>The Kessel valley is yours to look after: its slopes, its roads, its people. You have a log station, a snowmobile, a borrowed helicopter, a pair of old skis, and Koda.</p><div class="row">${has ? '<button class="btn red" data-a="cont">Continue</button><button class="btn ghost" data-a="new">New patrol</button>' : '<button class="btn red" data-a="new">Start your patrol</button>'}</div>${has ? `<div class="meta">${when}</div>` : ''}</div>`;
     this.ui.appendChild(el);
     const go = (fresh: boolean) => {
       this.audio.unlock();
@@ -679,6 +679,8 @@ export class Game {
       if (s.bump > 3) {
         this.audio.bump(s.bump);
         this.cam.kick(0.5);
+        // a knock you can see: snow shaken loose where you hit
+        this.particles.powder(s.x, s.y + 0.8, s.z, 8, 3, 1.8, 0, 0, 0.9);
       }
     } else if (this.mode === 'heli') {
       const h = this.heli;
