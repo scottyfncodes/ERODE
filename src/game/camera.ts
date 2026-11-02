@@ -110,8 +110,10 @@ export class CameraDirector {
     this.clampPlan();
   }
 
+  /** Gentle, capped shake: small knocks are ignored, big ones give a short rumble. */
   shake(amount: number) {
-    this.shakeAmt = Math.min(1.2, this.shakeAmt + amount);
+    if (amount < 0.3) return;
+    this.shakeAmt = Math.min(0.5, Math.max(this.shakeAmt, amount * 0.35));
   }
 
   /** Called on a fracture during the live run: move in, then pull back to show the spread. */
@@ -213,15 +215,17 @@ export class CameraDirector {
     // never dip under the ground (closer allowed when the shot is tight)
     const g = this.ground(pos.x, pos.z) + Math.max(0.35, Math.min(2.5, this.cur.dist * 0.18));
     if (pos.y < g) pos.y = g;
+    const look = this.cur.target.clone();
     if (this.shakeAmt > 0.001) {
-      const s = this.shakeAmt * 0.35;
-      pos.x += Math.sin(this.time * 47) * s;
-      pos.y += Math.sin(this.time * 59 + 1) * s;
-      pos.z += Math.sin(this.time * 41 + 2) * s;
-      this.shakeAmt *= Math.exp(-dt * 5);
+      // translate camera and target together (no swinging), scaled to the shot size
+      const s = this.shakeAmt * 0.035 * this.cur.dist;
+      const off = new Vector3(Math.sin(this.time * 23) * s, Math.sin(this.time * 29 + 1) * s * 0.7, Math.sin(this.time * 19 + 2) * s * 0.5);
+      pos.add(off);
+      look.add(off);
+      this.shakeAmt *= Math.exp(-dt * 9);
     }
     this.cam.position.copy(pos);
-    this.cam.lookAt(this.cur.target);
+    this.cam.lookAt(look);
     const near = Math.max(0.04, Math.min(0.3, this.cur.dist * 0.04));
     if (Math.abs(this.cam.near - near) > 0.005) {
       this.cam.near = near;

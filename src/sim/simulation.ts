@@ -567,7 +567,9 @@ export class Simulation {
       }
       if (this.debugImpacts && eff > 3) this.debugImpacts.push(`${(this.step * DT).toFixed(1)}s ${c.label} eff=${eff.toFixed(1)} r=${p.size.toFixed(2)} z=${t.z.toFixed(0)}`);
       if (p.kind !== 'stone' || this.step < p.immuneUntil) continue;
-      if (eff > this.strength(p)) breaks.push({ p, dv, eff, label: c.label });
+      // rock targets break stone; the ground itself only does it on really hard landings
+      const need = this.strength(p) * (c.env?.kind === 'terrain' ? 1.7 : 1);
+      if (eff > need) breaks.push({ p, dv, eff: c.env?.kind === 'terrain' ? eff / 1.7 : eff, label: c.label });
     }
     breaks.sort((a, b) => b.eff - a.eff);
     for (const b of breaks.slice(0, 2)) this.hit(b.p, b.dv, b.eff, b.label);
@@ -602,10 +604,18 @@ export class Simulation {
       tz = this.courseHit.tz;
     const m = p.body.mass();
     const v = p.body.linvel();
-    const control = grounded ? 1 : 0.35;
-    // steer across the course; damp sideways drift a little so it feels responsive
+    const control = grounded ? 1 : 0.55;
+    // Steering targets a sideways speed: full lock = 11 m/s across the course. The stone
+    // gets there quickly and holds it, so input maps directly to where it goes.
     const side = v.x * rx + v.z * rz;
-    const steerAcc = 14 * this.steer * control - side * 0.6 * Math.abs(this.steer) * control;
+    let steerAcc = 0;
+    if (Math.abs(this.steer) > 0.02) {
+      const want = this.steer * 11;
+      steerAcc = Math.max(-26, Math.min(26, (want - side) * 5)) * control;
+    } else if (grounded) {
+      // let go: sideways drift settles a little so it tracks straight
+      steerAcc = -side * 0.8;
+    }
     // smaller stone runs faster: a growing pull down the course
     const small = 1 - Math.min(1, p.size / this.level.boulder.radius);
     const pull = grounded ? 2.5 + 6 * small : 0;
@@ -637,7 +647,7 @@ export class Simulation {
   /** Granite gets a little stronger as it gets smaller. */
   strength(p: Piece): number {
     // cartoon rule: small stones crack as readily as big ones
-    return p.size < 0.5 ? 4.2 : 5.2 * Math.pow(p.size / this.level.boulder.radius, -0.15);
+    return p.size < 0.5 ? 5.4 : 5.2 * Math.pow(p.size / this.level.boulder.radius, -0.15);
   }
 
   private baseAngularDamping(kind: PieceKind, radius: number): number {
@@ -677,7 +687,7 @@ export class Simulation {
     const pos: [number, number, number] = [t.x, t.y, t.z];
     const rng = mulberry32(hashInts(p.id, this.step, 77));
     const before = p.size;
-    p.size *= p.size < 0.16 ? 0.62 - rng() * 0.08 : Math.max(0.5, 0.87 - (excess - 1) * 0.12 - rng() * 0.05);
+    p.size *= p.size < 0.16 ? 0.66 - rng() * 0.06 : Math.max(0.5, 0.87 - (excess - 1) * 0.12 - rng() * 0.05);
     p.smooth *= 0.75;
     p.immuneUntil = this.step + 9;
     const lost = before - p.size;

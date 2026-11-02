@@ -147,8 +147,20 @@ export class Game {
     });
     canvas.addEventListener('pointermove', (e) => {
       if (this.state !== 'sim' || !drag || drag.id !== e.pointerId) return;
+      // full lock at ~10% of the screen width, with a small dead zone; the anchor follows
+      // the thumb past full lock so reversing is instant
       const w = Math.max(320, canvas.clientWidth);
-      this.steerTouch = clamp((e.clientX - drag.x) / (w * 0.14), -1, 1);
+      const range = w * 0.1;
+      let dx = e.clientX - drag.x;
+      if (dx > range) {
+        drag.x = e.clientX - range;
+        dx = range;
+      } else if (dx < -range) {
+        drag.x = e.clientX + range;
+        dx = -range;
+      }
+      const v = dx / range;
+      this.steerTouch = Math.abs(v) < 0.08 ? 0 : clamp((v - Math.sign(v) * 0.08) / 0.92, -1, 1);
     });
     const endDrag = (e: PointerEvent) => {
       if (drag && drag.id === e.pointerId) {
@@ -789,7 +801,8 @@ export class Game {
     // live steering: keys, the hold buttons, or a drag anywhere on screen
     const keys = (this.steerKeys.right ? 1 : 0) - (this.steerKeys.left ? 1 : 0);
     const want = clamp(keys + this.steerButtons + this.steerTouch, -1, 1);
-    this.steerSmoothed += (want - this.steerSmoothed) * Math.min(1, dt * 14);
+    this.steerSmoothed += (want - this.steerSmoothed) * Math.min(1, dt * 22);
+    this.ui.setSteer(this.steerSmoothed);
     sim.steer = this.steerSmoothed;
     let steps = 0;
     const maxSteps = this.fast ? 16 : 6;
@@ -923,23 +936,19 @@ export class Game {
         this.effects.dust(pos.clone().add(new Vector3(0, -0.5, 4)), 0.35);
         this.effects.grit(pos, 1);
         this.cam.shake(1);
-        this.ui.doFlash(0.6);
-        this.ui.bigBanner('IT\'S LOOSE!', '', 1400);
+        this.ui.bigBanner('IT\'S LOOSE!', '', 1200);
         if (live) this.slowUntil = this.now + 0.9;
         break;
       case 'fracture': {
         this.squashHero(0.45, live);
-        if (fx) {
-          const sp = this.screenPos(pos);
-          this.ui.pop(sp.x, sp.y - 50, 'KA-BOOM!', 0, 'comic big');
-        }
+
         this.audio.fracture(e.intensity * att + 0.3, pan);
         this.effects.dust(pos, 0.6 + e.intensity * 0.6);
         this.effects.grit(pos, 1 + e.intensity);
         this.effects.grit(pos, 0.8);
         this.cam.shake(0.7 + e.intensity * 0.8);
         if (fx) {
-          this.ui.doFlash(0.4 + e.intensity * 0.6);
+          this.ui.doFlash(0.15 + e.intensity * 0.2);
           this.cam.punchIn(this.now);
           if (live) {
             this.hitStopUntil = this.now + 0.12;
@@ -953,7 +962,6 @@ export class Game {
         this.effects.grit(pos, 0.7);
         this.effects.dust(pos, 0.3);
         this.cam.shake(0.25);
-        if (fx) this.ui.doFlash(0.25);
         break;
       case 'impact':
         if (e.intensity > 0.25) this.squashHero(e.intensity * 0.35, live);
@@ -963,17 +971,11 @@ export class Game {
         break;
       case 'chip':
         this.squashHero(0.2 + e.intensity * 0.3, live);
-        if (fx && e.intensity > 0.35) {
-          const sp = this.screenPos(pos);
-          const words = ['BAM!', 'KRAK!', 'WHAM!', 'CRUNCH!', 'POW!', 'KA-CHUNK!'];
-          this.ui.pop(sp.x + 40, sp.y - 30, words[(e.step * 7) % words.length], 0, 'comic');
-        }
         this.audio.fracture(Math.min(1, e.intensity) * att * 0.8 + 0.15, pan);
         this.effects.grit(pos, 0.5 + e.intensity * 0.6);
         this.effects.dust(pos, 0.25 + e.intensity * 0.3);
         this.cam.shake(0.25 + e.intensity * 0.4);
         if (fx) {
-          this.ui.doFlash(0.2 + e.intensity * 0.3);
           if (live && e.intensity > 0.6) this.hitStopUntil = this.now + 0.07;
         }
         break;
@@ -985,7 +987,9 @@ export class Game {
         if (!fx) break;
         const sp = this.screenPos(pos);
         const big = (e.points ?? 0) >= 2000;
-        this.ui.pop(sp.x, sp.y, e.label ?? '', e.points ?? 0, `${big ? 'big' : ''} ${(e.label ?? '').startsWith('BIG AIR') ? 'air' : ''}`);
+        // keep the score text short: the label's first word and the points
+        const label = (e.label ?? '').split(' ')[0].replace(/!$/, '');
+        this.ui.pop(sp.x, sp.y, label, e.points ?? 0, `${big ? 'big' : ''} ${label.startsWith('BIG') ? 'air' : ''}`);
         if ((e.combo ?? 0) >= 2) this.audio.combo(e.combo ?? 2);
         break;
       }
@@ -1001,10 +1005,7 @@ export class Game {
       case 'nudge': {
         this.audio.whoosh();
         this.squashHero(0.35, live);
-        if (e.label && fx) {
-          const sp = this.screenPos(pos);
-          this.ui.pop(sp.x, sp.y, e.label, 0, 'comic boing');
-        }
+
         break;
       }
       case 'tree': {

@@ -1,4 +1,4 @@
-import { BackSide, Color, Group, Mesh, MeshBasicMaterial, Quaternion, Vector3 } from 'three';
+import { Color, Group, Mesh, Quaternion, Vector3 } from 'three';
 import type { Props } from '../sim/props';
 import { coniferGeometry } from './vegetation';
 import { createBarkMaterial, createFoliageMaterial } from './materials';
@@ -26,7 +26,6 @@ export class PropsView {
   constructor(props: Props) {
     const bark = createBarkMaterial(new Color(0.42, 0.26, 0.16));
     const foliage = createFoliageMaterial();
-    const ink = new MeshBasicMaterial({ color: 0x14100c, side: BackSide });
     const variants = [coniferGeometry(31, 7, 1, 10, 2), coniferGeometry(37, 8, 0.85, 10, 2), coniferGeometry(43, 6, 1.1, 10, 2)];
     const rng = mulberry32(77);
     for (const tr of props.trees) {
@@ -43,11 +42,6 @@ export class PropsView {
         m.receiveShadow = true;
         pivot.add(m);
       }
-      // ink outline: a slightly fattened back-face copy
-      const ol = new Mesh(v.crown, ink);
-      ol.scale.set(tr.h * 1.05, tr.h * 1.02, tr.h * 1.05);
-      ol.position.y = -tr.h * 0.01;
-      pivot.add(ol);
       this.group.add(pivot);
       this.trees.push({ pivot, base: pivot.position.clone(), h: tr.h, felled: false, t: 0, axis: new Vector3(1, 0, 0), slide: new Vector3(), spin: 0, yaw });
     }

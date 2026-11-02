@@ -73,7 +73,7 @@ export class PiecesView {
   squash(id: number, amount: number) {
     const e = this.meshes.get(id);
     if (!e) return;
-    e.squash = Math.min(0.45, Math.max(e.squash * Math.exp(-e.squashT * 6), amount));
+    e.squash = Math.min(0.18, Math.max(e.squash * Math.exp(-e.squashT * 6), amount));
     e.squashT = 0;
   }
 
@@ -103,7 +103,7 @@ export class PiecesView {
         mesh.receiveShadow = true;
         const outline = new Mesh(
           geo,
-          new ShaderMaterial({ uniforms: u, vertexShader: OUTLINE_VERT, fragmentShader: 'void main() { gl_FragColor = vec4(0.07, 0.05, 0.04, 1.0); }', side: BackSide }),
+          new ShaderMaterial({ uniforms: u, vertexShader: OUTLINE_VERT, fragmentShader: 'void main() { gl_FragColor = vec4(0.16, 0.13, 0.11, 1.0); }', side: BackSide }),
         );
         mesh.add(outline);
         const root = new Group();
@@ -128,7 +128,7 @@ export class PiecesView {
       e.u.uSmooth.value = s.smooth ?? 0;
       // outline thickness in object space, so it reads the same at any size
       const r = s.shape.radius * scale;
-      e.u.uWidth.value = Math.min(0.12, Math.max(0.004, r * 0.08)) / Math.max(0.0001, scale);
+      e.u.uWidth.value = Math.min(0.05, Math.max(0.002, r * 0.03)) / Math.max(0.0001, scale);
     }
     for (const [id, e] of this.meshes) if (!seen.has(id)) e.root.visible = false;
   }
