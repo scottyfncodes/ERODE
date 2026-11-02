@@ -1,8 +1,10 @@
-# ERODE
+# ROCKSLIDE
+
+*Keep it together. Get to the bottom.*
 
 **You are a boulder. Reach the bottom of the mountain with as much of yourself as you can.**
 
-ERODE is a physics-driven environmental puzzle game. Every level runs the same loop:
+ROCKSLIDE is a physics-driven environmental puzzle game. Every level runs the same loop:
 
 1. **Survey.** Fly down the descent, show the routes, and inspect each obstacle.
 2. **Plan.** Spend a few moves changing the mountain. You can lever loose boulders aside, fell a pine across a line, clear a log jam, angle a trunk into a guide, dig out a snowbank, or break a sheet of ice.

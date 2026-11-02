@@ -32,7 +32,24 @@ export interface Progress {
   lastLevel?: string;
 }
 
-const KEY = 'erode.progress.v3';
+const KEY = 'rockslide.progress.v3';
+/** saves from before the ROCKSLIDE name: moved to KEY on first load */
+const LEGACY_KEYS = ['erode.progress.v3'];
+
+function migrate() {
+  try {
+    if (localStorage.getItem(KEY)) return;
+    for (const k of LEGACY_KEYS) {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      localStorage.setItem(KEY, raw);
+      localStorage.removeItem(k);
+      return;
+    }
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 const fresh = (): Progress => ({
   v: 3,
@@ -43,6 +60,7 @@ const fresh = (): Progress => ({
 });
 
 export function loadProgress(): Progress {
+  migrate();
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fresh();

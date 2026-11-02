@@ -10,36 +10,36 @@ const logs = [];
 page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
 await page.goto(url);
-await page.waitForFunction(() => window.erode, null, { timeout: 120000 });
+await page.waitForFunction(() => window.rockslide, null, { timeout: 120000 });
 await page.waitForTimeout(2500);
 await page.screenshot({ path: `${out}-title.png`, timeout: 120000 });
 const steps = (process.env.STEPS ?? 'plan').split(',');
-await page.evaluate(() => window.erode.begin());
+await page.evaluate(() => window.rockslide.begin());
 await page.waitForTimeout(500);
-await page.evaluate(() => window.erode.snapCamera());
+await page.evaluate(() => window.rockslide.snapCamera());
 await page.waitForTimeout(Number(process.env.PLANWAIT ?? 2000));
 await page.screenshot({ path: `${out}-plan.png`, timeout: 120000 });
 if (steps.includes('select')) {
-  await page.evaluate(() => window.erode.select('tooth-1'));
+  await page.evaluate(() => window.rockslide.select('tooth-1'));
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${out}-select.png`, timeout: 120000 });
-  await page.evaluate(() => window.erode.select(null));
+  await page.evaluate(() => window.rockslide.select(null));
 }
 if (steps.includes('run')) {
-  if (process.env.PLAN) await page.evaluate((p) => window.erode.setPlan(JSON.parse(p)), process.env.PLAN);
-  await page.evaluate(() => window.erode.release());
+  if (process.env.PLAN) await page.evaluate((p) => window.rockslide.setPlan(JSON.parse(p)), process.env.PLAN);
+  await page.evaluate(() => window.rockslide.release());
   for (const t of [1, 2, 3]) {
     await page.waitForTimeout(Number(process.env.RUNWAIT ?? 3000));
     await page.screenshot({ path: `${out}-run${t}.png`, timeout: 120000 });
   }
-  await page.evaluate(() => window.erode.finishNow());
-  await page.waitForFunction(() => window.erode.result !== null || false, null, { timeout: 180000 }).catch(() => {});
+  await page.evaluate(() => window.rockslide.finishNow());
+  await page.waitForFunction(() => window.rockslide.result !== null || false, null, { timeout: 180000 }).catch(() => {});
   for (let i = 0; i < 60; i++) { const st = await page.evaluate(() => document.querySelector('.results.show') ? 1 : 0); if (st) break; await page.waitForTimeout(1000); }
   await page.waitForTimeout(6000);
   await page.screenshot({ path: `${out}-results.png`, timeout: 120000 });
-  console.log('result', JSON.stringify(await page.evaluate(() => { const r = window.erode.result; return r && { success: r.success, delivered: r.deliveredFraction, fractures: r.fractures.length, dest: r.destination }; })));
+  console.log('result', JSON.stringify(await page.evaluate(() => { const r = window.rockslide.result; return r && { success: r.success, delivered: r.deliveredFraction, fractures: r.fractures.length, dest: r.destination }; })));
   if (steps.includes('replay')) {
-    await page.evaluate(() => window.erode.replay());
+    await page.evaluate(() => window.rockslide.replay());
     await page.waitForTimeout(6000);
     await page.screenshot({ path: `${out}-replay.png`, timeout: 120000 });
   }

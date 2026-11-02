@@ -175,13 +175,20 @@ export class CameraDirector {
     let k = 3;
     if (this.mode === 'intro') {
       // the summit spire and its boulder, the whole run falling away below
+      // over the boulder's shoulder: the stone in the foreground, the whole run falling away below
       const t = this.time;
       const [bx, bz] = this.level.boulder.position;
+      const by = this.ground(bx, bz) + this.level.boulder.radius;
+      const yaw = 0.32 + Math.sin(t * 0.06) * 0.08;
+      const pitch = 0.3 + Math.sin(t * 0.045) * 0.025;
+      const dist = 70;
+      const back = 6 + this.level.boulder.radius * 7;
+      const cam = new Vector3(bx - Math.sin(yaw) * back, by + 2.5 + this.level.boulder.radius * 2.6, bz - Math.cos(yaw) * back);
       this.desired = {
-        target: new Vector3(bx + Math.sin(t * 0.07) * 3, this.ground(bx, bz + 14) + 2, bz + 18 + Math.sin(t * 0.05) * 3),
-        yaw: -0.5 + Math.sin(t * 0.06) * 0.3,
-        pitch: 0.16 + Math.sin(t * 0.045) * 0.05,
-        dist: 46,
+        target: new Vector3(cam.x + Math.sin(yaw) * Math.cos(pitch) * dist, cam.y - Math.sin(pitch) * dist, cam.z + Math.cos(yaw) * Math.cos(pitch) * dist),
+        yaw,
+        pitch,
+        dist,
       };
       k = 0.8;
     } else if (this.mode === 'plan') {

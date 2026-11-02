@@ -10,7 +10,7 @@ const BASE = {
   forest: new Color(0.1, 0.3, 0.12),
   forestFloor: new Color(0.2, 0.32, 0.12),
   scree: new Color(0.58, 0.48, 0.38),
-  bedrock: new Color(0.6, 0.55, 0.5),
+  bedrock: new Color(0.52, 0.48, 0.44),
   soil: new Color(0.45, 0.3, 0.17),
   streambed: new Color(0.35, 0.3, 0.24),
   snow: new Color(0.95, 0.97, 1.0),

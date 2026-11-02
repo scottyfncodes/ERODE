@@ -4,6 +4,7 @@ import type { Composition, CompositionId } from '../sim/composition';
 import type { LevelProgress, Records } from '../game/progress';
 import './style.css';
 import { kg, pct, seconds, sizeLabel } from './format';
+import { BRAND, wordmark } from './brand';
 
 export const ICONS = {
   reset: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg>',
@@ -190,8 +191,8 @@ export class UI {
     this.title = el('div', 'title hidden');
     this.title.innerHTML = `
       <div class="title-top">
-        <div class="wordmark">ERODE</div>
-        <div class="title-tag">You are the boulder. Reach the bottom of the mountain with as much of yourself as you can.</div>
+        ${wordmark()}
+        <div class="title-tag"><b>${BRAND.tagline}</b><br>You are the boulder. Reach the bottom of the mountain with as much of yourself as you can.</div>
       </div>
       <div class="title-bottom"><div class="title-stats" id="title-stats"></div></div>`;
     const go = this.btn('btn-go interactive', 'Play', () => this.h.play());
@@ -384,7 +385,7 @@ export class UI {
     card.querySelector('h1')!.textContent = level.name;
     card.querySelector('.targets')!.innerHTML = (['silver', 'gold', 'platinum'] as const)
       .map((k) => `<span class="tg">${medalBadge(k, 'xs')}<b>${Math.round(level.medals[k] * 1000) / 10}%</b></span>`)
-      .join('') + (lp?.finished ? `<span class="tg best">Best <b>${pct(lp.bestRetained)}</b></span>` : '');
+      .join('') + (lp?.finished && lp.bestRetained > 0 ? `<span class="tg best">Best <b>${pct(lp.bestRetained)}</b></span>` : '');
     const done = new Set(lp?.objectives ?? []);
     card.querySelector('.obj-toggle')!.textContent = `Objectives ${done.size}/${level.objectives.length}`;
     card.querySelector('.obj-list')!.innerHTML =
@@ -691,7 +692,7 @@ export class UI {
     this.menuEl.innerHTML = '';
     const card = el('div', 'menu-card');
     card.append(
-      el('h2', '', inRun ? 'Paused' : 'ERODE'),
+      el('h2', '', inRun ? 'Paused' : BRAND.name),
       this.actBtn(`Sound <b>${sound ? 'On' : 'Off'}</b>`, '', () => this.h.toggleSound()),
       this.actBtn(`Ambience <b>${music ? 'On' : 'Off'}</b>`, '', () => this.h.toggleMusic()),
       this.actBtn('The Mountains', '', () => this.h.mountains()),

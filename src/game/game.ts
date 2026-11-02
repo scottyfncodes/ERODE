@@ -21,6 +21,7 @@ import { compositionUnlocked, levelProgress, levelUnlocked, loadProgress, record
 import { AudioEngine } from '../audio/audio';
 import { UI, type ContextAction, type MountainCard } from '../ui/ui';
 import { kg, pct } from '../ui/format';
+import { wordmark } from '../ui/brand';
 import { clamp, makePolyline, pathDistance } from '../sim/geom';
 
 type State = 'title' | 'mountains' | 'plan' | 'sim' | 'results' | 'replay';
@@ -267,7 +268,7 @@ export class Game {
     if (this.w.level.id === level.id) return;
     const l = this.loadingEl;
     if (l) {
-      l.innerHTML = `<div class="loading-inner"><div class="wordmark">ERODE</div><div class="loading-text">${level.stage} · ${level.name}</div></div>`;
+      l.innerHTML = `<div class="loading-inner">${wordmark('sm')}<div class="loading-text">${level.stage} · ${level.name}</div></div>`;
       l.classList.remove('gone');
     }
     await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30)));

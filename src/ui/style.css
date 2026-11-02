@@ -1,11 +1,15 @@
 :root {
-  --ink: #f6f1e8;
-  --ink-dim: rgba(246, 241, 232, 0.72);
-  --ink-faint: rgba(246, 241, 232, 0.44);
+  --granite-950: #0f1012;
+  --sun: #f6d488;
+  --sand: #e2b06f;
+  --sand-deep: #b97b3f;
+  --ink: #f3ecdf;
+  --ink-dim: rgba(243, 236, 223, 0.74);
+  --ink-faint: rgba(243, 236, 223, 0.46);
   --glass: rgba(20, 18, 16, 0.6);
   --glass-strong: rgba(17, 15, 13, 0.86);
   --line: rgba(246, 241, 232, 0.13);
-  --accent: #e9c48a;
+  --accent: #e9c08a;
   --warn: #ff8a5b;
   --major: #ff5b45;
   --good: #9fdc9a;
@@ -13,8 +17,8 @@
   --silver: #cfd6dc;
   --gold: #e8c45a;
   --platinum: #a9ece4;
-  --display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
-  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --display: 'Archivo', 'Arial Black', 'Helvetica Neue', sans-serif;
+  --sans: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
@@ -39,7 +43,7 @@ body {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
 }
 #view {
   position: fixed;
@@ -101,12 +105,55 @@ svg {
   text-align: center;
 }
 .wordmark {
+  position: relative;
+  display: inline-block;
   font-family: var(--display);
-  font-weight: 600;
-  font-size: 64px;
-  letter-spacing: 0.32em;
-  margin-right: -0.32em;
-  line-height: 1;
+  font-weight: 900;
+  font-stretch: 125%;
+  font-size: clamp(40px, 10.6vw, 128px);
+  line-height: 0.9;
+  letter-spacing: -0.012em;
+  transform: skewX(-7deg);
+  filter: drop-shadow(0 0.045em 0 var(--granite-950)) drop-shadow(0 0.16em 0.32em rgba(0, 0, 0, 0.55));
+  white-space: nowrap;
+  padding: 0 0.06em 0.04em 0;
+}
+.wordmark span {
+  display: block;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+/* the summit block: weathered granite */
+.wm-top {
+  background-image: linear-gradient(180deg, #fffaf0 0%, #ece4d5 34%, #c3baab 62%, #9b9285 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 34%, 0 70%);
+}
+/* the slipped block: fresh sandstone face, caught in low sun */
+.wm-bot {
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  background-image: linear-gradient(180deg, var(--sun) 0%, var(--sand) 46%, var(--sand-deep) 100%);
+  clip-path: polygon(0 70%, 100% 34%, 100% 100%, 0 100%);
+  transform: translate(0.045em, 0.05em);
+}
+.wordmark.sm {
+  font-size: 30px;
+}
+.loading-tag,
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.loading-tag {
+  margin-top: 14px;
+}
+.error-box button {
+  margin-top: 16px;
 }
 .loading-bar {
   width: 180px;
@@ -281,8 +328,14 @@ svg {
   text-align: center;
 }
 .title .wordmark {
-  font-size: clamp(54px, 15vw, 104px);
-  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.35);
+  font-size: clamp(36px, 11.2vw, 110px);
+}
+.title-tag b {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 .title-tag {
   max-width: 340px;
@@ -334,11 +387,12 @@ svg {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   padding: calc(12px + var(--safe-t)) 0 0;
-  opacity: 0;
-  transition: opacity 0.35s;
+  animation: rise 0.3s ease-out;
 }
-.mountains.show {
-  opacity: 1;
+@keyframes rise {
+  from {
+    transform: translateY(12px);
+  }
 }
 .mt-head {
   display: grid;
@@ -350,7 +404,8 @@ svg {
   margin: 0;
   text-align: center;
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: 92%;
   font-size: 22px;
   letter-spacing: 0.04em;
 }
@@ -456,7 +511,8 @@ svg {
 .level-card h1 {
   margin: 2px 0 8px;
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: 92%;
   font-size: 22px;
   line-height: 1.1;
 }
@@ -698,7 +754,8 @@ svg {
 .context h2 {
   margin: 2px 0 0;
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: 92%;
   font-size: 20px;
 }
 .context p {
@@ -753,7 +810,8 @@ svg {
 .cs-head h3 {
   margin: 0;
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: 92%;
   font-size: 18px;
 }
 .cs-item {
@@ -1028,7 +1086,8 @@ svg {
 }
 .banner div {
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: 92%;
   font-size: clamp(30px, 9vw, 54px);
   letter-spacing: 0.2em;
   text-shadow: 0 3px 24px rgba(0, 0, 0, 0.5);
@@ -1184,7 +1243,8 @@ svg {
 .verdict {
   margin-top: 4px;
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: 92%;
   font-size: 22px;
   line-height: 1.2;
 }
@@ -1446,7 +1506,8 @@ svg {
 .menu-card h2 {
   margin: 0 0 8px;
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: 92%;
   font-size: 26px;
   text-align: center;
   letter-spacing: 0.08em;
@@ -1541,7 +1602,8 @@ svg {
 }
 .error-box h2 {
   font-family: var(--display);
-  font-weight: 600;
+  font-weight: 800;
+  font-stretch: 92%;
   color: var(--ink);
 }
 
@@ -1582,7 +1644,7 @@ svg {
 }
 @media (max-height: 520px) {
   .title .wordmark {
-    font-size: 54px;
+    font-size: min(9vw, 64px);
   }
   .title {
     padding-top: calc(24px + var(--safe-t));
