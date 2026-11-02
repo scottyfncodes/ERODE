@@ -43,9 +43,8 @@ async function boot() {
   await nextFrame();
   progress(1, 'Ready');
   game.start();
-  // debug handle for the scripts in /scripts (`erode` kept as an alias for older tooling)
-  const w = window as unknown as { rockslide: unknown; erode: unknown };
-  w.rockslide = w.erode = game.debug();
+  // debug handle for the scripts in /scripts
+  (window as unknown as { rockslide: unknown }).rockslide = game.debug();
   setTimeout(() => loading.classList.add('gone'), 250);
 }
 

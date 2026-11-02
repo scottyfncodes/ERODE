@@ -23,8 +23,25 @@ export interface Progress {
   tutorial: { selected: boolean; released: boolean; reviewed: boolean };
 }
 
-// Storage key predates the ROCKSLIDE name; kept so existing players keep their progress.
-const KEY = 'erode.progress.v2';
+const KEY = 'rockslide.progress.v2';
+/** where saves lived before the ROCKSLIDE name: read once, moved to KEY, then removed */
+const LEGACY_KEYS = ['erode.progress.v2'];
+
+/** Move a save from a legacy key to the current one, so existing players keep their records. */
+function migrate() {
+  try {
+    if (localStorage.getItem(KEY)) return;
+    for (const k of LEGACY_KEYS) {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      localStorage.setItem(KEY, raw);
+      localStorage.removeItem(k);
+      return;
+    }
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 const fresh = (): Progress => ({
   v: 1,
@@ -34,6 +51,7 @@ const fresh = (): Progress => ({
 });
 
 export function loadProgress(): Progress {
+  migrate();
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return fresh();
