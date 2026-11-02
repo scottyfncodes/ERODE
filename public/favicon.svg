@@ -1,10 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="12" fill="#16181b"/>
-  <path d="M0 44 Q30 44 64 60 L64 64 L0 64Z" fill="#2c3137"/>
-  <path d="M0 44 Q30 44 64 60" fill="none" stroke="#e2b06f" stroke-width="3" stroke-linecap="round"/>
-  <g transform="translate(9 3) scale(0.43)">
-    <path d="M14 92 L9 70 L15 46 L31 26 L52 15 L72 19 L87 34 L93 56 L90 78 L84 92 Z" fill="#d8d0c2" stroke="#0f1012" stroke-width="6" stroke-linejoin="round"/>
-    <path d="M31 26 L52 15 L72 19 L44 48 Z" fill="#fffaf0" opacity="0.7"/>
-    <path d="M44 48 L64 62 L93 56 L90 78 L84 92 L58 92 L64 62Z" fill="#0f1012" opacity="0.25"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>ROCKSLIDE: Kessel Patrol</title>
+  <g id="Layer_1" data-name="Layer 1">
+    <rect id="field" x="0" y="0" width="1024" height="1024" fill="#141c24"/>
+    <circle id="patch" cx="512" cy="512" r="400" fill="#1d2731" stroke="#f1ece1" stroke-width="26" stroke-miterlimit="10"/>
+    <circle id="pole_ring" data-name="pole ring" cx="512" cy="512" r="362" fill="none" stroke="#ff7a1a" stroke-width="9" stroke-miterlimit="10"/>
+    <circle id="star_0" data-name="star 0" cx="330" cy="300" r="7" fill="#f1ece1"/>
+    <circle id="star_1" data-name="star 1" cx="650" cy="250" r="9" fill="#f1ece1"/>
+    <circle id="star_2" data-name="star 2" cx="735" cy="360" r="6" fill="#f1ece1"/>
+    <circle id="star_3" data-name="star 3" cx="420" cy="225" r="5" fill="#f1ece1"/>
+    <polygon id="peak" points="168,602 392,352 452,410 566,262 858,602" fill="#f4f6f8"/>
+    <polygon id="north_face" data-name="north face" points="566,262 858,602 668,602 612,444 640,380" fill="#c9d8ea"/>
+    <polygon id="couloir" points="392,352 452,410 420,470 380,430 330,520 300,455" fill="#9fc3de"/>
+    <path id="patrol_band" data-name="patrol band" d="M121.8 600 L902.2 600 C889.023 658.377 862.915 713.053 825.8 760 L198.2 760 C161.085 713.053 134.977 658.377 121.8 600 Z" fill="#d8382a"/>
+    <polygon id="cross" points="490,618 534,618 534,658 574,658 574,702 534,702 534,742 490,742 490,702 450,702 450,658 490,658" fill="#f1ece1"/>
   </g>
 </svg>

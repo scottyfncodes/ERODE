@@ -1,4 +1,5 @@
 import { Game } from './game/game';
+import { loadKit } from './render/kitView';
 import './ui/style.css';
 
 const loading = document.getElementById('loading')!;
@@ -36,8 +37,11 @@ async function boot() {
   progress(0.05, 'Opening the station');
   await nextFrame();
   if (document.fonts?.ready) await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
+  progress(0.08, 'Hauling up the rocks');
+  // the Kessel kit: GLBs from GITCRAFT's MeshCraft (art/3d). The game still runs if one is missing.
+  const kit = await loadKit(`${import.meta.env.BASE_URL}models/`, (f) => progress(0.08 + f * 0.06, 'Hauling up the rocks'));
   const canvas = document.getElementById('view') as HTMLCanvasElement;
-  const game = new Game(canvas, document.getElementById('ui')!, progress);
+  const game = new Game(canvas, document.getElementById('ui')!, progress, kit);
   await nextFrame();
   progress(1, 'Ready');
   game.start();

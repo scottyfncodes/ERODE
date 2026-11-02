@@ -1,0 +1,80 @@
+{
+ "items": [
+  {
+   "path": "../../rockslide-production/3d/rs_lantern/exports/rs_lantern.three-web-toon.collision.glb",
+   "bytes": 4460,
+   "tools": "MeshCraft (Blender)",
+   "status": "game-ready",
+   "notes": "three-web-toon collision (convex hull)",
+   "sha256": "d50ab4b50c0375eb988f081c456ed69d7b76dcc8f42d116fef149c3dd121a334",
+   "triangles": 56
+  },
+  {
+   "path": "../../rockslide-production/3d/rs_lantern/exports/rs_lantern.three-web-toon.glb",
+   "bytes": 36820,
+   "tools": "MeshCraft (Blender)",
+   "status": "game-ready",
+   "notes": "three-web-toon export (Three.js (GLTFLoader) \u2014 vertex-colour toon pipeline)",
+   "sha256": "29ba1aaa02bf089116cb8a98d5412b454fd2f07bf9be5f02d5aba0250ab449c7",
+   "triangles": 396,
+   "profile": "three-web-toon",
+   "format": "glb",
+   "engine": "Three.js (GLTFLoader) \u2014 vertex-colour toon pipeline",
+   "clips": [
+    "swing"
+   ]
+  },
+  {
+   "path": "../../rockslide-production/3d/rs_lantern/exports/rs_lantern.three-web-toon.lod25.glb",
+   "bytes": 14152,
+   "tools": "MeshCraft (Blender)",
+   "status": "game-ready",
+   "notes": "three-web-toon lod (25% triangles)",
+   "sha256": "e50e507e89e7acf1646d8c97512d25e56cb1c6e029e92694b3d1aeb20a7e03d5",
+   "triangles": 90
+  },
+  {
+   "path": "../../rockslide-production/3d/rs_lantern/exports/rs_lantern.three-web-toon.lod50.glb",
+   "bytes": 23012,
+   "tools": "MeshCraft (Blender)",
+   "status": "game-ready",
+   "notes": "three-web-toon lod (50% triangles)",
+   "sha256": "5c63e4d32dabda691e2b16bb71c7df857850daa8d5fb731146fa30ce43a992a0",
+   "triangles": 198
+  },
+  {
+   "path": "../../rockslide-production/3d/rs_lantern/previews/rs_lantern_front.png",
+   "bytes": 73159,
+   "tools": "MeshCraft (Blender)",
+   "status": "preview",
+   "notes": "MeshCraft preview render",
+   "sha256": "0fd223c98a1bb39f3147ede3bdc212b8ffb036e4a94de08abb3d4e58b6303229"
+  },
+  {
+   "path": "../../rockslide-production/3d/rs_lantern/previews/rs_lantern_sheet.png",
+   "bytes": 92680,
+   "tools": "MeshCraft (Blender)",
+   "status": "preview",
+   "notes": "MeshCraft preview render",
+   "sha256": "704aa00f1799c7294bbce81e08df5ac12b0c2b87d0628c00513ce3382d5138a2"
+  },
+  {
+   "path": "../../rockslide-production/3d/rs_lantern/previews/rs_lantern_three_quarter.png",
+   "bytes": 79212,
+   "tools": "MeshCraft (Blender)",
+   "status": "preview",
+   "notes": "MeshCraft preview render",
+   "sha256": "9f9a4e69b0ca6050388769f1dd57e7efea62559b5f68dcab6c07d75bafb797c7"
+  },
+  {
+   "path": "../../rockslide-production/3d/rs_lantern/source/rs_lantern.blend",
+   "bytes": 101965,
+   "tools": "MeshCraft (Blender)",
+   "status": "source",
+   "notes": "Editable Blender source",
+   "sha256": "2e5676bd582d42fa123537e0fd4fa0a54ab8a4d0334d18b1eacc7a2a481d4aea"
+  }
+ ],
+ "files": 8,
+ "updated": "2026-11-02"
+}

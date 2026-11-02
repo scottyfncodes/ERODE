@@ -24,6 +24,8 @@ import { StationView } from '../render/stationView';
 import { buildTerrain, snowUniforms } from '../render/terrainView';
 import { drawTopo } from '../render/topoMap';
 import { WorldView } from '../render/worldView';
+import { KitView, type Kit } from '../render/kitView';
+import { kitObstacles, scatterKit, type Placed } from '../world/scatter';
 import { Hud } from '../ui/hud';
 import { Panels } from '../ui/panels';
 import type { Colliders } from '../world/colliders';
@@ -66,6 +68,8 @@ export class Game {
   private solid: Colliders;
   private station: StationView;
   private world: WorldView;
+  private kitView: KitView;
+  private scattered: Placed[];
   private markers: Markers;
   private avView: AvalancheView;
   private props: MissionProps;
@@ -113,7 +117,7 @@ export class Game {
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
 
-  constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void) {
+  constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void, kit: Kit = {}) {
     this.p = loadProfile(this.store) ?? newProfile();
     this.rig = new Rig(canvas, detectQuality(this.p.settings.quality));
     progress(0.15, 'Raising the mountains');
@@ -121,13 +125,17 @@ export class Game {
     this.solid = buildColliders();
     progress(0.35, 'Planting the forest');
     this.trees = plantForest(this.terrain, this.rig.quality.trees);
-    // collisions use the same trees you see
-    this.grid = new TreeGrid(this.trees);
+    // the Kessel kit (MeshCraft): tors on the steeps, boulders, deadwood and the patrol's own gear
+    const scattered = (this.scattered = scatterKit(this.terrain, this.trees, this.rig.quality.trees));
+    // collisions use the same trees and rocks you see
+    this.grid = new TreeGrid([...this.trees, ...kitObstacles(scattered.filter((p) => kit[p.kind]))]);
     progress(0.5, 'Drawing the map');
     this.topo = drawTopo(this.terrain, 640);
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
     scene.add(new ForestView(this.trees).group);
+    this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z));
+    scene.add(this.kitView.group);
     progress(0.7, 'Lighting the stove');
     this.station = new StationView(this.terrain, this.topo);
     this.world = new WorldView(this.terrain);
@@ -375,6 +383,15 @@ export class Game {
     this.audio.click();
   }
 
+  private gradeDim = false;
+  /** the lens grade closes in at night and in heavy weather */
+  private grade() {
+    const dim = this.rig.night > 0.55 || this.cond.fog > 0.6;
+    if (dim === this.gradeDim) return;
+    this.gradeDim = dim;
+    document.getElementById('grade')?.classList.toggle('dim', dim);
+  }
+
   private placeWalker(x: number, z: number, yaw: number) {
     const r = this.solid.resolve(x, z, 0.5);
     this.walker.x = r.x;
@@ -447,9 +464,11 @@ export class Game {
     c.lookAt(HQ.x - 8, this.station.y + 3, HQ.z);
     this.cond = conditions(this.p.weather);
     this.rig.setConditions(this.cond);
+    this.grade();
     this.rig.focus(new THREE.Vector3(HQ.x, this.station.y, HQ.z), 70);
     this.station.update(dt, this.rig.night);
     this.world.update(dt, this.rig.night, this.cond.wind);
+    this.kitView.update(dt, this.rig.night);
     this.placeActors(dt, true);
     this.dogMesh.animate('sit', 0, dt);
     this.smoke(dt);
@@ -516,10 +535,12 @@ export class Game {
     } else this.cam.update(dt, pos, this.headingNow(), this.speedNow());
 
     this.rig.setConditions(c, this.indoors);
+    this.grade();
     this.rig.focus(pos, this.mode === 'heli' ? 110 : 55);
     snowUniforms.fresh.value = Math.min(1, p.weather.freshSnow / 40);
     this.station.update(dt, this.rig.night);
     this.world.update(dt, this.rig.night, c.wind);
+    this.kitView.update(dt, this.rig.night);
     this.props.update(dt);
     this.markers.update(dt);
     this.placeActors(dt, false);
@@ -1430,6 +1451,19 @@ export class Game {
     return {
       game: this,
       profile: () => this.p,
+      /** the Kessel kit (QA): how much is placed, in how many draw calls, and the pieces nearest a point */
+      kit: (x?: number, z?: number, kind?: string) => ({
+        placed: this.kitView.placed,
+        drawCalls: this.kitView.drawCalls,
+        near:
+          x === undefined || z === undefined
+            ? []
+            : this.scattered
+                .filter((p) => !kind || p.kind.startsWith(kind))
+                .map((p) => ({ ...p, d: Math.hypot(p.x - x, p.z - z) }))
+                .sort((a, b) => a.d - b.d)
+                .slice(0, 5),
+      }),
       info: () => ({ calls: this.rig.renderer.info.render.calls, tris: this.rig.renderer.info.render.triangles, heli: { ...this.heli }, dog: { mode: this.dog.mode, anim: this.dog.anim, x: this.dog.x, z: this.dog.z } }),
       state: () => ({ mode: this.mode, pos: this.pos2(), active: this.p.active, fps: Math.round(this.fps), step: this.p.active ? currentStep(this.p.active)?.kind : null, watching: this.watching, pack: { fired: this.pack.fired, done: this.pack.done, moving: this.pack.moving, result: this.pack.result } }),
       teleport: (x: number, z: number, yaw = 0) => {

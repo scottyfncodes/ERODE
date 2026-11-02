@@ -36,14 +36,36 @@ const SKY_FRAG = /* glsl */ `
   uniform vec3 uSunColor;
   uniform float uNight;
   uniform float uCloud;
+  uniform float uTime;
   varying vec3 vDir;
   float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float n2(vec2 x) {
+    vec2 i = floor(x); vec2 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y);
+  }
+  float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * n2(p); p *= 2.1; a *= 0.5; } return s; }
   void main() {
     vec3 d = normalize(vDir);
     float h = d.y;
     vec3 col = mix(uHorizon, uZenith, pow(clamp(h, 0.0, 1.0), 0.55));
     col = mix(col, uGround, smoothstep(0.0, -0.08, h));
     float s = max(dot(d, uSunDir), 0.0);
+    // the warm glow along the horizon on the sun's side: alpine air at golden hour
+    float sideGlow = pow(max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(uSunDir.x, 0.0, uSunDir.z))), 0.0), 4.0);
+    col += uSunColor * sideGlow * exp(-max(h, 0.0) * 9.0) * 0.18 * (1.0 - uNight);
+    // clouds: soft cumulus banks drifting with the wind, lit on the sun side, thicker in bad weather
+    if (h > 0.0) {
+      vec2 uv = d.xz / (h + 0.18) * 1.6 + vec2(uTime * 0.006, uTime * 0.002);
+      float c = fbm(uv) * 0.75 + fbm(uv * 3.1 + 5.0) * 0.25;
+      float cover = mix(0.62, 0.34, uCloud);
+      float dens = smoothstep(cover, cover + 0.22, c) * smoothstep(0.0, 0.12, h);
+      vec3 lit = mix(vec3(0.94, 0.95, 0.98), uSunColor * 1.1, 0.25 + 0.5 * pow(s, 3.0));
+      vec3 shade = mix(uHorizon, uZenith, 0.35) * 0.82;
+      vec3 cloudCol = mix(shade, lit, smoothstep(0.2, 0.9, c - cover + 0.5));
+      cloudCol = mix(cloudCol, vec3(0.08, 0.1, 0.15), uNight * 0.85);
+      col = mix(col, cloudCol, dens * 0.85);
+    }
     col += uSunColor * (pow(s, 900.0) * 3.0 * (1.0 - uCloud) + pow(s, 12.0) * 0.28 + pow(s, 3.0) * 0.08);
     // stars
     if (uNight > 0.01 && h > 0.0) {
@@ -110,6 +132,7 @@ export class Rig {
       uSunColor: { value: new THREE.Color(1, 0.9, 0.75) },
       uNight: { value: 0 },
       uCloud: { value: 0 },
+      uTime: shared.time,
     };
     this.sky = new THREE.Mesh(
       new THREE.SphereGeometry(2000, 32, 16),
@@ -196,10 +219,10 @@ export class Rig {
     const sunCol = lerpC(0x8aa4d8, 0xfff1dc, day).lerp(new THREE.Color(0xffb46e), golden * 0.6);
     this.sun.color.copy(sunCol);
     (this.skyU.uSunColor.value as THREE.Color).copy(sunCol);
-    this.sun.intensity = (day > 0.05 ? 2.7 * day : 0.5) * (1 - cloud * 0.7) + 0.05;
-    this.hemi.color.copy(lerpC(0x2a3b5c, 0xd6e8ff, day));
+    this.sun.intensity = (day > 0.05 ? 3.0 * day : 0.5) * (1 - cloud * 0.7) + 0.05;
+    this.hemi.color.copy(lerpC(0x2a3b5c, 0xbcd6ff, day));
     this.hemi.groundColor.copy(lerpC(0x1d2638, 0xe8edf3, day));
-    this.hemi.intensity = 0.55 + day * 0.65 + cloud * 0.35;
+    this.hemi.intensity = 0.55 + day * 0.5 + cloud * 0.45;
     // fog: visibility falls in snow and storms; indoors it pulls in a little
     const near = THREE.MathUtils.lerp(320, 25, c.fog);
     const far = THREE.MathUtils.lerp(1800, 230, c.fog);
