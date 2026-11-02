@@ -146,11 +146,16 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
       if (!mine.length) return;
       const trunks = new InstancedMesh(v.trunk, bark, mine.length);
       const crowns = new InstancedMesh(v.crown, foliage, mine.length);
+      const tint = new Color();
       mine.forEach((p, i) => {
         q.setFromAxisAngle(up, p.rot);
-        m.compose(new Vector3(p.x, p.y - 0.3, p.z), q, new Vector3(p.s, p.s, p.s));
+        // slight lean and squash variety so the forest isn't a field of clones
+        m.compose(new Vector3(p.x, p.y - 0.3, p.z), q, new Vector3(p.s * (0.85 + rng() * 0.3), p.s, p.s * (0.85 + rng() * 0.3)));
         trunks.setMatrixAt(i, m);
         crowns.setMatrixAt(i, m);
+        const v = 0.78 + rng() * 0.4;
+        tint.setRGB(v * (0.92 + rng() * 0.16), v, v * (0.9 + rng() * 0.12));
+        crowns.setColorAt(i, tint);
       });
       trunks.castShadow = crowns.castShadow = set.shadows;
       trunks.receiveShadow = crowns.receiveShadow = set.shadows;

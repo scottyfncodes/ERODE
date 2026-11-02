@@ -454,6 +454,6 @@ export const FIRST_DESCENT: LevelDef = {
       },
     ],
   },
-  camera: { target: [0, 18, -15], yaw: 0, pitch: 60 * deg, distance: 104 },
+  camera: { target: [0, 18, -19], yaw: 0, pitch: 60 * deg, distance: 104 },
   look: { sunAzimuth: 128 * deg, sunElevation: 34 * deg },
 };

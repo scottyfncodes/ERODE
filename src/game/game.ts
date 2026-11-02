@@ -145,7 +145,8 @@ export class Game {
     });
     // unlock audio on the first touch anywhere
     const unlock = () => this.audio.unlock();
-    window.addEventListener('pointerdown', unlock, { passive: true });
+    // iOS only treats some events as user activation; listen to all of them
+    for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) window.addEventListener(ev, unlock, { passive: true });
     window.addEventListener('keydown', (e) => this.key(e));
     window.addEventListener('resize', () => this.resize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 250));
@@ -374,6 +375,12 @@ export class Game {
       saveProgress(this.progress);
       this.ui.tip(null);
     }
+    // bring an object near the edge of the screen into view (the context card covers the bottom)
+    const a = this.objects.anchorOf(id);
+    if (a && !this.dragging) {
+      const v = a.clone().project(this.rig.camera);
+      if (Math.abs(v.x) > 0.5 || v.y < -0.15 || v.y > 0.6) this.cam.focusOn(a);
+    }
     this.renderContext();
   }
 
@@ -401,10 +408,15 @@ export class Game {
       case 'log': {
         const s = st as Extract<ObjectState, { type: 'log' }>;
         tag = 'Rotate · Drag';
-        let a = ((s.yaw / deg) % 180 + 180) % 180;
+        const a = Math.round((((s.yaw / deg) % 180) + 180) % 180);
         const desc =
-          Math.abs(a - 90) < 16 ? 'lies along the slope — the way is open' : a < 90 ? 'angled to steer the boulder right' : 'angled to steer the boulder left';
-        if (a > 90) a = 180 - a;
+          Math.abs(a - 90) < 16
+            ? 'it lies along the slope — the way is open'
+            : a < 16 || a > 164
+              ? 'it lies straight across — a barrier'
+              : a < 90
+                ? 'it is angled to steer the boulder right'
+                : 'it is angled to steer the boulder left';
         text = `${o.hint} Now ${desc}.`;
         acts.push({ key: 'rotL', label: '15°', icon: 'rotL', disabled: locked, repeat: true }, { key: 'rotR', label: '15°', icon: 'rotR', disabled: locked, repeat: true });
         if (modified) acts.push({ key: 'restore', label: 'Restore', icon: 'undo' });
@@ -897,6 +909,10 @@ export class Game {
     const x = 0;
     const z = 38.2;
     this.addMarker('The stream', new Vector3(x, this.data.heightAt(x, z) + 2.4, z), 'goal');
+    if (this.state === 'plan') {
+      const [bx, bz] = this.level.boulder.position;
+      this.addMarker('The boulder', new Vector3(bx, this.data.heightAt(bx, bz) + this.level.boulder.radius * 2 + 1.8, bz), 'goal stone');
+    }
   }
   private updateMarkers() {
     const c = this.rig.renderer.domElement;
@@ -1055,10 +1071,18 @@ export class Game {
 
   /** test hooks */
   debug() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const game = this;
     return {
-      state: this.state,
-      plan: this.plan,
-      result: this.result,
+      get state() {
+        return game.state;
+      },
+      get result() {
+        return game.result;
+      },
+      get plan() {
+        return game.plan;
+      },
       setPlan: (p: Plan) => {
         this.plan = sanitizePlan(this.level, p);
         this.objects.sync(this.plan, false);

@@ -177,7 +177,19 @@ export function createFoliageMaterial(): MeshStandardMaterial {
       `#include <color_fragment>
       float nf = eNoise3(vObjF * 3.5);
       diffuseColor.rgb *= 0.72 + 0.45 * nf;
+      // darker toward the trunk and the ground: the interior of a conifer is in shade
+      diffuseColor.rgb *= 0.7 + 0.3 * smoothstep(0.1, 0.9, vObjF.y);
       `,
+    );
+  };
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (shader, r) => {
+    prev(shader, r);
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      float rim = pow(1.0 - abs(dot(normalize(vViewPosition), normal)), 3.0);
+      totalEmissiveRadiance += vec3(0.16, 0.2, 0.1) * rim * 0.35;`,
     );
   };
   m.customProgramCacheKey = () => 'foliage';
