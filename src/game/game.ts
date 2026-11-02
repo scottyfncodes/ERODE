@@ -770,7 +770,8 @@ export class Game {
     this.releaseUntil = this.now + 1.4;
     this.ui.showRun(this.level.zones ?? [], this.sim.nudgesLeft);
     this.audio.release();
-    this.audio.startDrums();
+    this.audio.riser(1.2);
+    window.setTimeout(() => this.audio.startDrums(), 1200);
     this.hadFirstRelease = true;
     this.lastStage = 0;
   }
@@ -1114,6 +1115,7 @@ export class Game {
     this.result = r;
     this.recording = sim.recording;
     this.audio.stopDrums();
+    this.audio.finish(r.sand ? 2 : r.landed ? 1 : 0);
     const lp = levelProgress(this.progress, this.level.id);
     const isBest = r.score > (lp.bestScore ?? 0);
     if (isBest) {
@@ -1366,7 +1368,15 @@ export class Game {
       const d = p.distanceTo(this.rig.camera.position);
       waterNear = Math.max(waterNear, clamp(1 - (d - 8) / 60, 0, 1));
     }
-    this.audio.update(dt, { waterNear, rolling: this.rolling, gravel: this.gravel, wind: 1 });
+    const hero = this.sim?.hero;
+    const hv = hero?.body.linvel();
+    const speed = hv && this.state === 'sim' ? Math.hypot(hv.x, hv.y, hv.z) : 0;
+    const heroSize = hero?.size ?? this.level.boulder.radius;
+    this.audio.weight = Math.min(1, Math.sqrt(heroSize / this.level.boulder.radius));
+    // the waterfall: loud when the camera is near the drop
+    const fz = this.level.zones?.find((q) => q.id === 'falls')?.z[0] ?? -1e9;
+    const fallsNear = clamp(1 - (Math.hypot(this.rig.camera.position.x, this.rig.camera.position.z - (fz + 10)) - 10) / 70, 0, 1);
+    this.audio.update(dt, { waterNear, rolling: this.rolling, gravel: this.gravel, wind: 1, speed, size: heroSize, falls: fallsNear, sand: hero?.contactSurface === 'sand' });
 
     this.rig.renderer.render(this.rig.scene, this.rig.camera);
     if (!document.hidden && !this.automation) this.rig.adapt(dt);

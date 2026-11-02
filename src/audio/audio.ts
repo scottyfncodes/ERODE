@@ -15,6 +15,9 @@ export class AudioEngine {
   private rollGain!: GainNode;
   private rollFilter!: BiquadFilterNode;
   private gravelGain!: GainNode;
+  private gravelFilter!: BiquadFilterNode;
+  /** how heavy the stone is right now (0 pebble … 1 boulder): adds low end to impacts */
+  weight = 1;
   private soundOn = true;
   private musicOn = true;
   private birdTimer = 3;
@@ -93,6 +96,7 @@ export class AudioEngine {
     roll.connect(this.rollFilter).connect(this.rollGain).connect(this.sfx);
     const gravel = this.loopNoise();
     const gf = ctx.createBiquadFilter();
+    this.gravelFilter = gf;
     gf.type = 'bandpass';
     gf.frequency.value = 2400;
     gf.Q.value = 0.8;
@@ -274,7 +278,7 @@ export class AudioEngine {
         this.thump(110, 0.3 * i, 0.2, pan);
         break;
       default:
-        this.thump(55 + Math.random() * 15, 1.2 * i, 0.45 + i * 0.4, pan);
+        this.thump(40 + (1 - this.weight) * 70 + Math.random() * 12, (0.5 + this.weight * 0.9) * i, 0.3 + this.weight * 0.6 + i * 0.3, pan);
         this.burst({ dur: 0.18, gain: 0.35 * i, type: 'lowpass', freq: 900 + i * 600, pan });
         this.burst({ dur: 0.05, gain: 0.25 * i * i, type: 'bandpass', freq: 2800, q: 1.2, pan });
         for (let k = 0; k < 3 + i * 6; k++)
@@ -375,6 +379,42 @@ export class AudioEngine {
     if (!this.ctx || !this.soundOn) return;
     this.grind();
     this.thump(45, 0.8, 1.2, 0, 0.1);
+  }
+
+  /** a rising swell into the release */
+  riser(seconds = 1.2) {
+    if (!this.ctx || !this.soundOn) return;
+    this.burst({ dur: seconds, gain: 0.25, type: 'bandpass', freq: 200, freqEnd: 3200, q: 1.5 });
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(55, t);
+    o.frequency.exponentialRampToValueAtTime(220, t + seconds);
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(200, t);
+    f.frequency.exponentialRampToValueAtTime(1800, t + seconds);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.08, t + seconds * 0.9);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.05);
+    o.connect(f).connect(g).connect(this.music);
+    o.start(t);
+    o.stop(t + seconds + 0.1);
+  }
+
+  /** the payoff at the end of a run; grander for a beach arrival, grandest for sand */
+  finish(level: 0 | 1 | 2) {
+    if (!this.ctx || !this.soundOn) return;
+    const root = level === 2 ? 392 : level === 1 ? 330 : 262;
+    const chord = level === 0 ? [1, 1.19, 1.5] : [1, 1.26, 1.5, 2];
+    chord.forEach((m, i) => this.blip(root * m, i * 0.09, 1.2 - i * 0.1, 0.07, 'triangle'));
+    if (level > 0) {
+      chord.forEach((m, i) => this.blip(root * m * 2, 0.5 + i * 0.07, 1.4, 0.05, 'sine'));
+      this.burst({ dur: 1.6, gain: 0.12, type: 'highpass', freq: 6000, delay: 0.45 });
+    }
+    if (level === 2) [2, 2.52, 3, 4].forEach((m, i) => this.blip(root * m, 1.0 + i * 0.12, 1.8, 0.05, 'sine'));
   }
 
   // ------------------------------------------------------------ arcade layer
@@ -533,15 +573,26 @@ export class AudioEngine {
   }
 
   /** Continuous state, called every frame. */
-  update(dt: number, s: { waterNear: number; rolling: number; gravel: number; wind: number }) {
+  update(
+    dt: number,
+    s: { waterNear: number; rolling: number; gravel: number; wind: number; speed?: number; size?: number; falls?: number; sand?: boolean },
+  ) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.windGain.gain.setTargetAtTime(0.06 + 0.08 * s.wind * (0.6 + 0.4 * Math.sin(t * 0.21) * Math.sin(t * 0.13)), t, 0.5);
-    this.windFilter.frequency.setTargetAtTime(280 + 220 * (0.5 + 0.5 * Math.sin(t * 0.17)), t, 0.8);
-    this.waterGain.gain.setTargetAtTime(Math.min(0.32, s.waterNear * 0.32), t, 0.3);
-    this.rollGain.gain.setTargetAtTime(Math.min(0.9, s.rolling * 0.9), t, 0.06);
-    this.rollFilter.frequency.setTargetAtTime(120 + s.rolling * 260, t, 0.1);
-    this.gravelGain.gain.setTargetAtTime(Math.min(0.25, s.gravel * 0.25) * (0.6 + Math.random() * 0.4), t, 0.03);
+    const speed = s.speed ?? 0;
+    // the size of the stone sets the pitch of its voice: a boulder rumbles, a pebble rattles
+    const big = Math.min(1, Math.sqrt(Math.max(0, s.size ?? 1) / 2));
+    // wind rushes harder and brighter with speed
+    const rush = Math.min(1, speed / 30);
+    this.windGain.gain.setTargetAtTime(0.05 + 0.07 * s.wind * (0.6 + 0.4 * Math.sin(t * 0.21) * Math.sin(t * 0.13)) + rush * 0.22, t, 0.25);
+    this.windFilter.frequency.setTargetAtTime(260 + 200 * (0.5 + 0.5 * Math.sin(t * 0.17)) + rush * 1400, t, 0.3);
+    // rivers hiss, the falls roar
+    const falls = s.falls ?? 0;
+    this.waterGain.gain.setTargetAtTime(Math.min(0.55, s.waterNear * 0.3 + falls * 0.4), t, 0.3);
+    this.rollGain.gain.setTargetAtTime(Math.min(0.95, s.rolling * (0.5 + big * 0.5)), t, 0.06);
+    this.rollFilter.frequency.setTargetAtTime(70 + (1 - big) * 700 + s.rolling * 120, t, 0.1);
+    this.gravelFilter.frequency.setTargetAtTime(s.sand ? 1100 : 2400, t, 0.2);
+    this.gravelGain.gain.setTargetAtTime(Math.min(0.3, s.gravel * (s.sand ? 0.2 : 0.3)) * (0.6 + Math.random() * 0.4), t, 0.03);
     this.birdTimer -= dt;
     if (this.birdTimer <= 0 && this.soundOn) {
       this.bird();
