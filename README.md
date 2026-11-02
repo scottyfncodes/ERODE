@@ -47,7 +47,7 @@ score breakdown (distance, rock-hit combos, trees, air, size-class bonuses, the 
 - **Icons and share card:** `public/icons/icon.svg` and `public/favicon.svg` are the sources;
   `node scripts/brand-assets.mjs` re-renders the PNG icons and `public/og-image.png`.
 
-The repository and deployment keep their original `erode` names; saved progress still lives under the
+Play at https://rockslide-game.vercel.app (the original erode-orpin.vercel.app address still works). The repository and Vercel project keep their original `erode` names; saved progress still lives under the
 `erode.progress.v2` storage key so existing players keep their records.
 
 ## Develop
