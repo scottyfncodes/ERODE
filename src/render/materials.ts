@@ -22,16 +22,36 @@ function inject(shader: WebGLProgramParametersWithUniforms, vertexDecl: string, 
 }
 
 /** Granite. Pattern lives in the original boulder's material space, so fragments match. */
-export function createRockMaterial(opts: { tint?: Color; scale?: number } = {}): MeshStandardMaterial {
+export interface RockUniforms {
+  uSmooth: IUniform<number>;
+  uRadius: IUniform<number>;
+}
+
+/**
+ * Granite. Pattern lives in the original boulder's material space, so fragments match.
+ * `uSmooth` (0..1) wears it into a rounded, polished river pebble.
+ */
+export function createRockMaterial(opts: { tint?: Color; scale?: number; uniforms?: RockUniforms } = {}): MeshStandardMaterial {
   const m = new MeshStandardMaterial({ color: opts.tint ?? new Color(1, 1, 1), roughness: 0.9, metalness: 0 });
   const scale = (opts.scale ?? 1).toFixed(3);
+  const u = opts.uniforms ?? { uSmooth: { value: 0 }, uRadius: { value: 1 } };
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uWet = { value: 0 };
+    shader.uniforms.uSmooth = u.uSmooth;
+    shader.uniforms.uRadius = u.uRadius;
     inject(
       shader,
-      'attribute vec3 rockPos; attribute float fresh; varying vec3 vRockPos; varying float vFresh;',
-      'vRockPos = rockPos; vFresh = fresh;',
-      'varying vec3 vRockPos; varying float vFresh;',
+      'attribute vec3 rockPos; attribute float fresh; varying vec3 vRockPos; varying float vFresh; uniform float uSmooth; uniform float uRadius; varying float vSmooth;',
+      `vRockPos = rockPos; vFresh = fresh; vSmooth = uSmooth;
+      // wear: pull every point toward a rounded pebble of the same size
+      float sm = uSmooth * 0.8;
+      vec3 round = normalize(position) * uRadius * vec3(1.08, 0.82, 1.0);
+      transformed = mix(transformed, round, sm);`,
+      'varying vec3 vRockPos; varying float vFresh; varying float vSmooth;',
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <beginnormal_vertex>',
+      `#include <beginnormal_vertex>
+      objectNormal = normalize(mix(objectNormal, normalize(position * vec3(0.93, 1.22, 1.0)), uSmooth * 0.8));`,
     );
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -52,20 +72,24 @@ export function createRockMaterial(opts: { tint?: Color; scale?: number } = {}):
         weathered = mix(weathered, vec3(0.72, 0.46, 0.20), smoothstep(0.72, 0.86, eFbm3(rp * 3.0 + 9.0)) * 0.55);
         weathered *= 0.85 + 0.3 * eFbm3(rp * 0.4 + 11.0);
         vec3 freshCol = base * vec3(1.12, 1.08, 1.05);
-        diffuseColor.rgb *= mix(weathered, freshCol, vFresh);
+        vec3 rockCol = mix(weathered, freshCol, vFresh);
+        // polished pebble: lichen gone, even tone, faint banding
+        vec3 polished = mix(vec3(0.52, 0.5, 0.47), vec3(0.66, 0.6, 0.55), n1) * (0.92 + 0.08 * sin(rp.y * 9.0 + n2 * 3.0));
+        polished = mix(polished, base * 1.05, 0.35);
+        diffuseColor.rgb *= mix(rockCol, polished, smoothstep(0.15, 0.9, vSmooth));
         `,
       )
       .replace(
         '#include <normal_fragment_maps>',
         `#include <normal_fragment_maps>
         float hb = eFbm3(vRockPos * ${scale} * 1.6) * 0.8 + eNoise3(vRockPos * ${scale} * 7.0) * 0.08;
-        normal = ePerturbNormal(-vViewPosition, normal, hb, mix(0.55, 0.25, vFresh));
+        normal = ePerturbNormal(-vViewPosition, normal, hb, mix(0.55, 0.25, vFresh) * (1.0 - vSmooth * 0.9));
         `,
       )
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        roughnessFactor = mix(0.95, 0.72, vFresh) - n3 * 0.08;
+        roughnessFactor = mix(mix(0.95, 0.72, vFresh) - n3 * 0.08, 0.42, vSmooth);
         `,
       );
   };

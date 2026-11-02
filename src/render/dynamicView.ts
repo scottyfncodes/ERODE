@@ -17,24 +17,25 @@ import {
 } from 'three';
 import type { PieceShape } from '../sim/fracture';
 import { pieceGeometry } from './pieceGeometry';
-import { createRockMaterial } from './materials';
+import { createRockMaterial, type RockUniforms } from './materials';
 import { mulberry32 } from '../sim/noise';
 
 export interface PieceState {
   id: number;
   shape: PieceShape;
-  kind: 'stone' | 'loose';
+  kind: 'stone' | 'loose' | 'chip';
   pos: [number, number, number];
   quat: [number, number, number, number];
   scale: number;
+  /** 0 jagged … 1 polished */
+  smooth?: number;
 }
 
 /** Renders the boulder, its fragments and loose stones. */
 export class PiecesView {
   readonly group = new Group();
-  private meshes = new Map<number, Mesh>();
+  private meshes = new Map<number, { mesh: Mesh; u: RockUniforms }>();
   private geoCache = new WeakMap<PieceShape, BG>();
-  private mat: MeshStandardMaterial = createRockMaterial();
 
   private geo(shape: PieceShape): BG {
     let g = this.geoCache.get(shape);
@@ -49,24 +50,32 @@ export class PiecesView {
     const seen = new Set<number>();
     for (const s of states) {
       seen.add(s.id);
-      let m = this.meshes.get(s.id);
-      if (!m) {
-        m = new Mesh(this.geo(s.shape), this.mat);
-        m.castShadow = true;
-        m.receiveShadow = true;
-        this.meshes.set(s.id, m);
-        this.group.add(m);
+      let e = this.meshes.get(s.id);
+      if (!e) {
+        // each stone gets its own uniforms (wear), sharing one shader program
+        const u: RockUniforms = { uSmooth: { value: 0 }, uRadius: { value: s.shape.radius } };
+        const mesh = new Mesh(this.geo(s.shape), createRockMaterial({ uniforms: u }));
+        mesh.castShadow = s.kind !== 'chip';
+        mesh.receiveShadow = true;
+        e = { mesh, u };
+        this.meshes.set(s.id, e);
+        this.group.add(mesh);
       }
+      const m = e.mesh;
       m.visible = true;
       m.position.set(s.pos[0], s.pos[1], s.pos[2]);
       m.quaternion.set(s.quat[0], s.quat[1], s.quat[2], s.quat[3]);
       m.scale.setScalar(s.scale);
+      e.u.uSmooth.value = s.smooth ?? 0;
     }
-    for (const [id, m] of this.meshes) if (!seen.has(id)) m.visible = false;
+    for (const [id, e] of this.meshes) if (!seen.has(id)) e.mesh.visible = false;
   }
 
   clear() {
-    for (const m of this.meshes.values()) this.group.remove(m);
+    for (const e of this.meshes.values()) {
+      this.group.remove(e.mesh);
+      (e.mesh.material as MeshStandardMaterial).dispose();
+    }
     this.meshes.clear();
   }
 }
@@ -190,7 +199,7 @@ export class Effects {
         size: 1.1 + this.rng() * 1.4 + strength,
         grow: 1.6,
         color: tint.clone().multiplyScalar(0.85 + this.rng() * 0.3),
-        alpha: 0.35 + strength * 0.25,
+        alpha: 0.22 + strength * 0.18,
         drag: 1.8,
         gravity: -0.15,
       });

@@ -2,7 +2,7 @@ import { Color, Raycaster, Vector2, Vector3, type Object3D } from 'three';
 import type RAPIER_T from '@dimforge/rapier3d-deterministic-compat';
 import type { LevelDef, LevelObject, ObjectState, Plan } from '../levels/types';
 import { loadLevelData, type LevelData } from '../sim/levelData';
-import { Simulation, RECORD_EVERY, DT, STAGES, stageOf, restingBoulder, type SimEvent, type SimResult, type Recording, type Track } from '../sim/simulation';
+import { Simulation, RECORD_EVERY, FRAME, DT, STAGES, stageOf, restingBoulder, type SimEvent, type SimResult, type Recording, type Track } from '../sim/simulation';
 import { activeWater, clonePlan, countInterventions, defaultPlan, defaultState, isModified, sanitizePlan } from '../sim/plan';
 import { createSceneRig, detectQuality, type SceneRig } from '../render/scene';
 import { buildTerrain } from '../render/terrainView';
@@ -16,7 +16,7 @@ import { attachGestures } from './input';
 import { loadProgress, saveProgress, levelProgress, type Progress } from './progress';
 import { AudioEngine } from '../audio/audio';
 import { UI, sizeLabel, type ContextAction } from '../ui/ui';
-import { clamp } from '../sim/geom';
+import { clamp, makePolyline, pathDistance } from '../sim/geom';
 
 type State = 'title' | 'plan' | 'sim' | 'results' | 'replay';
 const deg = Math.PI / 180;
@@ -115,7 +115,7 @@ export class Game {
       action: (k) => this.doAction(k),
       closeContext: () => this.select(null),
       replay: () => this.startReplay(),
-      adjust: () => this.toPlanning(),
+      adjust: () => this.startRun(),
       pause: () => this.togglePause(),
       skip: () => this.toggleFast(),
       scrub: (f) => this.scrub(f),
@@ -132,18 +132,29 @@ export class Game {
       },
       zone: (id) => this.goZone(id),
       nudge: (d) => this.nudge(d),
+      steer: (d) => (this.steerButtons = d),
     });
-    // during a run: swipe left/right anywhere to nudge
-    let sw: { x: number; y: number; t: number } | null = null;
+    // during a run: drag anywhere — left/right of where you touched — to steer
+    let drag: { id: number; x: number } | null = null;
     canvas.addEventListener('pointerdown', (e) => {
-      if (this.state === 'sim') sw = { x: e.clientX, y: e.clientY, t: performance.now() };
+      if (this.state === 'sim') drag = { id: e.pointerId, x: e.clientX };
     });
-    canvas.addEventListener('pointerup', (e) => {
-      if (this.state !== 'sim' || !sw) return;
-      const dx = e.clientX - sw.x,
-        dy = e.clientY - sw.y;
-      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3 && performance.now() - sw.t < 600) this.nudge(Math.sign(dx));
-      sw = null;
+    canvas.addEventListener('pointermove', (e) => {
+      if (this.state !== 'sim' || !drag || drag.id !== e.pointerId) return;
+      const w = Math.max(320, canvas.clientWidth);
+      this.steerTouch = clamp((e.clientX - drag.x) / (w * 0.14), -1, 1);
+    });
+    const endDrag = (e: PointerEvent) => {
+      if (drag && drag.id === e.pointerId) {
+        drag = null;
+        this.steerTouch = 0;
+      }
+    };
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'a') this.steerKeys.left = false;
+      if (e.key === 'ArrowRight' || e.key === 'd') this.steerKeys.right = false;
     });
 
     attachGestures(canvas, {
@@ -192,6 +203,7 @@ export class Game {
   // ------------------------------------------------------------------ helpers
   private resize() {
     this.rig.resize();
+    this.cam.baseFov = this.rig.camera.fov;
     this.effects.setViewportHeight(this.rig.renderer.domElement.clientHeight * Math.min(2, window.devicePixelRatio || 1));
   }
 
@@ -205,7 +217,7 @@ export class Game {
     const out: PieceState[] = [];
     for (const p of s.pieces.values()) {
       const pose = s.pose(p);
-      out.push({ id: p.id, shape: p.shape, kind: p.kind, pos: pose.pos, quat: pose.quat, scale: pose.scale });
+      out.push({ id: p.id, shape: p.shape, kind: p.kind, pos: pose.pos, quat: pose.quat, scale: pose.scale, smooth: pose.smooth });
     }
     return out;
   }
@@ -284,7 +296,7 @@ export class Game {
     this.audio.unlock();
     this.audio.click();
     this.ui.hideTitle();
-    this.toPlanning();
+    this.startRun();
   }
 
   private toTitle() {
@@ -674,13 +686,14 @@ export class Game {
       else if (this.selected) this.select(null);
       else this.openMenu();
     }
-    if (this.state === 'plan' && (e.key === ' ' || e.key === 'Enter') && !this.menuOpen) {
+    if ((this.state === 'results' || this.state === 'title') && e.key === 'Enter' && !this.menuOpen) {
       e.preventDefault();
-      this.release();
+      if (this.state === 'title') this.begin();
+      else this.startRun();
     }
     if (this.state === 'sim' && e.key === ' ') this.togglePause();
-    if (this.state === 'sim' && (e.key === 'ArrowLeft' || e.key === 'a')) this.nudge(-1);
-    if (this.state === 'sim' && (e.key === 'ArrowRight' || e.key === 'd')) this.nudge(1);
+    if (e.key === 'ArrowLeft' || e.key === 'a') this.steerKeys.left = true;
+    if (e.key === 'ArrowRight' || e.key === 'd') this.steerKeys.right = true;
     if (this.state === 'plan' && this.selected && this.obj(this.selected).type === 'log') {
       if (e.key === 'q' || e.key === 'ArrowLeft') this.doAction('rotL');
       if (e.key === 'e' || e.key === 'ArrowRight') this.doAction('rotR');
@@ -690,7 +703,18 @@ export class Game {
   // ------------------------------------------------------------------ the run
   private release() {
     if (this.state !== 'plan') return;
+    this.startRun();
+  }
+
+  /** Straight into a run: the boulder breaks off the summit and you steer. */
+  private startRun() {
     this.audio.unlock();
+    this.ui.hideResults();
+    this.ui.hideReplay();
+    this.trails.clear();
+    this.steerKeys = { left: false, right: false };
+    this.steerTouch = 0;
+    this.steerButtons = 0;
     this.select(null);
     this.ui.tip(null);
     this.ui.hidePlanning();
@@ -703,7 +727,7 @@ export class Game {
     } catch (err) {
       console.error(err);
       this.ui.tip('The mountain could not be prepared. Try again.', 3000);
-      this.toPlanning();
+      this.toTitle();
       return;
     }
     const lp = levelProgress(this.progress, this.level.id);
@@ -755,6 +779,11 @@ export class Game {
     else if (this.now < this.slowUntil && !this.fast) scale = 0.3;
     this.timeScale += (scale - this.timeScale) * Math.min(1, dt * 12);
     this.acc += dt * this.timeScale;
+    // live steering: keys, the hold buttons, or a drag anywhere on screen
+    const keys = (this.steerKeys.right ? 1 : 0) - (this.steerKeys.left ? 1 : 0);
+    const want = clamp(keys + this.steerButtons + this.steerTouch, -1, 1);
+    this.steerSmoothed += (want - this.steerSmoothed) * Math.min(1, dt * 14);
+    sim.steer = this.steerSmoothed;
     let steps = 0;
     const maxSteps = this.fast ? 16 : 6;
     try {
@@ -804,6 +833,10 @@ export class Game {
   }
   private lastStage = 0;
   private hitStopUntil = 0;
+  private steerKeys = { left: false, right: false };
+  private steerTouch = 0;
+  private steerButtons = 0;
+  private steerSmoothed = 0;
 
   private fallsMist() {
     const falls = this.level.zones?.find((z) => z.id === 'falls');
@@ -826,7 +859,12 @@ export class Game {
       if (d < 26) spread = Math.max(spread, d);
     }
     const r = lead.shape.radius * lead.scale;
-    this.followInfo = { focus, vel, spread: Math.min(18, spread) + Math.max(0, (r - 1) * 3), small: r < 0.3 };
+    let courseYaw: number | undefined;
+    if (this.coursePl) {
+      const h = pathDistance(this.coursePl, focus.x, focus.z);
+      courseYaw = Math.atan2(h.tx, h.tz);
+    }
+    this.followInfo = { focus, vel, spread: Math.min(18, spread), small: r < 0.3, size: r, courseYaw };
     let rolling = 0;
     let gravel = 0;
     for (const s of states) {
@@ -840,7 +878,12 @@ export class Game {
     this.rolling = Math.min(1, rolling);
     this.gravel = Math.min(1, gravel);
   }
-  private followInfo: { focus: Vector3; vel: Vector3; spread: number; small?: boolean } | undefined;
+  private followInfo: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number } | undefined;
+  private coursePlCache: ReturnType<typeof makePolyline> | null | undefined;
+  private get coursePl() {
+    if (this.coursePlCache === undefined) this.coursePlCache = this.level.terrain.course ? makePolyline(this.level.terrain.course) : null;
+    return this.coursePlCache;
+  }
   private rolling = 0;
   private gravel = 0;
 
@@ -864,7 +907,8 @@ export class Game {
     switch (e.type) {
       case 'breakoff':
         this.audio.fracture(1, 0);
-        this.effects.dust(pos.clone().add(new Vector3(0, 1, -2)), 1.2);
+        // the crack: grit and a little dust thrown downhill, away from the camera
+        this.effects.dust(pos.clone().add(new Vector3(0, -0.5, 4)), 0.35);
         this.effects.grit(pos, 1);
         this.cam.shake(1);
         this.ui.doFlash(0.6);
@@ -873,7 +917,7 @@ export class Game {
         break;
       case 'fracture': {
         this.audio.fracture(e.intensity * att + 0.3, pan);
-        this.effects.dust(pos, 0.9 + e.intensity);
+        this.effects.dust(pos, 0.6 + e.intensity * 0.6);
         this.effects.grit(pos, 1 + e.intensity);
         this.effects.grit(pos, 0.8);
         this.cam.shake(0.7 + e.intensity * 0.8);
@@ -896,12 +940,18 @@ export class Game {
         break;
       case 'impact':
         this.audio.impact(Math.min(1, e.intensity * 1.3) * att, e.material === 'terrain' ? 'granite' : (e.material as 'granite'), pan);
-        if (e.intensity > 0.2) this.effects.dust(pos, e.intensity * 0.7, e.material === 'wood' ? new Color(0.5, 0.42, 0.32) : undefined);
+        if (e.intensity > 0.3) this.effects.dust(pos, e.intensity * 0.45, e.material === 'wood' ? new Color(0.5, 0.42, 0.32) : undefined);
         if (e.intensity > 0.35) this.cam.shake(e.intensity * 0.5);
         break;
       case 'chip':
-        this.audio.impact(0.5 * att, 'granite', pan);
-        this.effects.grit(pos, 0.35);
+        this.audio.fracture(Math.min(1, e.intensity) * att * 0.8 + 0.15, pan);
+        this.effects.grit(pos, 0.5 + e.intensity * 0.6);
+        this.effects.dust(pos, 0.25 + e.intensity * 0.3);
+        this.cam.shake(0.25 + e.intensity * 0.4);
+        if (fx) {
+          this.ui.doFlash(0.2 + e.intensity * 0.3);
+          if (live && e.intensity > 0.6) this.hitStopUntil = this.now + 0.07;
+        }
         break;
       case 'splash':
         this.audio.splash(e.intensity * att + 0.2, pan);
@@ -1225,7 +1275,7 @@ function round2(v: number) {
 }
 
 function sampleTrack(t: Track, f: number, frames: number): PieceState | null {
-  const n = t.data.length / 8;
+  const n = t.data.length / FRAME;
   if (n === 0) return null;
   const end = t.endFrame ?? frames - 1;
   if (f < t.startFrame || f > end + 0.001) {
@@ -1236,8 +1286,8 @@ function sampleTrack(t: Track, f: number, frames: number): PieceState | null {
   const i = Math.floor(local);
   const j = Math.min(n - 1, i + 1);
   const u = local - i;
-  const a = i * 8,
-    b = j * 8;
+  const a = i * FRAME,
+    b = j * FRAME;
   const d = t.data;
   const lerp = (k: number) => d[a + k] + (d[b + k] - d[a + k]) * u;
   // quaternion nlerp with sign fix
@@ -1263,39 +1313,26 @@ function sampleTrack(t: Track, f: number, frames: number): PieceState | null {
     pos: [lerp(0), lerp(1), lerp(2)],
     quat: [rx / l, ry / l, rz / l, rw / l],
     scale: lerp(7),
+    smooth: lerp(8),
   };
 }
 
 /** What happened, and what to try next — in arcade terms. */
-export function explainRun(r: SimResult, level: LevelDef, plan: Plan): string {
-  if (r.unstable) return 'The physics hiccuped. Nothing you did — run it again.';
+export function explainRun(r: SimResult, level: LevelDef, _plan: Plan): string {
+  if (r.unstable) return 'The physics hiccuped. Nothing you did — go again.';
   const stage = STAGES[r.stage].name.toLowerCase();
-  if (r.sand) return `A grain of sand on the beach after ${Math.round(r.distance)} m and ${r.smashes} smashes. The mountain is complete.`;
-  const tips: string[] = [];
-  const blocked = (id: string) => {
-    const o = level.objects.find((x) => x.id === id);
-    if (!o) return false;
-    const st = plan[id] ?? defaultState(o);
-    return (st.type === 'branches' && !st.removed) || (st.type === 'soil' && !st.dug) || (st.type === 'gate' && o.type === 'gate' && st.option === o.initial);
-  };
-  const smashersIdle = level.objects.filter((o) => o.type === 'outcrop' && o.hardness && !(plan[o.id] as { split?: boolean } | undefined)?.split).length;
+  if (r.sand) return `A grain of sand on the beach after ${Math.round(r.distance)} m and ${r.smashes + r.chips} hits. The mountain is complete.`;
   let lead: string;
   if (r.landed) lead = `It hit the beach as ${/^[aeiou]/.test(stage) ? 'an' : 'a'} ${stage} — ${sizeLabel(r.size)} across.`;
   else lead = `It ran ${Math.round(r.distance)} m and stopped at ${r.destination}, ${sizeLabel(r.size)} across.`;
+  const tips: string[] = [];
   if (!r.landed) {
-    const near: [string, string][] = [
-      ['logjam', 'The log jam stopped it — blast it clear.'],
-      ['debris', 'The debris dam above the falls caught it.'],
-      ['beaver', 'The beaver dam held it in the rapids.'],
-      ['sandbar', 'The sandbar choked the sea channel.'],
-      ['weir', 'The weir sent the river into the dead-end marsh — switch the water right.'],
-    ];
-    for (const [id, msg] of near) if (blocked(id)) {
-      tips.push(msg);
-      break;
-    }
+    const z = r.trajectory[r.trajectory.length - 1]?.[2] ?? 0;
+    const near = level.objects.find((o) => o.type === 'branches' && Math.abs(o.position[1] - z) < 18);
+    if (near && near.type === 'branches') tips.push(`${near.name} — ${near.hint.split('. ').slice(-1)[0]}`);
+    else if (r.destination === 'the marsh') tips.push('The left channel dies in the marsh. Steer right at the delta.');
+    else tips.push('Keep it on the line — drag left and right to steer.');
   }
-  if (r.stage < STAGES.length - 1 && smashersIdle) tips.push(`${smashersIdle} smasher${smashersIdle > 1 ? 's are' : ' is'} still on the sidelines — drop them in the line to grind it smaller.`);
-  else if (r.stage < STAGES.length - 1) tips.push('Use your nudges to steer it into the hard rocks.');
+  if (r.stage < STAGES.length - 1) tips.push('Aim straight at the granite teeth and crusher rocks to knock more off, and ride the water to wear it smooth.');
   return [lead, ...tips].join(' ');
 }

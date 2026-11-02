@@ -7,16 +7,19 @@ How far can it travel — and how small can you grind it — before it lands on 
 
 ## The Long Fall
 
-One 1.1 km course: the summit, the Face, the Scree Field, the Forest, a 25 m waterfall, the Rapids, the Delta, the Beach.
+You steer. A granite boulder snaps off the summit and goes over the edge; drag left/right (or hold the arrow
+buttons, or use ←/→ / A/D) to steer it down 1.1 km of mountain: the Face, the Scree Field, the Forest,
+a 25 m waterfall, the Rapids, the Delta and the Beach.
 
-- **Blockers** (red) stop the run: a log jam, a debris dam above the falls, a beaver dam, a sandbar, and a weir that
-  sends the river into a dead-end marsh. Clear them to get further.
-- **Smashers** (orange) make it smaller: granite teeth you drop into the line on the face, crusher rocks you roll into the rapids.
-- You have **8 moves**. Every blocker you clear is a move you can't spend on a smasher.
-- During the run, swipe (or tap the arrows / press ←→) for **3 nudges** to steer into the rocks.
+- **Crash it into the rock** — granite teeth, scree blocks, crusher rocks. Every hard hit knocks real chips off
+  and the stone shrinks; brutal hits split it, and the camera stays with the **largest piece**.
+- **Ride the water and the sand** — they wear the stone down and polish it from jagged granite to a smooth pebble.
+- **Smaller is faster.** The camera pulls in as it shrinks and the lens widens with speed.
+- **Steer through the gaps** in the log jam, the debris dam and the beaver dam, and take the right-hand channel
+  at the delta — the left one dies in a marsh.
 
-Scoring: distance, smash points with combos, big-air bonuses, a bonus for each new size class, a beach bonus,
-then a size multiplier. Grind it to sand on the beach for **PERFECT EROSION** and an S.
+Score: distance, hit combos, big air, a bonus for each new size class, the beach, then a size multiplier.
+Grind it to sand on the beach for **PERFECT EROSION** and an S.
 
 ## How it works
 

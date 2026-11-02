@@ -1,28 +1,29 @@
 import type RAPIER_T from '@dimforge/rapier3d-deterministic-compat';
 import { Quaternion, Vector3 } from 'three';
 import type { LevelDef, Plan } from '../levels/types';
-import { fracturePiece, generateBoulder, type PieceShape } from './fracture';
+import { fracturePiece, generateBoulder, generateStone, type PieceShape } from './fracture';
 import { bedAt, loadLevelData, type LevelData, type WaterBody } from './levelData';
 import { hashInts, mulberry32 } from './noise';
 import { resolveObjects, type ColliderPart, type Material, type ResolvedObject } from './objects';
 import { activeWater, countInterventions } from './plan';
-import { pathDistance } from './geom';
+import { makePolyline, pathDistance, type Polyline, type PathHit } from './geom';
 import { SURFACE_HARDNESS } from './terrain';
 
 type R = typeof RAPIER_T;
 
 export const DT = 1 / 60;
-export const RECORD_EVERY = 3; // record at 20 Hz
+export const RECORD_EVERY = 3; // 20 Hz
+/** floats per recorded frame: px py pz qx qy qz qw scale smooth */
+export const FRAME = 9;
 export const MAX_STONES = 34;
-export const DENSITY = 2.7; // tonnes / m^3 — granite
+export const DENSITY = 2.7;
 const GRAVITY = 9.81;
-/** stones are never simulated smaller than this; below it, size is tracked (and drawn) virtually */
-export const MIN_PHYSICAL_RADIUS = 0.24;
+/** below this, the collider stops shrinking; the stone keeps shrinking visually */
+export const MIN_PHYSICAL_RADIUS = 0.16;
 const MAX_TIME = 240;
-/** arcade grip: stone skids down anything steeper than ~17° rather than parking on it */
 const STONE_FRICTION = 0.26;
 
-/** The journey: Boulder → Fragment → Rock → Pebble → Gravel → Sand (thresholds are radius in metres). */
+/** Boulder → Fragment → Rock → Pebble → Gravel → Sand (radius thresholds, m). */
 export const STAGES = [
   { name: 'Boulder', min: 0.9, mult: 1 },
   { name: 'Fragment', min: 0.45, mult: 1.5 },
@@ -37,7 +38,7 @@ export function stageOf(size: number): number {
   return STAGES.length - 1;
 }
 
-export type PieceKind = 'stone' | 'loose';
+export type PieceKind = 'stone' | 'loose' | 'chip';
 
 export interface Piece {
   id: number;
@@ -45,8 +46,12 @@ export interface Piece {
   shape: PieceShape;
   body: RAPIER_T.RigidBody;
   collider: RAPIER_T.Collider;
-  /** true size of the stone (radius, m); smaller than the shape once it is ground below physics scale */
+  /** true size (radius, m) */
   size: number;
+  /** collider scale relative to shape */
+  physScale: number;
+  /** 0 = fresh jagged granite, 1 = water-polished pebble */
+  smooth: number;
   generation: number;
   parent: number | null;
   bornStep: number;
@@ -55,13 +60,12 @@ export interface Piece {
   submerged: boolean;
   lastImpactStep: number;
   lastContactStep: number;
+  contactSurface: string | null;
   impactAcc: Vector3;
-  /** stuck counter (steps) */
-  still: number;
   grinding: number;
 }
 
-export type SimEventType = 'fracture' | 'crack' | 'impact' | 'splash' | 'chip' | 'slump' | 'score' | 'stage' | 'air' | 'breakoff' | 'nudge';
+export type SimEventType = 'fracture' | 'chip' | 'crack' | 'impact' | 'splash' | 'slump' | 'score' | 'stage' | 'air' | 'breakoff' | 'nudge';
 
 export interface SimEvent {
   step: number;
@@ -91,7 +95,6 @@ export interface Track {
   kind: PieceKind;
   shape: PieceShape;
   startFrame: number;
-  /** frames × 8 floats: px py pz qx qy qz qw scale */
   data: number[];
   endFrame: number | null;
   fate: 'fractured' | 'carried' | 'lost' | 'culled' | null;
@@ -102,26 +105,25 @@ export interface Recording {
   tracks: Track[];
   events: SimEvent[];
   objectChanges: { frame: number; objectId: string; change: 'slumped' }[];
-  /** leader id per frame, for the replay camera */
+  /** hero id per frame, for the replay camera */
   leader: number[];
 }
 
 export interface SimResult {
   score: number;
-  /** metres travelled down the course by the leading stone */
   distance: number;
-  /** progress as a fraction of the course to the beach */
   progress: number;
-  /** final size of the leading stone (radius, m) */
   size: number;
   stage: number;
   bestStage: number;
   landed: boolean;
   sand: boolean;
   smashes: number;
+  chips: number;
   maxCombo: number;
   airTime: number;
   waterTime: number;
+  topSpeed: number;
   fractures: FractureRecord[];
   destination: string;
   duration: number;
@@ -142,6 +144,8 @@ interface EnvInfo {
   saturated?: boolean;
 }
 
+const COMBO_STEPS = Math.round(2.5 / DT);
+
 export class Simulation {
   readonly level: LevelDef;
   readonly data: LevelData;
@@ -154,6 +158,8 @@ export class Simulation {
   step = 0;
   done = false;
   result: SimResult | null = null;
+  /** live steering input, -1 (left) … 1 (right), screen-relative for a camera looking down the course */
+  steer = 0;
   private pending: SimEvent[] = [];
   private env = new Map<number, EnvInfo>();
   private colliderPiece = new Map<number, number>();
@@ -167,16 +173,19 @@ export class Simulation {
   private unstable = false;
   private objectColliders = new Map<string, RAPIER_T.Collider[]>();
   private slumped = new Set<string>();
-  private leaderId = 1;
+  private heroId = 1;
   private startZ: number;
   private finishZ: number;
   private maxZ: number;
-  private leaderStill = 0;
-  private landedSteps = 0;
-  // scoring
+  private heroStill = 0;
+  private lastHero: { x: number; y: number; z: number; size: number } | null = null;
+  private beachSteps = 0;
+  private course: Polyline | null;
+  private courseHit: PathHit = { d: 0, t: 0, s: 0, px: 0, pz: 0, tx: 0, tz: 1 };
   private smashPoints = 0;
   private bonusPoints = 0;
   private smashes = 0;
+  private chips = 0;
   private combo = 0;
   private maxCombo = 0;
   private lastSmashStep = -1000;
@@ -184,10 +193,10 @@ export class Simulation {
   private airSteps = 0;
   private totalAir = 0;
   private waterSteps = 0;
+  private topSpeed = 0;
   private breakdown: { label: string; points: number }[] = [];
   nudgesLeft: number;
   private nudgesUsed = 0;
-  /** set to an array to collect impact diagnostics (tuning tools only) */
   debugImpacts: string[] | null = null;
 
   constructor(R: R, level: LevelDef, plan: Plan) {
@@ -198,6 +207,7 @@ export class Simulation {
     const waterOn = activeWater(level, plan);
     this.waters = this.data.water.filter((w) => waterOn.has(w.spec.id));
     this.nudgesLeft = level.nudges ?? 0;
+    this.course = level.terrain.course ? makePolyline(level.terrain.course) : null;
     const world = new R.World({ x: 0, y: -GRAVITY, z: 0 });
     world.timestep = DT;
     world.numSolverIterations = 5;
@@ -206,10 +216,7 @@ export class Simulation {
 
     const t = R.ColliderDesc.trimesh(this.data.mesh.vertices, this.data.mesh.indices).setFriction(0.74).setRestitution(0.1);
     const tc = world.createCollider(t);
-    this.env.set(tc.handle, {
-      kind: 'terrain',
-      material: { hardness: 0.5, friction: 0.8, restitution: 0.08, label: 'the ground', kind: 'granite' },
-    });
+    this.env.set(tc.handle, { kind: 'terrain', material: { hardness: 0.5, friction: 0.8, restitution: 0.08, label: 'the ground', kind: 'granite' } });
 
     this.objects = resolveObjects(level, plan, this.data.heightAt);
     for (const o of this.objects) {
@@ -229,7 +236,7 @@ export class Simulation {
 
     const pose = restingBoulder(level);
     const boulder = this.spawn('stone', pose.shape, pose.pos, [0, 0, 0, 1], [0, 0, 0], [0, 0, 0], 0, null);
-    this.leaderId = boulder.id;
+    this.heroId = boulder.id;
     this.startZ = pose.pos[2];
     this.maxZ = this.startZ;
     this.finishZ = level.beach?.z[0] ?? level.terrain.bounds.z[1];
@@ -240,10 +247,13 @@ export class Simulation {
   get fractureCount(): number {
     return this.fractures.length;
   }
+  /** the largest piece of the original boulder */
   get leader(): Piece | undefined {
-    return this.pieces.get(this.leaderId);
+    return this.pieces.get(this.heroId);
   }
-  /** live score shown during the run (before the final multipliers) */
+  get hero(): Piece | undefined {
+    return this.leader;
+  }
   get liveScore(): number {
     return Math.round(this.distancePoints() + this.smashPoints + this.bonusPoints);
   }
@@ -279,6 +289,34 @@ export class Simulation {
     return d;
   }
 
+  /** Collider for a stone at a given scale: a rounded hull, rounder as it smooths. */
+  private stoneCollider(p: { shape: PieceShape; kind: PieceKind; generation: number; smooth: number }, scale: number, material?: Material): RAPIER_T.ColliderDesc {
+    const R = this.R;
+    const shape = p.shape;
+    const r = shape.radius * scale;
+    const roundness = p.kind === 'loose' ? 0.03 / r : (p.generation === 0 ? 0.05 : 0.12) + p.smooth * 0.3;
+    const border = Math.min(r * 0.45, Math.max(0.01, r * roundness));
+    const pts = new Float32Array(shape.points.length);
+    for (let i = 0; i < shape.points.length; i += 3) {
+      const x = shape.points[i] * scale,
+        y = shape.points[i + 1] * scale,
+        z = shape.points[i + 2] * scale;
+      const l = Math.hypot(x, y, z) || 1;
+      const k = Math.max(0.3, (l - border) / l);
+      pts[i] = x * k;
+      pts[i + 1] = y * k;
+      pts[i + 2] = z * k;
+    }
+    const vol = shape.volume * scale ** 3;
+    return (R.ColliderDesc.roundConvexHull(pts, border) ?? R.ColliderDesc.convexHull(pts))!
+      .setDensity(DENSITY)
+      .setFriction(material?.friction ?? STONE_FRICTION)
+      .setFrictionCombineRule(R.CoefficientCombineRule.Min)
+      .setRestitution(material?.restitution ?? 0.18)
+      .setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS)
+      .setContactForceEventThreshold(vol * DENSITY * GRAVITY * 0.9);
+  }
+
   private spawn(
     kind: PieceKind,
     shape: PieceShape,
@@ -296,31 +334,12 @@ export class Simulation {
       .setRotation({ x: quat[0], y: quat[1], z: quat[2], w: quat[3] })
       .setLinvel(...linvel)
       .setAngvel({ x: angvel[0], y: angvel[1], z: angvel[2] })
-      .setLinearDamping(0.02 + 0.1 * Math.min(1, shape.radius / this.level.boulder.radius))
+      .setLinearDamping(0.02 + 0.08 * Math.min(1, shape.radius / this.level.boulder.radius))
       .setAngularDamping(this.baseAngularDamping(kind, shape.radius))
-      .setCcdEnabled(true);
+      .setCcdEnabled(kind !== 'chip');
     const body = this.world.createRigidBody(bd);
-    // rounded hulls let fresh fragments tumble instead of locking on slopes
-    const border = kind === 'stone' ? Math.min(0.14, shape.radius * (generation === 0 ? 0.05 : 0.12)) : 0.03;
-    const shrunk = new Float32Array(shape.points.length);
-    for (let i = 0; i < shape.points.length; i += 3) {
-      const x = shape.points[i],
-        y = shape.points[i + 1],
-        z = shape.points[i + 2];
-      const l = Math.hypot(x, y, z) || 1;
-      const k = Math.max(0.3, (l - border) / l);
-      shrunk[i] = x * k;
-      shrunk[i + 1] = y * k;
-      shrunk[i + 2] = z * k;
-    }
-    const cd = (R.ColliderDesc.roundConvexHull(shrunk, border) ?? R.ColliderDesc.convexHull(shape.points))!
-      .setDensity(DENSITY)
-      .setFriction(material?.friction ?? STONE_FRICTION)
-      .setFrictionCombineRule(R.CoefficientCombineRule.Min)
-      .setRestitution(material?.restitution ?? 0.16)
-      .setActiveEvents(R.ActiveEvents.CONTACT_FORCE_EVENTS)
-      .setContactForceEventThreshold(shape.volume * DENSITY * GRAVITY * 0.9);
-    const collider = this.world.createCollider(cd, body);
+    const proto = { shape, kind, generation, smooth: 0 };
+    const collider = this.world.createCollider(this.stoneCollider(proto, 1, material), body);
     const id = this.nextId++;
     const p: Piece = {
       id,
@@ -329,6 +348,8 @@ export class Simulation {
       body,
       collider,
       size: shape.radius,
+      physScale: 1,
+      smooth: 0,
       generation,
       parent,
       bornStep: this.step,
@@ -337,8 +358,8 @@ export class Simulation {
       submerged: false,
       lastImpactStep: -100,
       lastContactStep: this.step,
+      contactSurface: null,
       impactAcc: new Vector3(),
-      still: 0,
       grinding: 0,
     };
     this.pieces.set(id, p);
@@ -350,12 +371,26 @@ export class Simulation {
     return p;
   }
 
+  /** Physically shrink a stone's collider to match its worn size. */
+  private rescale(p: Piece) {
+    const want = Math.max(MIN_PHYSICAL_RADIUS / p.shape.radius, p.size / p.shape.radius);
+    if (want > p.physScale * 0.9) return;
+    this.colliderPiece.delete(p.collider.handle);
+    this.world.removeCollider(p.collider, false);
+    p.physScale = want;
+    p.collider = this.world.createCollider(this.stoneCollider(p, want), p.body);
+    p.collider.setFriction(p.wet ? 0.18 : STONE_FRICTION);
+    this.colliderPiece.set(p.collider.handle, p.id);
+    p.body.setLinearDamping(0.02 + 0.08 * Math.min(1, p.size / this.level.boulder.radius));
+    p.body.setAngularDamping(this.baseAngularDamping(p.kind, p.size));
+  }
+
   private despawn(p: Piece, fate: Track['fate']) {
     const t = this.tracks.get(p.id);
     if (t) {
-      const expected = (this.recording.frames - t.startFrame) * 8;
+      const expected = (this.recording.frames - t.startFrame) * FRAME;
       if (t.data.length === expected) this.writeFrame(t, p);
-      t.endFrame = t.startFrame + t.data.length / 8 - 1;
+      t.endFrame = t.startFrame + t.data.length / FRAME - 1;
       t.fate = fate;
     }
     this.colliderPiece.delete(p.collider.handle);
@@ -364,11 +399,10 @@ export class Simulation {
     this.pieces.delete(p.id);
   }
 
-  /** The boulder snaps off the summit and goes over the edge. */
   release() {
     if (this.released) return;
     this.released = true;
-    const b = this.pieces.get(this.leaderId);
+    const b = this.pieces.get(this.heroId);
     if (!b) return;
     const push = this.level.boulder.push;
     b.body.setLinvel({ x: push[0], y: push[1], z: push[2] }, true);
@@ -377,24 +411,26 @@ export class Simulation {
     this.emit({ step: this.step, type: 'breakoff', pos: [t.x, t.y, t.z], intensity: 1, label: 'the summit' });
   }
 
-  /** A live shove left (-1) or right (+1). */
+  /** A one-off sideways shove (kept for keyboard/tests). */
   nudge(dir: number): boolean {
-    const p = this.leader;
+    const p = this.hero;
     if (!p || this.nudgesLeft <= 0 || this.done) return false;
     this.nudgesLeft--;
     this.nudgesUsed++;
-    const v = p.body.linvel();
-    const sp = Math.hypot(v.x, v.z);
-    // across the direction of travel; "right" is screen-right for a camera looking downhill (-x)
-    let ax = sp > 0.5 ? -v.z / sp : -1;
-    let az = sp > 0.5 ? v.x / sp : 0;
-    ax *= dir;
-    az *= dir;
+    const [rx, rz] = this.rightAt(p);
     const m = p.body.mass();
-    p.body.applyImpulse({ x: ax * m * 5.5, y: m * 2.2, z: az * m * 5.5 }, true);
+    p.body.applyImpulse({ x: rx * dir * m * 5.5, y: m * 2.2, z: rz * dir * m * 5.5 }, true);
     const t = p.body.translation();
     this.emit({ step: this.step, type: 'nudge', pos: [t.x, t.y, t.z], intensity: 0.6 });
     return true;
+  }
+
+  /** screen-right across the course at a stone's position */
+  private rightAt(p: Piece): [number, number] {
+    const t = p.body.translation();
+    if (!this.course) return [-1, 0];
+    pathDistance(this.course, t.x, t.z, this.courseHit);
+    return [-this.courseHit.tz, this.courseHit.tx];
   }
 
   drainEvents(): SimEvent[] {
@@ -402,12 +438,10 @@ export class Simulation {
     this.pending = [];
     return e;
   }
-
   private emit(e: SimEvent) {
     this.pending.push(e);
     this.recording.events.push(e);
   }
-
   private award(points: number, label: string, pos: [number, number, number], combo?: number) {
     points = Math.round(points);
     this.emit({ step: this.step, type: 'score', pos, intensity: points, points, label, combo });
@@ -420,13 +454,15 @@ export class Simulation {
     for (const p of this.pieces.values()) {
       const v = p.body.linvel();
       before.set(p.id, new Vector3(v.x, v.y, v.z));
+      p.body.resetForces(false);
       this.applyWater(p);
     }
+    this.driveHero();
 
     this.world.step(this.queue);
     this.step++;
 
-    const contacts = new Map<number, { hardness: number; label: string; env: EnvInfo | null; force: number }>();
+    const contacts = new Map<number, { hardness: number; label: string; env: EnvInfo | null; force: number; surface: string | null }>();
     this.queue.drainContactForceEvents((ev) => {
       const h1 = ev.collider1(),
         h2 = ev.collider2();
@@ -441,11 +477,13 @@ export class Simulation {
         const otherPiece = this.colliderPiece.get(b);
         let hardness = 0.5;
         let label = 'the ground';
+        let surface: string | null = null;
         if (other) {
           if (other.kind === 'terrain') {
             const p = this.pieces.get(pid)!;
             const t = p.body.translation();
             const s = this.data.terrain.surface(t.x, t.z);
+            surface = s;
             hardness = SURFACE_HARDNESS[s];
             label = s === 'bedrock' ? 'bedrock' : s === 'scree' ? 'the scree' : s === 'streambed' ? 'the riverbed' : s === 'sand' ? 'the sand' : 'the slope';
           } else {
@@ -457,17 +495,17 @@ export class Simulation {
           label = 'another fragment';
         }
         const prev = contacts.get(pid);
-        if (!prev || f * hardness > prev.force * prev.hardness) contacts.set(pid, { hardness, label, env: other ?? null, force: f });
+        if (!prev || f * hardness > prev.force * prev.hardness) contacts.set(pid, { hardness, label, env: other ?? null, force: f, surface });
       }
     });
 
-    const fractureQueue: { p: Piece; dv: Vector3; eff: number; label: string }[] = [];
+    const breaks: { p: Piece; dv: Vector3; eff: number; label: string }[] = [];
     const g = new Vector3(0, -GRAVITY * DT, 0);
     for (const p of this.pieces.values()) {
       const v = p.body.linvel();
       const vb = before.get(p.id);
       if (!vb) continue;
-      if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.z) || Math.hypot(v.x, v.y, v.z) > 90) {
+      if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.z) || Math.hypot(v.x, v.y, v.z) > 95) {
         this.unstable = true;
         continue;
       }
@@ -476,13 +514,14 @@ export class Simulation {
       const c = contacts.get(p.id);
       if (!c) continue;
       p.lastContactStep = this.step;
+      p.contactSurface = c.surface;
       const dv = p.impactAcc.clone();
       const impact = dv.length();
       const eff = impact * c.hardness;
       const t = p.body.translation();
       if (c.env?.saturated && c.env.objectId && !this.slumped.has(c.env.objectId) && impact > 0.4) this.slump(c.env.objectId, [t.x, t.y, t.z]);
       if (p.kind === 'stone' && c.hardness >= 1.3 && p.wet) p.grinding = 12;
-      if (p.kind === 'stone' && impact > 1.4 && this.step - p.lastImpactStep > 6) {
+      if (p.kind !== 'chip' && impact > 1.4 && this.step - p.lastImpactStep > 6) {
         p.lastImpactStep = this.step;
         this.emit({
           step: this.step,
@@ -495,93 +534,151 @@ export class Simulation {
       }
       if (this.debugImpacts && eff > 3) this.debugImpacts.push(`${(this.step * DT).toFixed(1)}s ${c.label} eff=${eff.toFixed(1)} r=${p.size.toFixed(2)} z=${t.z.toFixed(0)}`);
       if (p.kind !== 'stone' || this.step < p.immuneUntil) continue;
-      const strength = this.strength(p);
-      if (eff > strength) fractureQueue.push({ p, dv, eff, label: c.label });
+      if (eff > this.strength(p)) breaks.push({ p, dv, eff, label: c.label });
     }
+    breaks.sort((a, b) => b.eff - a.eff);
+    for (const b of breaks.slice(0, 2)) this.hit(b.p, b.dv, b.eff, b.label);
 
-    fractureQueue.sort((a, b) => b.eff - a.eff);
-    for (const f of fractureQueue.slice(0, 2)) this.fracture(f.p, f.dv, f.eff, f.label);
-
-    this.updateLeader();
+    this.wearOnGround();
+    this.updateHero();
     this.checkBounds();
     if (this.step % 30 === 0) this.cull();
     if (this.step % RECORD_EVERY === 0) this.record();
     this.checkEnd();
   }
 
+  /** Steering and the pull of the mountain on the hero stone. */
+  private driveHero() {
+    const p = this.hero;
+    if (!p) return;
+    const grounded = this.step - p.lastContactStep < 6 || p.wet;
+    const [rx, rz] = this.rightAt(p);
+    const tx = this.courseHit.tx,
+      tz = this.courseHit.tz;
+    const m = p.body.mass();
+    const v = p.body.linvel();
+    const control = grounded ? 1 : 0.35;
+    // steer across the course; damp sideways drift a little so it feels responsive
+    const side = v.x * rx + v.z * rz;
+    const steerAcc = 14 * this.steer * control - side * 0.6 * Math.abs(this.steer) * control;
+    // smaller stone runs faster: a growing pull down the course
+    const small = 1 - Math.min(1, p.size / this.level.boulder.radius);
+    const pull = grounded ? 2.5 + 6 * small : 0;
+    const course = this.course ? Math.min(1, Math.max(0, (this.courseHit.d - 6) / 10)) : 0;
+    // keep it from climbing the valley walls forever: a gentle nudge back toward the line
+    const back = course * 4;
+    const toLine = this.course ? Math.sign((this.courseHit.px - p.body.translation().x) * rx + (this.courseHit.pz - p.body.translation().z) * rz) : 0;
+    p.body.addForce(
+      {
+        x: m * (rx * (steerAcc + back * toLine) + tx * pull),
+        y: 0,
+        z: m * (rz * (steerAcc + back * toLine) + tz * pull),
+      },
+      true,
+    );
+  }
+
   /** Granite gets a little stronger as it gets smaller. */
   strength(p: Piece): number {
-    return 5.6 * Math.pow(Math.max(0.0005, p.size) / this.level.boulder.radius, -0.2);
+    return 5.2 * Math.pow(Math.max(0.0005, p.size) / this.level.boulder.radius, -0.15);
   }
 
   private baseAngularDamping(kind: PieceKind, radius: number): number {
     if (kind === 'loose') return 0.5;
-    return 0.1 + 0.4 * Math.pow(Math.min(1, radius / this.level.boulder.radius), 1.5);
+    return 0.08 + 0.4 * Math.pow(Math.min(1, radius / this.level.boulder.radius), 1.5);
   }
 
   private stoneCount(): number {
     let n = 0;
-    for (const p of this.pieces.values()) if (p.kind === 'stone') n++;
+    for (const p of this.pieces.values()) if (p.kind !== 'loose') n++;
     return n;
   }
 
-  private registerSmash(p: Piece, pos: [number, number, number], label: string, kind: 'break' | 'crack') {
-    this.smashes++;
+  private registerSmash(size: number, pos: [number, number, number], label: string, kind: 'break' | 'chip') {
+    if (kind === 'break') this.smashes++;
+    else this.chips++;
     this.combo = this.step - this.lastSmashStep < COMBO_STEPS ? this.combo + 1 : 1;
     this.lastSmashStep = this.step;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
-    // smaller stone = harder to break = worth more; combos multiply
-    const st = stageOf(p.size);
-    const pts = (kind === 'break' ? 300 : 450) * (1 + st * 0.6) * Math.min(8, this.combo);
+    const st = stageOf(size);
+    const pts = (kind === 'break' ? 600 : 220) * (1 + st * 0.6) * Math.min(10, this.combo);
     this.smashPoints += pts;
-    this.award(pts, kind === 'break' ? `SMASH! ${label}` : `CRACK! ${label}`, pos, this.combo);
+    this.award(pts, kind === 'break' ? `SMASH! ${label}` : `CHIP! ${label}`, pos, this.combo);
   }
 
-  private fracture(p: Piece, dv: Vector3, eff: number, label: string) {
+  /** A hard hit: chips fly off, or — if it's brutal — the stone splits. */
+  private hit(p: Piece, dv: Vector3, eff: number, label: string) {
     if (!this.pieces.has(p.id)) return;
+    const excess = eff / this.strength(p);
+    const isHero = p.id === this.heroId;
+    if (excess > 2.1 && p.size > 0.55 && p.size >= p.shape.radius * 0.97 && this.stoneCount() < MAX_STONES - 4) {
+      this.split(p, dv, eff, label);
+      return;
+    }
+    // chip: knock pieces off and wear the stone down
+    const t = p.body.translation();
+    const pos: [number, number, number] = [t.x, t.y, t.z];
+    const rng = mulberry32(hashInts(p.id, this.step, 77));
+    const before = p.size;
+    p.size *= Math.max(0.5, 0.9 - (excess - 1) * 0.12 - rng() * 0.05);
+    p.smooth *= 0.75;
+    p.immuneUntil = this.step + 9;
+    const lost = before - p.size;
+    // throw off one or two real chips
+    const n = isHero && this.stoneCount() < MAX_STONES ? (excess > 1.5 ? 2 : 1) : 0;
+    const out = dv.clone().normalize();
+    const v = p.body.linvel();
+    for (let i = 0; i < n; i++) {
+      const cr = Math.max(0.07, Math.min(0.6, lost * (0.9 + rng() * 0.6)));
+      const shape = generateStone(cr, hashInts(p.id, this.step, i), 0.7);
+      const side = new Vector3(rng() - 0.5, rng() * 0.6 + 0.2, rng() - 0.5).normalize();
+      const dir = out.clone().multiplyScalar(-0.6).add(side).normalize();
+      const off = dir.clone().multiplyScalar(p.size * p.physScale > 0 ? p.shape.radius * p.physScale + cr : cr);
+      const sp = 3 + (excess - 1) * 4 + rng() * 3;
+      this.spawn(
+        'chip',
+        shape,
+        [t.x + off.x, t.y + off.y, t.z + off.z],
+        [0, 0, 0, 1],
+        [v.x + dir.x * sp, v.y + dir.y * sp + 2, v.z + dir.z * sp],
+        [(rng() - 0.5) * 20, (rng() - 0.5) * 20, (rng() - 0.5) * 20],
+        p.generation + 1,
+        p.id,
+      );
+    }
+    this.fractures.push({ time: this.step * DT, pos, against: label, pieces: n, impact: eff, generation: p.generation });
+    this.emit({ step: this.step, type: 'chip', pos, intensity: Math.min(1, 0.3 + excess * 0.25 + Math.sqrt(p.size) * 0.2), label, parent: p.id });
+    if (isHero) {
+      this.registerSmash(before, pos, label, 'chip');
+      this.checkStage();
+    }
+    this.rescale(p);
+  }
+
+  private split(p: Piece, dv: Vector3, eff: number, label: string) {
     const t = p.body.translation();
     const pos: [number, number, number] = [t.x, t.y, t.z];
     const excess = eff / this.strength(p);
     const rng = mulberry32(hashInts(p.id, this.step, this.level.boulder.seed));
-    // Below physics scale (or if the world is full), stone shrinks in place: chips and cracks.
     const room = MAX_STONES - this.stoneCount() + 1;
-    if (p.shape.radius < MIN_PHYSICAL_RADIUS * 2.1 || room < 2 || p.size < p.shape.radius * 0.98) {
-      const before = p.size;
-      p.size *= Math.max(0.28, 0.72 - (excess - 1) * 0.12 - rng() * 0.08);
-      p.immuneUntil = this.step + 8;
-      this.fractures.push({ time: this.step * DT, pos, against: label, pieces: 1, impact: eff, generation: p.generation });
-      this.emit({ step: this.step, type: 'crack', pos, intensity: Math.min(1, excess * 0.4), label, parent: p.id, pieces: [p.id] });
-      if (p.id === this.leaderId) this.registerSmash({ ...p, size: before }, pos, label, 'crack');
-      this.checkStage();
-      return;
-    }
-    let count = Math.round(2 + (excess - 1) * 4 + rng() * 1.5);
-    count = Math.min(count, 6, room);
+    const count = Math.min(Math.round(2 + (excess - 2) * 1.5 + rng()), 5, room);
     if (count < 2) return;
     const r = p.body.rotation();
     const q = new Quaternion(r.x, r.y, r.z, r.w);
     const impactLocal = dv.clone().normalize().negate().applyQuaternion(q.clone().invert());
-    const minVol = (4 / 3) * Math.PI * MIN_PHYSICAL_RADIUS ** 3;
+    const minVol = (4 / 3) * Math.PI * 0.12 ** 3;
     const res = fracturePiece(p.shape, [impactLocal.x, impactLocal.y, impactLocal.z], count, rng() * 1e9, minVol);
-    if (res.cells.length < 2) {
-      // could only chip it: shrink in place instead
-      p.size *= 0.8;
-      p.immuneUntil = this.step + 8;
-      this.emit({ step: this.step, type: 'chip', pos, intensity: 0.6, label });
-      return;
-    }
+    if (res.cells.length < 2) return;
     const lv = p.body.linvel();
     const av = p.body.angvel();
     const w = new Vector3(av.x, av.y, av.z);
     const base = new Vector3(lv.x, lv.y, lv.z);
-    const wasLeader = p.id === this.leaderId;
+    const wasHero = p.id === this.heroId;
     const parentSize = p.size;
     this.despawn(p, 'fractured');
-    const childIds: number[] = [];
-    // arcade: breaks throw pieces apart hard
-    const spread = Math.min(6, 1.4 + (excess - 1) * 2.6);
-    let best: Piece | null = null;
-    let bestKey = -Infinity;
+    const ids: number[] = [];
+    const spread = Math.min(7, 2 + (excess - 2) * 2.5);
+    let biggest: Piece | null = null;
     for (const cell of res.cells) {
       const off = new Vector3(...cell.offset).applyQuaternion(q);
       const cpos = off.clone().add(new Vector3(t.x, t.y, t.z));
@@ -589,7 +686,7 @@ export class Simulation {
       if (off.lengthSq() > 1e-6) vel.add(off.clone().normalize().multiplyScalar(spread * (0.6 + rng() * 0.7)));
       vel.y += spread * 0.25;
       const ch = this.spawn(
-        'stone',
+        cell.shape.radius < 0.3 ? 'chip' : 'stone',
         cell.shape,
         [cpos.x, cpos.y, cpos.z],
         [q.x, q.y, q.z, q.w],
@@ -598,33 +695,16 @@ export class Simulation {
         p.generation + 1,
         p.id,
       );
-      // keep any earlier wear proportionally
-      ch.size = cell.shape.radius * Math.min(1, parentSize / p.shape.radius);
-      childIds.push(ch.id);
-      const key = cpos.z + vel.z * 0.8;
-      if (key > bestKey) {
-        bestKey = key;
-        best = ch;
-      }
+      ids.push(ch.id);
+      if (ch.kind === 'stone' && (!biggest || ch.size > biggest.size)) biggest = ch;
     }
     this.fractures.push({ time: this.step * DT, pos, against: label, pieces: res.cells.length, impact: eff, generation: p.generation });
-    this.emit({
-      step: this.step,
-      type: 'fracture',
-      pos,
-      intensity: Math.min(1, (excess - 0.6) * 0.6 + p.shape.radius / 2.5),
-      label,
-      pieces: childIds,
-      parent: p.id,
-    });
-    if (wasLeader && best) {
-      this.leaderId = best.id;
-      this.registerSmash({ ...p, size: parentSize }, pos, label, 'break');
+    this.emit({ step: this.step, type: 'fracture', pos, intensity: Math.min(1, (excess - 1) * 0.4 + parentSize / 2.5), label, pieces: ids, parent: p.id });
+    if (wasHero && biggest) {
+      // the camera stays with the largest piece of the original boulder
+      this.heroId = biggest.id;
+      this.registerSmash(parentSize, pos, label, 'break');
       this.checkStage();
-    } else {
-      // breaking any piece still counts, at a discount
-      this.smashPoints += 80;
-      this.award(80, 'Shatter', pos);
     }
   }
 
@@ -639,15 +719,34 @@ export class Simulation {
     this.emit({ step: this.step, type: 'slump', pos, intensity: 0.8, objectId, label: 'the soaked bank' });
   }
 
+  /** Abrasion: shrink and polish. Water is strongest, sand is gentle, rolling rock barely. */
+  private wear(p: Piece, rate: number) {
+    if (p.kind !== 'stone' || rate <= 0) return;
+    const k = Math.exp(-rate * DT);
+    p.size = Math.max(0.0004, p.size * k);
+    p.smooth = Math.min(1, p.smooth + rate * DT * 6);
+    if (p.id === this.heroId) this.checkStage();
+    if (this.step % 20 === p.id % 20) this.rescale(p);
+  }
+
+  private wearOnGround() {
+    for (const p of this.pieces.values()) {
+      if (p.kind !== 'stone' || p.wet || this.step - p.lastContactStep > 3) continue;
+      const v = p.body.linvel();
+      const sp = Math.hypot(v.x, v.y, v.z);
+      if (sp < 0.5) continue;
+      const sand = p.contactSurface === 'sand';
+      this.wear(p, (sand ? 0.009 : 0.0006) * sp);
+    }
+  }
+
   private applyWater(p: Piece) {
-    p.body.resetForces(false);
     const t = p.body.translation();
     const v = p.body.linvel();
-    const r = p.shape.radius;
+    const r = p.shape.radius * p.physScale;
     const vol = (4 / 3) * Math.PI * r * r * r;
     const mass = p.body.mass();
     let wet = false;
-    let submerged = false;
     let rel = 0;
     for (const w of this.waters) {
       const pl = w.pl;
@@ -661,7 +760,6 @@ export class Simulation {
       const frac = Math.max(0, Math.min(1, (surface - bottom) / (2 * r)));
       if (frac <= 0) continue;
       wet = true;
-      submerged = true;
       const vfx = hit.tx * w.spec.flowSpeed,
         vfz = hit.tz * w.spec.flowSpeed;
       const k = 1.6 * frac * mass;
@@ -669,13 +767,11 @@ export class Simulation {
       rel = Math.max(rel, Math.hypot(v.x - vfx, v.z - vfz) + w.spec.flowSpeed * 0.35);
       break;
     }
-    // the sea: buoyancy, and waves that wash stone back up the beach
     const sea = this.level.sea;
     if (!wet && sea && t.z > sea.shoreZ - 12 && t.y - r < sea.level) {
       const frac = Math.max(0, Math.min(1, (sea.level - (t.y - r)) / (2 * r)));
       if (frac > 0) {
         wet = true;
-        submerged = true;
         const surge = Math.sin(this.step * DT * 0.9 + t.z * 0.15) * 2.4 - 1.2;
         const k = 1.1 * frac * mass;
         p.body.addForce({ x: -k * v.x * 0.6, y: frac * vol * GRAVITY - 0.9 * frac * mass * v.y, z: k * (surge - v.z) }, true);
@@ -685,30 +781,25 @@ export class Simulation {
     if (wet !== p.wet) {
       p.wet = wet;
       p.collider.setFriction(wet ? 0.18 : STONE_FRICTION);
-    }
-    if (submerged !== p.submerged) {
-      p.submerged = submerged;
-      p.body.setAngularDamping(submerged ? 1.0 : this.baseAngularDamping(p.kind, p.shape.radius));
-      if (submerged && p.kind === 'stone') {
+      p.body.setAngularDamping(wet ? 1.0 : this.baseAngularDamping(p.kind, p.size));
+      if (wet && p.kind === 'stone') {
         const sp = Math.hypot(v.x, v.y, v.z);
         if (sp > 1) this.emit({ step: this.step, type: 'splash', pos: [t.x, t.y, t.z], intensity: Math.min(1, (sp / 10) * (r / 1.2) + 0.15) });
       }
     }
+    p.submerged = wet;
     if (wet && p.kind === 'stone') {
-      if (p.id === this.leaderId) this.waterSteps++;
-      // abrasion: water grinds stone down, much faster against hard rock
+      if (p.id === this.heroId) this.waterSteps++;
       const grind = p.grinding > 0 ? 7 : 1;
       if (p.grinding > 0) p.grinding--;
-      const rate = 0.0085 * rel * grind;
-      if (p.size < 0.6) {
-        p.size *= Math.exp(-rate * DT);
-        if (p.id === this.leaderId) this.checkStage();
-      }
+      // water wears big stone too (slowly), small stone fast
+      const sizeFactor = p.size < 0.6 ? 1 : 0.35;
+      this.wear(p, 0.0085 * rel * grind * sizeFactor);
     }
   }
 
   private checkStage() {
-    const p = this.leader;
+    const p = this.hero;
     if (!p) return;
     const st = stageOf(p.size);
     if (st > this.bestStage) {
@@ -721,38 +812,36 @@ export class Simulation {
     }
   }
 
-  private updateLeader() {
-    let cur = this.leader;
-    if (this.step % 10 === 0 || !cur) {
+  private updateHero() {
+    let hero = this.hero;
+    if (!hero) {
+      // the hero left the world: follow the largest stone that remains
       let best: Piece | undefined;
-      let bestKey = -Infinity;
+      for (const p of this.pieces.values()) if (p.kind === 'stone' && (!best || p.size > best.size)) best = p;
+      if (!best) return;
+      this.heroId = best.id;
+      hero = best;
+    }
+    // always the largest piece of the original boulder that is still in the race
+    if (this.step % 10 === 0) {
+      const hz = hero.body.translation().z;
       for (const p of this.pieces.values()) {
-        if (p.kind !== 'stone') continue;
-        const t = p.body.translation();
-        const v = p.body.linvel();
-        const moving = Math.hypot(v.x, v.y, v.z) > 0.5;
-        const key = t.z + (moving ? 0 : -35);
-        if (key > bestKey) {
-          bestKey = key;
-          best = p;
+        if (p.kind !== 'stone' || p.id === hero.id) continue;
+        if (p.size > hero.size * 1.08 && p.body.translation().z > hz - 15) {
+          hero = p;
+          this.heroId = p.id;
         }
       }
-      if (best && cur && best.id !== cur.id) {
-        const ct = cur.body.translation();
-        const cv = cur.body.linvel();
-        const curKey = ct.z + (Math.hypot(cv.x, cv.y, cv.z) > 0.5 ? 0 : -35);
-        if (bestKey > curKey + 5) cur = best;
-      } else if (!cur) cur = best;
-      if (cur) this.leaderId = cur.id;
     }
-    if (!cur) return;
-    const t = cur.body.translation();
-    const v = cur.body.linvel();
+    const t = hero.body.translation();
+    this.lastHero = { x: t.x, y: t.y, z: t.z, size: hero.size };
+    const v = hero.body.linvel();
+    const sp = Math.hypot(v.x, v.y, v.z);
+    this.topSpeed = Math.max(this.topSpeed, sp);
     if (t.z > this.maxZ) this.maxZ = Math.min(t.z, this.finishZ + 60);
     if (this.step % 6 === 0) this.trajectory.push([t.x, t.y, t.z]);
-    // air time: no contact and well above the ground
     const ground = this.data.heightAt(t.x, t.z);
-    const airborne = this.step - cur.lastContactStep > 4 && t.y - ground > cur.shape.radius + 0.8 && !cur.wet;
+    const airborne = this.step - hero.lastContactStep > 4 && t.y - ground > hero.shape.radius * hero.physScale + 0.8 && !hero.wet;
     if (airborne) this.airSteps++;
     else if (this.airSteps > 0) {
       const air = this.airSteps * DT;
@@ -765,21 +854,21 @@ export class Simulation {
       }
       this.airSteps = 0;
     }
-    const sp = Math.hypot(v.x, v.y, v.z);
-    this.leaderStill = sp < 0.35 ? this.leaderStill + 1 : 0;
+    this.heroStill = sp < 0.4 ? this.heroStill + 1 : 0;
     const beach = this.level.beach;
-    if (beach && t.z >= beach.z[0]) this.landedSteps++;
+    if (beach && t.z >= beach.z[0]) this.beachSteps++;
   }
 
-  /** Stone left far behind no longer matters; free it. */
+  /** Chips and stone far behind no longer matter. */
   private cull() {
-    const lead = this.leader;
-    if (!lead) return;
-    const lz = lead.body.translation().z;
+    const hero = this.hero;
+    if (!hero) return;
+    const hz = hero.body.translation().z;
     for (const p of [...this.pieces.values()]) {
-      if (p.id === lead.id) continue;
+      if (p.id === hero.id) continue;
       const t = p.body.translation();
-      if (t.z < lz - 70) this.despawn(p, 'culled');
+      const old = p.kind === 'chip' && this.step - p.bornStep > 60 * 6;
+      if (t.z < hz - 60 || old) this.despawn(p, 'culled');
     }
   }
 
@@ -793,53 +882,44 @@ export class Simulation {
     }
   }
 
-  private writeFrame(track: Track, p: Piece) {
+  private framePose(p: Piece): number[] {
     const t = p.body.translation();
     const r = p.body.rotation();
-    const scale = Math.max(0.002, p.size / p.shape.radius);
-    // a virtually-small stone sits at the bottom of its (larger) physics body
-    const drop = (1 - Math.min(1, scale)) * p.shape.radius * 0.85;
-    track.data.push(t.x, t.y - drop, t.z, r.x, r.y, r.z, r.w, scale);
+    const scale = Math.max(0.0015, p.size / p.shape.radius);
+    // a stone smaller than its collider sits at the bottom of it
+    const drop = Math.max(0, p.physScale - scale) * p.shape.radius * 0.85;
+    return [t.x, t.y - drop, t.z, r.x, r.y, r.z, r.w, scale, p.smooth];
   }
 
-  /** Render pose for a live piece (matches recorded frames). */
-  pose(p: Piece): { pos: [number, number, number]; quat: [number, number, number, number]; scale: number } {
-    const t = p.body.translation();
-    const r = p.body.rotation();
-    const scale = Math.max(0.002, p.size / p.shape.radius);
-    const drop = (1 - Math.min(1, scale)) * p.shape.radius * 0.85;
-    return { pos: [t.x, t.y - drop, t.z], quat: [r.x, r.y, r.z, r.w], scale };
+  private writeFrame(track: Track, p: Piece) {
+    track.data.push(...this.framePose(p));
+  }
+
+  pose(p: Piece): { pos: [number, number, number]; quat: [number, number, number, number]; scale: number; smooth: number } {
+    const f = this.framePose(p);
+    return { pos: [f[0], f[1], f[2]], quat: [f[3], f[4], f[5], f[6]], scale: f[7], smooth: f[8] };
   }
 
   private record() {
     for (const p of this.pieces.values()) {
       const track = this.tracks.get(p.id)!;
-      const expected = (this.recording.frames - track.startFrame) * 8;
-      while (track.data.length < expected && track.data.length >= 8) track.data.push(...track.data.slice(track.data.length - 8));
+      const expected = (this.recording.frames - track.startFrame) * FRAME;
+      while (track.data.length < expected && track.data.length >= FRAME) track.data.push(...track.data.slice(track.data.length - FRAME));
       if (track.data.length === expected) this.writeFrame(track, p);
     }
-    this.recording.leader.push(this.leaderId);
+    this.recording.leader.push(this.heroId);
     this.recording.frames++;
   }
 
   private checkEnd() {
     const time = this.step * DT;
-    const lead = this.leader;
+    const hero = this.hero;
     if (this.unstable) return this.finish('unstable');
-    if (!lead || this.stoneCount() === 0) return this.finish('lost');
     const beach = this.level.beach;
-    const lz = lead.body.translation().z;
-    if (beach && lz >= beach.z[0] && (this.leaderStill > 50 || this.landedSteps > 60 * 6)) return this.finish('landed');
-    // stuck: the leader has stopped and nothing else is moving near it
-    if (this.leaderStill > 150 && time > 3) {
-      let moving = false;
-      for (const p of this.pieces.values()) {
-        if (p.kind !== 'stone' || p.id === lead.id) continue;
-        const v = p.body.linvel();
-        if (Math.hypot(v.x, v.y, v.z) > 0.6 && p.body.translation().z > lz - 25) moving = true;
-      }
-      if (!moving) return this.finish('stopped');
-    }
+    if (!hero) return this.finish(beach && this.lastHero && this.lastHero.z >= beach.z[0] ? 'landed' : 'lost');
+    const hz = hero.body.translation().z;
+    if (beach && hz >= beach.z[0] && (this.heroStill > 50 || this.beachSteps > 60 * 7)) return this.finish('landed');
+    if (this.heroStill > 150 && time > 3) return this.finish('stopped');
     if (time > MAX_TIME) this.finish('time');
   }
 
@@ -858,9 +938,9 @@ export class Simulation {
     if (this.done) return;
     this.done = true;
     this.record();
-    const lead = this.leader;
-    const lt = lead?.body.translation();
-    const size = lead?.size ?? 0;
+    const hero = this.hero;
+    const ht = hero?.body.translation() ?? this.lastHero ?? undefined;
+    const size = hero?.size ?? this.lastHero?.size ?? 0;
     const stage = stageOf(size);
     const landed = reason === 'landed';
     const sand = landed && stage === STAGES.length - 1;
@@ -868,7 +948,7 @@ export class Simulation {
     const distPts = this.distancePoints();
     const breakdown = [
       { label: `Distance ${Math.round(distance)} m`, points: Math.round(distPts) },
-      { label: `Smashes ×${this.smashes}`, points: Math.round(this.smashPoints) },
+      { label: `Smashes ×${this.smashes} · chips ×${this.chips}`, points: Math.round(this.smashPoints) },
       ...this.breakdown,
     ];
     let bonus = this.bonusPoints;
@@ -882,26 +962,26 @@ export class Simulation {
       breakdown.push({ label: 'PERFECT EROSION — sand on the beach', points: 25000 });
     }
     const raw = distPts + this.smashPoints + bonus;
-    const mult = STAGES[stage].mult;
-    const score = Math.round(raw * mult);
+    const score = Math.round(raw * STAGES[stage].mult);
     breakdown.push({ label: `${STAGES[stage].name} size multiplier`, points: score - Math.round(raw) });
-    if (lt) this.trajectory.push([lt.x, lt.y, lt.z]);
-    const span = this.finishZ - this.startZ;
+    if (ht) this.trajectory.push([ht.x, ht.y, ht.z]);
     this.result = {
       score,
       distance,
-      progress: Math.min(1, distance / span),
+      progress: Math.min(1, distance / (this.finishZ - this.startZ)),
       size,
       stage,
       bestStage: this.bestStage,
       landed,
       sand,
       smashes: this.smashes,
+      chips: this.chips,
       maxCombo: this.maxCombo,
       airTime: this.totalAir,
       waterTime: this.waterSteps * DT,
+      topSpeed: this.topSpeed,
       fractures: this.fractures,
-      destination: landed ? 'the beach' : lt ? this.placeName(lt.z, lt.x) : 'nowhere',
+      destination: landed ? 'the beach' : ht ? this.placeName(ht.z, ht.x) : 'nowhere',
       duration: this.step * DT,
       stoneCount: this.stoneCount(),
       interventions: countInterventions(this.level, this.plan),
@@ -924,8 +1004,6 @@ export class Simulation {
   }
 }
 
-const COMBO_STEPS = Math.round(2.5 / DT);
-
 export function gradeFor(score: number): string {
   if (score >= 400000) return 'S';
   if (score >= 150000) return 'A';
@@ -935,7 +1013,6 @@ export function gradeFor(score: number): string {
 }
 
 const boulderCache = new Map<string, PieceShape>();
-/** The boulder perched on the summit before it breaks away. */
 export function restingBoulder(level: LevelDef): { shape: PieceShape; pos: [number, number, number] } {
   const b = level.boulder;
   let shape = boulderCache.get(level.id);
