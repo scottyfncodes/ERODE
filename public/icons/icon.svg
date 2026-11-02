@@ -1,58 +1,45 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3a4552"/>
-      <stop offset="0.55" stop-color="#262b2c"/>
-      <stop offset="1" stop-color="#1b1d1b"/>
+      <stop offset="0" stop-color="#2c3137"/>
+      <stop offset="0.42" stop-color="#6e5a48"/>
+      <stop offset="0.7" stop-color="#e2b06f"/>
+      <stop offset="0.82" stop-color="#f6d488"/>
     </linearGradient>
+    <radialGradient id="sun" cx="0.8" cy="0.66" r="0.42">
+      <stop offset="0" stop-color="#fff1c9" stop-opacity="0.95"/>
+      <stop offset="0.25" stop-color="#f6d488" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#f6d488" stop-opacity="0"/>
+    </radialGradient>
     <linearGradient id="slope" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7a7468"/>
-      <stop offset="1" stop-color="#4c4a43"/>
+      <stop offset="0" stop-color="#2c3137"/>
+      <stop offset="1" stop-color="#16181b"/>
     </linearGradient>
-    <linearGradient id="slopeShade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#5f5a50"/>
-      <stop offset="1" stop-color="#34332e"/>
+    <linearGradient id="stone" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#f3ecdf"/>
+      <stop offset="0.6" stop-color="#bdb5a7"/>
+      <stop offset="1" stop-color="#8a8276"/>
     </linearGradient>
-    <radialGradient id="stone" cx="0.36" cy="0.32" r="0.75">
-      <stop offset="0" stop-color="#ece5d8"/>
-      <stop offset="0.55" stop-color="#b9b0a2"/>
-      <stop offset="1" stop-color="#6f675c"/>
-    </radialGradient>
-    <linearGradient id="water" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#5f9ea3"/>
-      <stop offset="1" stop-color="#8cc5c9"/>
-    </linearGradient>
-    <radialGradient id="sun" cx="0.78" cy="0.2" r="0.35">
-      <stop offset="0" stop-color="#f3d9a8" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#f3d9a8" stop-opacity="0"/>
-    </radialGradient>
   </defs>
   <rect width="1024" height="1024" fill="url(#sky)"/>
   <rect width="1024" height="1024" fill="url(#sun)"/>
-  <!-- distant ridge -->
-  <path d="M0 470 L170 360 L280 420 L420 300 L560 400 L700 330 L860 430 L1024 380 L1024 1024 L0 1024 Z" fill="#2f3533" opacity="0.9"/>
-  <!-- the mountainside -->
-  <path d="M0 330 L250 300 Q420 330 560 470 Q720 640 1024 760 L1024 1024 L0 1024 Z" fill="url(#slope)"/>
-  <path d="M0 520 Q300 520 520 640 Q760 770 1024 830 L1024 1024 L0 1024 Z" fill="url(#slopeShade)" opacity="0.75"/>
-  <!-- the stream -->
-  <path d="M0 870 Q260 820 520 868 T1024 860 L1024 1024 L0 1024 Z" fill="url(#water)"/>
-  <path d="M0 870 Q260 820 520 868 T1024 860" fill="none" stroke="#e8f3f2" stroke-width="10" stroke-linecap="round" opacity="0.55"/>
-  <!-- the boulder -->
-  <ellipse cx="300" cy="455" rx="150" ry="16" fill="#000" opacity="0.25"/>
-  <path d="M175 330 Q170 230 260 190 Q350 160 410 215 Q462 262 448 350 Q438 440 340 458 Q230 470 192 415 Q172 380 175 330 Z" fill="url(#stone)"/>
-  <!-- a fresh fracture running through the stone -->
-  <path d="M352 186 L338 236 L372 268 L344 318 L388 352 L366 410 L392 452" fill="none" stroke="#4a443b" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
-  <path d="M352 186 L338 236 L372 268 L344 318 L388 352 L366 410" fill="none" stroke="#fbf6ec" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.5" transform="translate(-6 0)"/>
-  <ellipse cx="250" cy="250" rx="46" ry="26" fill="#fffaf0" opacity="0.18" transform="rotate(-25 250 250)"/>
-  <!-- fragments → pebbles → sand, tumbling to the water -->
-  <g fill="#cfc7b8">
-    <path d="M540 520 l40 -20 l28 34 l-36 30 l-38 -14 z"/>
-    <path d="M640 610 l26 -10 l16 24 l-24 18 l-24 -10 z"/>
-    <circle cx="720" cy="680" r="15"/>
-    <circle cx="776" cy="726" r="10"/>
-    <circle cx="820" cy="760" r="7"/>
-    <circle cx="856" cy="786" r="5"/>
-    <circle cx="884" cy="806" r="3.5"/>
-    <circle cx="906" cy="822" r="2.5"/>
+  <!-- far ridges -->
+  <path d="M0 640 L120 560 L210 610 L330 500 L450 590 L560 520 L700 610 L820 560 L1024 650 L1024 1024 L0 1024Z" fill="#59616a" opacity="0.55"/>
+  <path d="M0 720 L150 650 L280 700 L420 640 L560 720 L700 680 L860 740 L1024 700 L1024 1024 L0 1024Z" fill="#3b4148" opacity="0.8"/>
+  <!-- the slope, falling away to the right -->
+  <path d="M0 520 L240 560 Q520 620 700 760 Q860 880 1024 930 L1024 1024 L0 1024Z" fill="url(#slope)"/>
+  <path d="M0 520 L240 560 Q520 620 700 760 Q860 880 1024 930" fill="none" stroke="#e2b06f" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
+  <!-- the boulder: faceted granite, poised at the lip -->
+  <g transform="translate(176 196) scale(4.2)">
+    <path d="M14 92 L9 70 L15 46 L31 26 L52 15 L72 19 L87 34 L93 56 L90 78 L84 92 Z" fill="url(#stone)" stroke="#0f1012" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="M31 26 L52 15 L72 19 L44 48 Z" fill="#fffaf0" opacity="0.55"/>
+    <path d="M44 48 L64 62 L93 56 L90 78 L84 92 L58 92 L64 62Z" fill="#0f1012" opacity="0.22"/>
+    <path d="M31 26 L44 48 L15 46 M44 48 L72 19 M44 48 L64 62 L93 56 M64 62 L58 92 M44 48 L30 92" fill="none" stroke="#0f1012" stroke-opacity="0.5" stroke-width="2.2" stroke-linejoin="round"/>
+  </g>
+  <!-- loose chips already on their way -->
+  <g fill="#bdb5a7" stroke="#0f1012" stroke-width="5" stroke-linejoin="round">
+    <path d="M600 640 l34 -12 l18 26 l-28 22 l-30 -12z"/>
+    <path d="M720 728 l22 -6 l12 18 l-18 14 l-20 -8z"/>
+    <path d="M818 806 l14 -4 l8 12 l-12 9 l-12 -6z"/>
   </g>
 </svg>
