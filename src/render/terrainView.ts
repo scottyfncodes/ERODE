@@ -1,319 +1,233 @@
-import { BufferAttribute, BufferGeometry, Color, Group, Mesh, PlaneGeometry, ShaderMaterial, UniformsLib, UniformsUtils, Vector3 } from 'three';
-import type { LevelData } from '../sim/levelData';
-import { fbm2 } from '../sim/noise';
-import { pathDistance, smoothstep } from '../sim/geom';
-import { createTerrainMaterial, shared } from './materials';
+import * as THREE from 'three';
+import { fbm2, ridged2 } from '../sim/noise';
+import { smoothstep } from '../sim/geom';
+import { LAKE, PADS, WORLD_HALF } from '../world/places';
+import type { Terrain } from '../world/terrain';
+import { NOISE_GLSL } from './shaderChunks';
+import { shared, TOON_GLSL } from './materials';
 
-const BASE = {
-  meadow: new Color(0.3, 0.52, 0.13),
-  meadowDry: new Color(0.58, 0.6, 0.2),
-  forest: new Color(0.1, 0.3, 0.12),
-  forestFloor: new Color(0.2, 0.32, 0.12),
-  scree: new Color(0.58, 0.48, 0.38),
-  bedrock: new Color(0.52, 0.48, 0.44),
-  soil: new Color(0.45, 0.3, 0.17),
-  streambed: new Color(0.35, 0.3, 0.24),
-  snow: new Color(0.95, 0.97, 1.0),
-  rock: new Color(0.5, 0.45, 0.42),
-  valley: new Color(0.34, 0.55, 0.16),
-  sand: new Color(0.98, 0.85, 0.56),
-  strata: new Color(0.62, 0.42, 0.32),
-  wet: new Color(0.2, 0.2, 0.17),
-  wetSand: new Color(0.72, 0.58, 0.38),
-  mud: new Color(0.3, 0.22, 0.14),
-  ash: new Color(0.3, 0.29, 0.28),
-  ice: new Color(0.72, 0.86, 0.95),
+/**
+ * The ground: snow that is a little blue in the shade and warm in the sun, wind-scoured rock on
+ * the steeps, packed roads, groomed pistes and the lake's grey ice. Drawn in chunks so the ones
+ * behind you are culled; a ring of far peaks closes the valley.
+ */
+
+export const snowUniforms = {
+  /** fresh snow: brightens and smooths the ground, fills in tracks */
+  fresh: { value: 0.5 },
+  sparkle: { value: 1 },
 };
-type Palette = typeof BASE;
-let C: Palette = BASE;
 
-/** The level's colours: the base palette with its environment's overrides. */
-function paletteFor(data: LevelData): Palette {
-  const out = {} as Palette;
-  for (const k of Object.keys(BASE) as (keyof Palette)[]) out[k] = BASE[k].clone();
-  const p = data.level.palette ?? {};
-  for (const [k, v] of Object.entries(p)) {
-    const key = k as keyof Palette;
-    if (out[key] && v) out[key].setRGB(v[0], v[1], v[2]);
-    if (key === 'meadow' && v) out.meadowDry.setRGB(v[0], v[1], v[2]).lerp(new Color(0.6, 0.58, 0.3), 0.35);
-    if (key === 'forest' && v) out.forestFloor.setRGB(v[0], v[1], v[2]).multiplyScalar(1.3);
+export function createSnowMaterial(): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uFresh = snowUniforms.fresh;
+    shader.uniforms.uSparkle = snowUniforms.sparkle;
+    shader.uniforms.uTime = shared.time;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${NOISE_GLSL}\nvarying vec3 vWP;\nuniform float uFresh;\nuniform float uSparkle;`)
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        vec2 wp = vWP.xz;
+        float snowness = smoothstep(0.82, 0.95, diffuseColor.r);
+        float d1 = eFbm2(wp * 0.05);
+        float d2 = eNoise2(wp * 0.6);
+        float rockVar = (0.78 + 0.4 * d1) * (0.9 + 0.2 * d2);
+        float snowVar = 0.965 + 0.05 * d1 + 0.02 * d2;
+        diffuseColor.rgb *= mix(rockVar, snowVar, snowness);
+        // wind ripples on the open snow
+        float rip = sin(wp.x * 0.9 + wp.y * 0.35 + eNoise2(wp * 0.15) * 6.0);
+        diffuseColor.rgb *= 1.0 - snowness * (1.0 - uFresh) * 0.025 * rip;
+        `,
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        float sn = smoothstep(0.82, 0.95, vColor.r);
+        float th = eFbm2(vWP.xz * 0.35) * 0.5 + eNoise2(vWP.xz * 2.0) * 0.12;
+        normal = ePerturbNormal(-vViewPosition, normal, th, mix(0.35, 0.08, sn));
+        `,
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        `${TOON_GLSL}
+        {
+          // glints: a few crystals catch the light as you move
+          float sn = smoothstep(0.82, 0.95, vColor.r);
+          vec3 cell = floor(vWP * 3.0);
+          float h = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+          vec3 v = normalize(vViewPosition);
+          float g = step(0.93, h) * step(0.6, fract(h * 91.0 + dot(v, vec3(3.1, 1.7, 2.3)) * 2.0));
+          // a crystal is a tiny point inside its cell, not the whole cell
+          g *= step(length(fract(vWP.xz * 3.0) - vec2(0.5)), 0.06);
+          float dist = length(vViewPosition);
+          outgoingLight += vec3(g) * sn * uSparkle * smoothstep(60.0, 8.0, dist) * 0.9;
+        }
+        #include <opaque_fragment>`,
+      );
+  };
+  m.customProgramCacheKey = () => 'snow-terrain';
+  return m;
+}
+
+const SNOW = new THREE.Color(0.95, 0.965, 0.99);
+const SHADE = new THREE.Color(0.86, 0.9, 0.97);
+const ROCK = new THREE.Color(0.38, 0.37, 0.38);
+const ROCK_WARM = new THREE.Color(0.47, 0.41, 0.36);
+const ROAD = new THREE.Color(0.8, 0.77, 0.72);
+const TRACK = new THREE.Color(0.87, 0.85, 0.82);
+const PISTE = new THREE.Color(0.985, 0.99, 1);
+const ICE = new THREE.Color(0.62, 0.77, 0.86);
+const YARD = new THREE.Color(0.86, 0.84, 0.8);
+
+function groundColor(t: Terrain, x: number, z: number, nx: number, ny: number, nz: number, out: THREE.Color): THREE.Color {
+  const slope = Math.acos(Math.min(1, ny));
+  out.copy(SNOW);
+  // shade side
+  out.lerp(SHADE, Math.max(0, -nz * 0.9 + nx * 0.3));
+  // rock on the steeps; ridged noise decides where snow clings
+  const cling = fbm2(x / 30, z / 30, 2, 31) * 0.12;
+  const rock = smoothstep(0.62 + cling, 0.82 + cling, slope);
+  out.lerp(fbm2(x / 80, z / 80, 2, 4) > 0 ? ROCK_WARM : ROCK, rock);
+  const ld = Math.hypot(x - LAKE.x, z - LAKE.z);
+  if (ld < LAKE.r) out.lerp(ICE, smoothstep(LAKE.r, LAKE.r - 14, ld) * (0.75 + fbm2(x / 20, z / 20, 2, 6) * 0.25));
+  for (const p of PADS) {
+    const d = Math.hypot(x - p.x, z - p.z);
+    if (d < p.r) out.lerp(YARD, smoothstep(p.r, p.r * 0.6, d) * 0.55);
+  }
+  const r = t.onRoute(x, z, 1.5);
+  if (r) {
+    const k = smoothstep(r.route.width + 1.5, r.route.width * 0.4, r.d);
+    out.lerp(r.route.kind === 'road' ? ROAD : r.route.kind === 'track' ? TRACK : PISTE, k);
   }
   return out;
 }
 
-function surfaceColor(kind: string, x: number, z: number, out: Color): Color {
-  const n = fbm2(x / 9, z / 9, 2, 5) * 0.5 + 0.5;
-  switch (kind) {
-    case 'meadow':
-      return out.copy(C.meadow).lerp(C.meadowDry, smoothstep(0.35, 0.8, n));
-    case 'scree':
-      return out.copy(C.scree).lerp(C.soil, n * 0.25);
-    case 'bedrock':
-      return out.copy(C.bedrock).multiplyScalar(0.88 + n * 0.24);
-    case 'soil':
-      return out.copy(C.soil);
-    case 'streambed':
-      return out.copy(C.streambed);
-    case 'snow':
-      return out.copy(C.snow);
-    case 'sand':
-      return out.copy(C.sand).multiplyScalar(0.94 + n * 0.1);
-    case 'mud':
-      return out.copy(C.mud).multiplyScalar(0.85 + n * 0.25);
-    case 'ash':
-      return out.copy(C.ash).multiplyScalar(0.85 + n * 0.3);
-    case 'ice':
-      return out.copy(C.ice).lerp(C.snow, n * 0.4);
-    default:
-      return out.copy(C.meadow);
-  }
-}
-
-const CHUNK = 80;
-
-export function buildTerrain(data: LevelData, withFar: boolean): Group {
-  const group = new Group();
-  C = paletteFor(data);
-  const { grid, terrain } = data;
-  const mat = createTerrainMaterial();
-  const b = terrain.spec.bounds;
-  const snowLine = terrain.spec.snowLine;
-  const sea = data.level.sea;
-
-  // --- play area: colour from the sampled grid (fast), split into chunks for culling ---
-  const { nx, nz, heights, cell } = grid;
-  const H = (i: number, j: number) => heights[Math.max(0, Math.min(nz - 1, j)) * nx + Math.max(0, Math.min(nx - 1, i))];
-  const col = new Float32Array(nx * nz * 3);
-  const nrm = new Float32Array(nx * nz * 3);
-  const c = new Color();
-  const stra = new Color();
-  for (let j = 0; j < nz; j++)
-    for (let i = 0; i < nx; i++) {
-      const k = j * nx + i;
-      const x = grid.x0 + i * cell;
-      const z = grid.z0 + j * cell;
-      const y = heights[k];
-      const dx = (H(i + 1, j) - H(i - 1, j)) / (2 * cell);
-      const dz = (H(i, j + 1) - H(i, j - 1)) / (2 * cell);
-      const l = Math.hypot(dx, 1, dz);
-      const ny = 1 / l;
-      nrm[k * 3] = -dx / l;
-      nrm[k * 3 + 1] = ny;
-      nrm[k * 3 + 2] = -dz / l;
-      surfaceColor(terrain.surface(x, z, ny, y), x, z, c);
-      // exposed faces show their geology: layered strata, warmer and bolder in the gorge
-      const steep = smoothstep(0.86, 0.6, ny);
-      if (steep > 0) {
-        const gorge = sea ? smoothstep(440, 480, z) * (1 - smoothstep(640, 720, z)) : data.level.palette?.strata ? 0.6 : 0;
-        const band = Math.sin(y * (1.1 + gorge * 0.6) + fbm2(x / 20, z / 20, 2, 33) * 3);
-        stra.copy(C.rock).lerp(C.strata, 0.25 + gorge * 0.6).multiplyScalar(0.78 + 0.24 * band + gorge * 0.08 * Math.sign(band));
-        c.lerp(stra, steep * 0.8);
-      }
-      // wet stone and dark earth along running water
-      for (const w of data.water) {
-        const pl = w.pl;
-        if (x < pl.minX - 9 || x > pl.maxX + 9 || z < pl.minZ - 9 || z > pl.maxZ + 9) continue;
-        const d = pathDistance(pl, x, z).d;
-        if (d < 9) c.lerp(C.wet, (1 - smoothstep(w.spec.width * 0.5, 9, d)) * 0.55);
-      }
-      const curv = (H(i - 2, j) + H(i + 2, j) + H(i, j - 2) + H(i, j + 2)) / 4 - y;
-      c.multiplyScalar(1 - Math.max(-0.12, Math.min(0.22, curv * 0.12)));
-      if (y > snowLine - 10) c.lerp(C.snow, smoothstep(snowLine - 10, snowLine + 6, y + fbm2(x / 12, z / 12, 2, 9) * 6) * (ny > 0.72 ? 1 : 0.35));
-      if (sea && y < sea.level + 0.8) c.lerp(C.wetSand, smoothstep(sea.level + 0.8, sea.level - 0.5, y));
-      col[k * 3] = c.r;
-      col[k * 3 + 1] = c.g;
-      col[k * 3 + 2] = c.b;
+export function buildTerrain(t: Terrain): THREE.Group {
+  const group = new THREE.Group();
+  const material = createSnowMaterial();
+  const n = t.n;
+  const chunks = 8;
+  const per = (n - 1) / chunks;
+  const col = new THREE.Color();
+  // normals from the grid
+  const normals = new Float32Array(n * n * 3);
+  for (let j = 0; j < n; j++)
+    for (let i = 0; i < n; i++) {
+      const H = t.heights;
+      const l = H[j * n + Math.max(0, i - 1)];
+      const r = H[j * n + Math.min(n - 1, i + 1)];
+      const u = H[Math.max(0, j - 1) * n + i];
+      const d = H[Math.min(n - 1, j + 1) * n + i];
+      const nx = l - r;
+      const nz = u - d;
+      const ny = 4 * t.cell;
+      const len = Math.hypot(nx, ny, nz);
+      normals.set([nx / len, ny / len, nz / len], (j * n + i) * 3);
     }
-  const rowsPer = Math.round(CHUNK / cell);
-  for (let j0 = 0; j0 < nz - 1; j0 += rowsPer) {
-    const j1 = Math.min(nz - 1, j0 + rowsPer);
-    const rows = j1 - j0 + 1;
-    const pos = new Float32Array(rows * nx * 3);
-    const cc = new Float32Array(rows * nx * 3);
-    const nn = new Float32Array(rows * nx * 3);
-    for (let r = 0; r < rows; r++)
-      for (let i = 0; i < nx; i++) {
-        const k = (j0 + r) * nx + i;
-        const o = (r * nx + i) * 3;
-        pos[o] = grid.x0 + i * cell;
-        pos[o + 1] = heights[k];
-        pos[o + 2] = grid.z0 + (j0 + r) * cell;
-        cc.set(col.subarray(k * 3, k * 3 + 3), o);
-        nn.set(nrm.subarray(k * 3, k * 3 + 3), o);
-      }
-    const idx = new Uint32Array((rows - 1) * (nx - 1) * 6);
-    let p = 0;
-    for (let r = 0; r < rows - 1; r++)
-      for (let i = 0; i < nx - 1; i++) {
-        const a = r * nx + i,
-          bb = a + 1,
-          c2 = a + nx,
-          d = c2 + 1;
-        idx[p++] = a;
-        idx[p++] = c2;
-        idx[p++] = bb;
-        idx[p++] = bb;
-        idx[p++] = c2;
-        idx[p++] = d;
-      }
-    const geo = new BufferGeometry();
-    geo.setAttribute('position', new BufferAttribute(pos, 3));
-    geo.setAttribute('color', new BufferAttribute(cc, 3));
-    geo.setAttribute('normal', new BufferAttribute(nn, 3));
-    geo.setIndex(new BufferAttribute(idx, 1));
-    geo.computeBoundingSphere();
-    const mesh = new Mesh(geo, mat);
-    mesh.receiveShadow = true;
-    mesh.name = 'terrain';
-    group.add(mesh);
-  }
-
-  // --- the wider world: mountains around, the valley and coast below ---
-  if (withFar) {
-    const n = 170;
-    const cx = (b.x[0] + b.x[1]) / 2;
-    const cz = (b.z[0] + b.z[1]) / 2;
-    const R = 1500;
-    const pos = new Float32Array(n * n * 3);
-    const fcol = new Float32Array(n * n * 3);
-    const warp = (t: number) => Math.sign(t) * Math.pow(Math.abs(t), 1.7);
-    for (let j = 0; j < n; j++)
-      for (let i = 0; i < n; i++) {
-        const k = j * n + i;
-        const x = cx + warp((i / (n - 1)) * 2 - 1) * R;
-        const z = cz + warp((j / (n - 1)) * 2 - 1) * R;
-        let y = terrain.height(x, z);
-        const inside = x > b.x[0] + 1 && x < b.x[1] - 1 && z > b.z[0] + 1 && z < b.z[1] - 1;
-        if (inside) y -= 6;
-        pos[k * 3] = x;
-        pos[k * 3 + 1] = y;
-        pos[k * 3 + 2] = z;
-        const nm = terrain.normal(x, z);
-        const nv = fbm2(x / 40, z / 40, 3, 17) * 0.5 + 0.5;
-        const snowy = smoothstep(snowLine - 10, snowLine + 14, y + nv * 16);
-        const rocky = smoothstep(0.66, 0.48, nm[1]);
-        if (y < 3) c.copy(C.valley).lerp(C.meadowDry, nv * 0.7);
-        else c.copy(C.forest).lerp(C.meadow, smoothstep(0.5, 0.75, nv) * 0.7);
-        c.lerp(C.meadowDry, smoothstep(snowLine - 100, snowLine - 60, y) * 0.6);
-        c.lerp(C.rock, Math.max(rocky, smoothstep(snowLine - 70, snowLine - 20, y) * 0.7));
-        c.lerp(C.snow, snowy * (nm[1] > 0.6 ? 1 : 0.45));
-        if (sea && y < sea.level + 1.5) c.copy(C.sand).lerp(C.wetSand, smoothstep(sea.level + 1.5, sea.level - 1, y));
-        fcol[k * 3] = c.r;
-        fcol[k * 3 + 1] = c.g;
-        fcol[k * 3 + 2] = c.b;
-      }
-    const idx = new Uint32Array((n - 1) * (n - 1) * 6);
-    let p = 0;
-    for (let j = 0; j < n - 1; j++)
-      for (let i = 0; i < n - 1; i++) {
-        const a = j * n + i,
-          bb = a + 1,
-          c2 = a + n,
-          d = c2 + 1;
-        idx[p++] = a;
-        idx[p++] = c2;
-        idx[p++] = bb;
-        idx[p++] = bb;
-        idx[p++] = c2;
-        idx[p++] = d;
-      }
-    const geo = new BufferGeometry();
-    geo.setAttribute('position', new BufferAttribute(pos, 3));
-    geo.setAttribute('color', new BufferAttribute(fcol, 3));
-    geo.setIndex(new BufferAttribute(idx, 1));
-    geo.computeVertexNormals();
-    const far = new Mesh(geo, mat);
-    far.receiveShadow = true;
-    far.name = 'far-terrain';
-    group.add(far);
-  }
-
-  if (sea) group.add(buildSea(data, sea.level));
+  for (let cj = 0; cj < chunks; cj++)
+    for (let ci = 0; ci < chunks; ci++) {
+      const i0 = Math.round(ci * per);
+      const j0 = Math.round(cj * per);
+      const i1 = Math.round((ci + 1) * per);
+      const j1 = Math.round((cj + 1) * per);
+      const w = i1 - i0 + 1;
+      const h = j1 - j0 + 1;
+      const pos = new Float32Array(w * h * 3);
+      const nor = new Float32Array(w * h * 3);
+      const cols = new Float32Array(w * h * 3);
+      for (let j = 0; j < h; j++)
+        for (let i = 0; i < w; i++) {
+          const gi = i0 + i;
+          const gj = j0 + j;
+          const k = (j * w + i) * 3;
+          const x = -WORLD_HALF + gi * t.cell;
+          const z = -WORLD_HALF + gj * t.cell;
+          pos[k] = x;
+          pos[k + 1] = t.heights[gj * n + gi];
+          pos[k + 2] = z;
+          const g = (gj * n + gi) * 3;
+          nor[k] = normals[g];
+          nor[k + 1] = normals[g + 1];
+          nor[k + 2] = normals[g + 2];
+          groundColor(t, x, z, nor[k], nor[k + 1], nor[k + 2], col);
+          cols[k] = col.r;
+          cols[k + 1] = col.g;
+          cols[k + 2] = col.b;
+        }
+      const idx: number[] = [];
+      for (let j = 0; j < h - 1; j++)
+        for (let i = 0; i < w - 1; i++) {
+          const a = j * w + i;
+          const b = a + 1;
+          const c = a + w;
+          const d = c + 1;
+          // same split as Terrain.height: a-c-b, c-d-b
+          idx.push(a, c, b, c, d, b);
+        }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      geo.setIndex(idx);
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+  group.add(buildBackdrop(t));
   return group;
 }
 
-/** The sea: rolling swell, foam where it breaks on the beach. */
-function buildSea(data: LevelData, level: number): Mesh {
-  const W = 2400,
-    D = 1600;
-  const geo = new PlaneGeometry(W, D, 220, 160);
-  geo.rotateX(-Math.PI / 2);
-  const z0 = data.level.sea!.shoreZ - 60;
-  geo.translate(0, level, z0 + D / 2);
-  // depth below the waterline per vertex, for foam and colour
-  const p = geo.getAttribute('position');
-  const depth = new Float32Array(p.count);
-  for (let i = 0; i < p.count; i++) depth[i] = level - data.terrain.height(p.getX(i), p.getZ(i));
-  geo.setAttribute('aDepth', new BufferAttribute(depth, 1));
-  const mat = new ShaderMaterial({
-    uniforms: UniformsUtils.merge([
-      UniformsLib.fog,
-      {
-        uTime: { value: 0 },
-        uSun: { value: new Vector3(0.4, 0.5, 0.75).normalize() },
-        uDeep: { value: new Color(0.03, 0.16, 0.22) },
-        uShallow: { value: new Color(0.18, 0.46, 0.46) },
-        uSky: { value: new Color(0.66, 0.76, 0.84) },
-      },
-    ]),
-    vertexShader: /* glsl */ `
-      attribute float aDepth;
-      uniform float uTime;
-      varying float vDepth;
-      varying vec3 vWorld;
-      varying float vCrest;
-      #include <fog_pars_vertex>
-      void main() {
-        vDepth = aDepth;
-        vec3 p = position;
-        // swell rolling in toward the shore (-z)
-        float ph = p.z * 0.09 + uTime * 1.1;
-        float sw = sin(ph) * 0.35 + sin(p.z * 0.21 + p.x * 0.05 + uTime * 1.7) * 0.12;
-        float shoal = clamp(aDepth / 4.0, 0.0, 1.0);
-        p.y += sw * (0.4 + shoal);
-        vCrest = smoothstep(0.75, 1.0, sin(ph));
-        vec4 wp = modelMatrix * vec4(p, 1.0);
-        vWorld = wp.xyz;
-        vec4 mvPosition = viewMatrix * wp;
-        gl_Position = projectionMatrix * mvPosition;
-        #include <fog_vertex>
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform float uTime; uniform vec3 uSun; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky;
-      varying float vDepth; varying vec3 vWorld; varying float vCrest;
-      #include <fog_pars_fragment>
-      float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float n(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f*f*(3.0-2.0*f);
-        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-      void main() {
-        if (vDepth < -0.4) discard;
-        vec2 q = vWorld.xz * 0.12 + vec2(0.0, uTime * 0.25);
-        float e = 0.2;
-        float w0 = n(q) + n(q * 2.3) * 0.5;
-        vec3 N = normalize(vec3(-(n(q + vec2(e, 0.0)) - n(q)) * 2.0, 1.0, -(n(q + vec2(0.0, e)) - n(q)) * 2.0));
-        vec3 V = normalize(cameraPosition - vWorld);
-        float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
-        vec3 col = mix(uShallow, uDeep, clamp(vDepth / 6.0, 0.0, 1.0));
-        col = mix(col, uSky, 0.2 + fres * 0.55);
-        vec3 H = normalize(uSun + V);
-        col += vec3(1.0, 0.9, 0.7) * pow(max(dot(N, H), 0.0), 140.0) * 1.4;
-        // surf: foam on the breaking line and the swash
-        float surf = smoothstep(1.4, 0.0, vDepth) * (0.5 + 0.5 * sin(vWorld.z * 0.6 - uTime * 2.4 + w0 * 2.0));
-        float foam = clamp(surf + vCrest * smoothstep(5.0, 1.0, vDepth) * 0.6, 0.0, 1.0) * smoothstep(0.35, 0.6, w0 * 0.7 + 0.2);
-        col = mix(col, vec3(0.95, 0.97, 0.97), foam);
-        float alpha = mix(0.55, 0.95, clamp(vDepth / 2.0, 0.0, 1.0)) + foam * 0.3;
-        gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0) * smoothstep(-0.4, 0.05, vDepth));
-        #include <fog_fragment>
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    fog: true,
-  });
-  mat.uniforms.uTime = shared.time;
-  const mesh = new Mesh(geo, mat);
-  mesh.renderOrder = 2;
-  mesh.name = 'sea';
-  return mesh;
+/** Far peaks all round: big exaggerated silhouettes past the edge of the valley. */
+function buildBackdrop(t: Terrain): THREE.Mesh {
+  const seg = 160;
+  const rings = 7;
+  const pos: number[] = [];
+  const cols: number[] = [];
+  const idx: number[] = [];
+  const c = new THREE.Color();
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s <= seg; s++) {
+      const a = (s / seg) * Math.PI * 2;
+      // the first ring follows the square edge of the valley, the rest spread out round it
+      const edge = (WORLD_HALF - 2) / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)));
+      const rad = edge + r * r * 70 + r * 120;
+      const x = Math.cos(a) * rad;
+      const z = Math.sin(a) * rad;
+      // squarer near the valley edge so it meets the grid
+      const k = r / (rings - 1);
+      const north = smoothstep(400, -900, z);
+      const peaks = ridged2(Math.cos(a) * 3.2 + 9, Math.sin(a) * 3.2 + r * 0.35, 4, 17);
+      let y = 120 + north * 300 + peaks * (380 + north * 520) * smoothstep(0, 0.45, k);
+      if (r === 0) y = t.height(x, z) - 1;
+      else if (r === 1) y = Math.max(y, t.height(Math.cos(a) * edge, Math.sin(a) * edge) + 30);
+      y *= 1 - smoothstep(0.85, 1, k) * 0.2;
+      pos.push(x, y, z);
+      const snowLine = 260 + fbm2(x / 200, z / 200, 2, 3) * 60;
+      c.setRGB(0.55, 0.6, 0.66).lerp(new THREE.Color(0.95, 0.96, 0.99), smoothstep(snowLine - 60, snowLine + 60, y));
+      cols.push(c.r, c.g, c.b);
+    }
+  }
+  for (let r = 0; r < rings - 1; r++)
+    for (let s = 0; s < seg; s++) {
+      const a = r * (seg + 1) + s;
+      const b = a + 1;
+      const cc = a + seg + 1;
+      const d = cc + 1;
+      idx.push(a, b, cc, b, d, cc);
+    }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const m = new THREE.Mesh(geo, mat);
+  return m;
 }
+

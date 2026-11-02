@@ -1,78 +1,61 @@
-// Drive a real run in a browser and screenshot it.
-// Usage: node scripts/play.mjs <url> <outprefix> [mobile] ; env LEVEL, SIDES (e.g. "left,right,left"), SHOTS (seconds between shots)
+// Drive the game in a real browser and screenshot the key scenes (QA).
+// Usage: node scripts/play.mjs <url> <outprefix> [portrait]
+// Uses the window.patrol debug handle to jump between places; controls are real key and touch input.
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
-const [url, out, mobile] = process.argv.slice(2);
+const [url = 'http://localhost:5173/', out = 'out/patrol', portrait] = process.argv.slice(2);
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await browser.newContext(mobile ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true } : { viewport: { width: Number(process.env.W ?? 1280), height: Number(process.env.H ?? 720) } });
+const size = portrait ? { width: 390, height: 844 } : { width: 844, height: 390 };
+const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
 const page = await ctx.newPage();
-page.setDefaultTimeout(90000);
 const logs = [];
-page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
 await page.goto(url);
-await page.waitForFunction(() => window.rockslide, null, { timeout: 120000 });
-await page.waitForTimeout(1500);
+await page.waitForFunction(() => window.patrol, null, { timeout: 120000 });
+await page.evaluate(() => localStorage.clear());
+await page.reload();
+await page.waitForFunction(() => window.patrol, null, { timeout: 120000 });
+await page.waitForTimeout(1000);
 await page.screenshot({ path: `${out}-0title.png` });
-if (process.env.LEVEL) {
-  await page.evaluate(() => window.rockslide.unlockAll());
-  await page.evaluate((id) => window.rockslide.load(id), process.env.LEVEL);
-  await page.waitForTimeout(1500);
-} else await page.evaluate(() => window.rockslide.begin());
-await page.waitForTimeout(1500);
-await page.screenshot({ path: `${out}-1ready.png` });
-await page.evaluate(() => window.rockslide.release());
-const FAST = !!process.env.FAST;
-if (FAST) await page.evaluate(() => window.rockslide.fast(true));
-let lastSeg = '';
-let segShotAt = 0;
-const sides = (process.env.SIDES ?? 'left,right,left').split(',');
-let shot = 0;
-let lastFrom = '';
-let k = 0;
-const t0 = Date.now();
-while (Date.now() - t0 < Number(process.env.MAXMS ?? 240000)) {
-  const st = await page.evaluate(() => {
-    const r = window.rockslide;
-    const d = r.decision;
-    return { state: r.state, dec: d && { from: d.from, chosen: d.chosen, t: d.timeLeft }, cam: r.camInfo() };
-  });
-  if (st.state !== 'run') break;
-  if (st.dec && st.dec.from !== lastFrom) {
-    lastFrom = st.dec.from;
-    if (FAST) await page.evaluate(() => window.rockslide.fast(false));
-    await page.waitForTimeout(400);
-    await page.screenshot({ path: `${out}-d${k}a.png` });
-    await page.evaluate((s) => window.rockslide.choose(s), sides[k % sides.length]);
-    await page.waitForTimeout(300);
-    await page.screenshot({ path: `${out}-d${k}b.png` });
-    k++;
-    if (FAST) await page.evaluate(() => window.rockslide.fast(true));
-  }
-  if (st.cam.seg && st.cam.seg !== lastSeg) {
-    lastSeg = st.cam.seg;
-    segShotAt = Date.now() + Number(process.env.SEGDELAY ?? 6000);
-  }
-  if (segShotAt && Date.now() > segShotAt) {
-    segShotAt = 0;
-    await page.screenshot({ path: `${out}-s-${lastSeg}.png` });
-    console.log('seg', lastSeg, JSON.stringify(st.cam), JSON.stringify(await page.evaluate(() => window.rockslide.renderInfo())));
-  }
-  if (Date.now() - t0 > (shot + 1) * Number(process.env.SHOTS ?? 9000)) {
-    shot++;
-    await page.screenshot({ path: `${out}-r${String(shot).padStart(2, '0')}.png` });
-    console.log('shot', shot, JSON.stringify(st.cam), JSON.stringify(await page.evaluate(() => window.rockslide.renderInfo())));
-  }
-  await page.waitForTimeout(150);
-}
-await page.screenshot({ path: `${out}-8end.png` });
-await page.waitForTimeout(5000);
-await page.screenshot({ path: `${out}-8recap.png` });
-await page.evaluate(() => window.rockslide.results());
-await page.waitForTimeout(3500);
-await page.screenshot({ path: `${out}-9results.png` });
-const r = await page.evaluate(() => { const r = window.rockslide.result; return r && { reason: r.reason, total: r.score.total, route: r.route.join('>'), dur: r.duration }; });
-console.log('result', JSON.stringify(r), 'real s', ((Date.now() - t0) / 1000).toFixed(0));
-console.log(logs.slice(0, 30).join('\n'));
+await page.click('[data-a=new]');
+await page.waitForTimeout(1000);
+const P = (f, a) => page.evaluate(f, a);
+const hold = async (k, ms) => {
+  await page.keyboard.down(k);
+  await page.waitForTimeout(ms);
+  await page.keyboard.up(k);
+};
+const shot = async (name, at, wait = 1200) => {
+  if (at) await P(at.f, at.a);
+  await page.waitForTimeout(wait);
+  await page.screenshot({ path: `${out}-${name}.png` });
+};
+await shot('1lodge');
+await shot('2yard', { f: () => window.patrol.teleport(10, 236, 0.3) });
+// the board
+await P(() => window.patrol.teleport(-28, 247.8, 0));
+await hold('KeyE', 100);
+await shot('3board', null, 600);
+await P(() => window.patrol.closePanel());
+// the sled up the pass road
+await P(() => window.patrol.sledTo(-150, -60));
+await P(() => window.patrol.teleport(-150, -58, 0));
+await page.waitForTimeout(500);
+await hold('KeyE', 100);
+await page.keyboard.down('KeyW');
+await shot('4sled', null, 3000);
+await page.keyboard.up('KeyW');
+await hold('KeyX', 100);
+// recon from the helicopter
+await P(() => window.patrol.complete('rounds'));
+await P(() => window.patrol.accept('survey'));
+await P(() => window.patrol.teleport(-20.5, 292, Math.PI / 2));
+await page.waitForTimeout(500);
+await hold('KeyE', 100);
+await P(() => window.patrol.heliTo(-175, -335, 380));
+await P(() => window.patrol.camYaw(0));
+await shot('5recon', null, 2500);
+console.log(JSON.stringify(await P(() => window.patrol.state())));
+console.log(logs.join('\n') || 'no page errors');
 await browser.close();

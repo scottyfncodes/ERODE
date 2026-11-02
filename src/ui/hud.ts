@@ -1,0 +1,309 @@
+import type { Input } from '../core/input';
+
+/** A handful of drawn glyphs; nothing from an icon font. */
+export const ICON = {
+  map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
+  paw: '<svg viewBox="0 0 24 24" fill="currentColor"><ellipse cx="12" cy="16" rx="5" ry="4"/><circle cx="6" cy="10" r="2.2"/><circle cx="18" cy="10" r="2.2"/><circle cx="9.3" cy="6" r="2.2"/><circle cx="14.7" cy="6" r="2.2"/></svg>',
+  off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h5v16h-5"/><path d="M10 8l-4 4 4 4M6 12h9"/></svg>',
+  skis: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 3l12 17M10 3l9 13"/><path d="M15 20h4"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+};
+
+/** Weather glyphs for the forecast, drawn as instruments would. */
+export function skyGlyph(sky: string): string {
+  const sun = '<circle cx="12" cy="12" r="4.5" fill="#f2b33d"/><g stroke="#f2b33d" stroke-width="2" stroke-linecap="round"><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></g>';
+  const cloud = (c: string, dy = 0) => `<path transform="translate(0 ${dy})" d="M7 18h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.6A3.3 3.3 0 0 0 7 18z" fill="${c}"/>`;
+  const flakes = '<g fill="#eef2f5"><circle cx="8" cy="21" r="1.2"/><circle cx="12.5" cy="22.5" r="1.2"/><circle cx="17" cy="21" r="1.2"/></g>';
+  const inner = sky === 'clear' ? sun : sky === 'cloud' ? cloud('#c9d3dc') : sky === 'snow' ? cloud('#c9d3dc', -3) + flakes : cloud('#8c98a4', -3) + flakes + '<path d="M3 10h5M2 14h4" stroke="#eef2f5" stroke-width="1.8" stroke-linecap="round"/>';
+  return `<svg viewBox="0 0 24 24">${inner}</svg>`;
+}
+
+export interface TaskInfo {
+  family: string;
+  title: string;
+  objective: string;
+  steps: number;
+  current: number;
+}
+
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+};
+
+export class Hud {
+  readonly root: HTMLElement;
+  private task: HTMLElement;
+  private compass: HTMLElement;
+  private tape: HTMLElement;
+  private wp: HTMLElement;
+  private wpDist: HTMLElement;
+  private time: HTMLElement;
+  private wx: HTMLElement;
+  private dangerLvl: HTMLElement;
+  private dangerTxt: HTMLElement;
+  private fundsEl: HTMLElement;
+  private act: HTMLButtonElement;
+  private actLabel: HTMLElement;
+  private ringCircle: SVGCircleElement;
+  readonly chips: Record<'off' | 'skis' | 'koda' | 'map', HTMLButtonElement>;
+  readonly pause: HTMLButtonElement;
+  private lever: HTMLElement;
+  private speedo: HTMLElement;
+  private radioEl: HTMLElement;
+  private radioT = 0;
+  private toastEl: HTMLElement;
+  private toastT = 0;
+  private alertEl: HTMLElement;
+  private scanEl: HTMLElement;
+  private altEl: HTMLElement;
+  private hintEl: HTMLElement;
+  private lastTask = '';
+  private queue: { who: string; text: string; secs: number }[] = [];
+
+  constructor(parent: HTMLElement, input: Input) {
+    this.root = el('div', 'hud hidden');
+    parent.appendChild(this.root);
+    this.task = el('div', 'task housing');
+    this.compass = el('div', 'compass housing');
+    this.tape = el('div', 'tape');
+    this.wp = el('div', 'wp');
+    this.compass.append(this.tape, el('div', 'center'), this.wp);
+    this.wpDist = el('div', 'wp-dist housing');
+    const cond = el('div', 'cond');
+    const tbox = el('div', 'box housing wx');
+    this.time = el('div', 'big');
+    this.wx = el('div', 'small');
+    tbox.append(this.time, this.wx);
+    const dbox = el('div', 'box housing');
+    const drow = el('div', 'danger');
+    this.dangerLvl = el('div', 'lvl d3', '3');
+    this.dangerTxt = el('div', 'small');
+    const dcol = el('div');
+    dcol.append(el('div', 'label', 'Avalanche'), this.dangerTxt);
+    drow.append(this.dangerLvl, dcol);
+    dbox.append(drow);
+    const fbox = el('div', 'box housing');
+    this.fundsEl = el('div', 'big', '0');
+    fbox.append(this.fundsEl, el('div', 'small', 'funds'));
+    this.pause = el('button', 'iconbtn', ICON.pause) as HTMLButtonElement;
+    this.pause.setAttribute('aria-label', 'Pause');
+    cond.append(tbox, dbox, fbox, this.pause);
+
+    const actions = el('div', 'actions');
+    const side = el('div', 'side');
+    const chip = (icon: string, label: string) => {
+      const b = el('button', 'chip', `${icon}<span>${label}</span>`) as HTMLButtonElement;
+      return b;
+    };
+    this.chips = { koda: chip(ICON.paw, 'Koda'), skis: chip(ICON.skis, 'Skis on'), off: chip(ICON.off, 'Get off'), map: chip(ICON.map, 'Map') };
+    side.append(this.chips.map, this.chips.koda, this.chips.skis, this.chips.off);
+    this.lever = el('div', 'lever hidden');
+    const up = el('button', 'chip', `${ICON.up}<span>Climb</span>`);
+    const down = el('button', 'chip', `${ICON.down}<span>Descend</span>`);
+    this.lever.append(up, down);
+    input.bind(up, 'up');
+    input.bind(down, 'down');
+    this.act = el('button', 'act') as HTMLButtonElement;
+    this.actLabel = el('span');
+    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    ring.setAttribute('viewBox', '0 0 100 100');
+    ring.classList.add('ring');
+    this.ringCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    this.ringCircle.setAttribute('cx', '50');
+    this.ringCircle.setAttribute('cy', '50');
+    this.ringCircle.setAttribute('r', '46');
+    this.ringCircle.setAttribute('stroke-dasharray', `${Math.PI * 92}`);
+    this.ringCircle.setAttribute('stroke-dashoffset', `${Math.PI * 92}`);
+    ring.appendChild(this.ringCircle);
+    this.act.append(ring, this.actLabel);
+    input.bind(this.act, 'action');
+    actions.append(side, this.lever, this.act);
+
+    this.speedo = el('div', 'speedo housing hidden');
+    this.radioEl = el('div', 'radio housing');
+    this.toastEl = el('div', 'toast housing');
+    this.alertEl = el('div', 'alert housing');
+    this.scanEl = el('div', 'scan', '<div class="ret"></div><div class="bar housing"><div class="l"></div><div class="p"><i></i></div></div>');
+    this.altEl = el('div', 'alt housing hidden');
+    this.hintEl = el('div', 'hint', '<div class="ghost"></div><div>Drag on the left to move<br/>Drag on the right to look</div>');
+    this.root.append(this.task, this.compass, this.wpDist, cond, actions, this.speedo, this.radioEl, this.toastEl, this.alertEl, this.scanEl, this.altEl, this.hintEl);
+    // compass ticks
+    for (let d = 0; d < 360; d += 15) {
+      const t = el('div', d % 45 === 0 ? 'tick big' : 'tick');
+      t.dataset.deg = String(d);
+      this.tape.appendChild(t);
+      if (d % 90 === 0) {
+        const c = el('div', `card${d === 0 ? ' n' : ''}`, ['N', 'E', 'S', 'W'][d / 90]);
+        c.dataset.deg = String(d);
+        this.tape.appendChild(c);
+      }
+    }
+  }
+
+  show(on: boolean) {
+    this.root.classList.toggle('hidden', !on);
+  }
+
+  setTask(t: TaskInfo | null, freeHint: string) {
+    const key = t ? `${t.title}|${t.objective}|${t.current}` : `free|${freeHint}`;
+    if (key === this.lastTask) return;
+    this.lastTask = key;
+    if (!t) {
+      this.task.className = 'task housing free';
+      this.task.innerHTML = `<div class="fam label">Free patrol</div><div class="title">The valley is yours</div><div class="obj">${freeHint}</div>`;
+      return;
+    }
+    this.task.className = 'task housing';
+    let pips = '';
+    for (let i = 0; i < t.steps; i++) pips += `<b class="${i < t.current ? 'done' : i === t.current ? 'now' : ''}"></b>`;
+    this.task.innerHTML = `<div class="fam label"><i></i>${t.family}</div><div class="title">${t.title}</div><div class="obj">${t.objective}</div><div class="pips">${pips}</div>`;
+  }
+
+  /** Heading in degrees (0 = north), and the bearing to a waypoint. */
+  setCompass(heading: number, bearing: number | null, dist: number, label: string) {
+    const w = this.compass.clientWidth || 300;
+    const span = 120;
+    const pxPer = w / span;
+    for (const c of Array.from(this.tape.children) as HTMLElement[]) {
+      let d = Number(c.dataset.deg) - heading;
+      while (d > 180) d -= 360;
+      while (d < -180) d += 360;
+      c.style.display = Math.abs(d) > span / 2 ? 'none' : '';
+      c.style.left = `${w / 2 + d * pxPer}px`;
+    }
+    if (bearing === null) {
+      this.wp.style.display = 'none';
+      this.wpDist.style.display = 'none';
+      return;
+    }
+    let d = bearing - heading;
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    const clamped = Math.max(-span / 2 + 3, Math.min(span / 2 - 3, d));
+    this.wp.style.display = '';
+    this.wp.style.left = `${w / 2 + clamped * pxPer}px`;
+    this.wp.style.opacity = Math.abs(d) > span / 2 ? '0.6' : '1';
+    this.wpDist.style.display = '';
+    const dtxt = dist >= 1000 ? `${(dist / 1000).toFixed(1)} km` : `${Math.round(dist)} m`;
+    this.wpDist.textContent = `${label ? label + '  ' : ''}${dtxt}`;
+  }
+
+  setConditions(time: string, wx: string, danger: number, dangerTxt: string, funds: number) {
+    this.time.textContent = time;
+    this.wx.textContent = wx;
+    this.dangerLvl.textContent = String(danger);
+    this.dangerLvl.className = `lvl d${danger}`;
+    this.dangerTxt.textContent = dangerTxt;
+    this.fundsEl.textContent = String(funds);
+  }
+
+  setAction(label: string | null, red = false, progress = 0, enabled = true) {
+    this.act.classList.toggle('hidden', !label);
+    if (!label) return;
+    if (this.actLabel.textContent !== label) this.actLabel.textContent = label;
+    this.act.classList.toggle('red', red);
+    this.act.classList.toggle('disabled', !enabled);
+    this.ringCircle.setAttribute('stroke-dashoffset', `${Math.PI * 92 * (1 - progress)}`);
+  }
+
+  setChips(c: { off?: string | null; skis?: string | null; koda?: string | null; kodaOn?: boolean }) {
+    const set = (b: HTMLButtonElement, t: string | null | undefined) => {
+      b.classList.toggle('hidden', !t);
+      if (t) {
+        const s = b.querySelector('span')!;
+        if (s.textContent !== t) s.textContent = t;
+      }
+    };
+    set(this.chips.off, c.off);
+    set(this.chips.skis, c.skis);
+    set(this.chips.koda, c.koda);
+    this.chips.koda.classList.toggle('on', !!c.kodaOn);
+  }
+
+  setLever(on: boolean) {
+    this.lever.classList.toggle('hidden', !on);
+  }
+
+  setSpeedo(kmh: number | null, sub: string) {
+    this.speedo.classList.toggle('hidden', kmh === null);
+    if (kmh === null) return;
+    this.speedo.innerHTML = `<span class="v">${Math.round(kmh)}</span><span class="u">km/h</span><span class="u">${sub}</span>`;
+  }
+
+  setAlt(agl: number | null, elev = 0, speed = 0) {
+    this.altEl.classList.toggle('hidden', agl === null);
+    if (agl === null) return;
+    this.altEl.innerHTML = `<div class="label">Above ground</div><div class="big">${Math.round(agl)} m</div><div class="label" style="margin-top:6px">Altitude</div><div class="big">${elev} m</div><div class="label" style="margin-top:6px">Ground speed</div><div class="big">${Math.round(speed * 3.6)}</div>`;
+  }
+
+  setScan(label: string | null, progress: number) {
+    this.scanEl.classList.toggle('on', !!label);
+    if (!label) return;
+    (this.scanEl.querySelector('.l') as HTMLElement).textContent = label;
+    (this.scanEl.querySelector('.p i') as HTMLElement).style.width = `${Math.round(progress * 100)}%`;
+  }
+
+  hint(on: boolean) {
+    this.hintEl.classList.toggle('hidden', !on);
+  }
+
+  /** A line on the radio, subtitled; lines queue. */
+  radio(who: string, text: string, secs = 4.5) {
+    this.queue.push({ who, text, secs });
+    // never let the radio fall far behind what is happening
+    while (this.queue.length > 2) this.queue.shift();
+    if (this.radioT <= 0) this.nextRadio();
+  }
+
+  private nextRadio(): boolean {
+    const n = this.queue.shift();
+    if (!n) {
+      this.radioEl.classList.remove('on');
+      return false;
+    }
+    this.radioEl.innerHTML = `<span class="who">${n.who}</span>${n.text}`;
+    this.radioEl.classList.add('on');
+    this.radioT = n.secs;
+    return true;
+  }
+
+  toast(text: string, kind: 'good' | 'warn' | '' = '', secs = 2.4) {
+    this.toastEl.textContent = text;
+    this.toastEl.className = `toast housing on ${kind}`;
+    this.toastT = secs;
+  }
+
+  /** A call coming in: Accept or Later. */
+  alert(title: string, desc: string, onAccept: () => void, onLater: () => void) {
+    this.alertEl.innerHTML = `<div class="label" style="color:var(--red)">Incoming call</div><div class="t">${title}</div><div class="d">${desc}</div><div class="row"><button class="btn red" data-a="go">Respond</button><button class="btn ghost" data-a="later">Later</button></div>`;
+    this.alertEl.classList.add('on');
+    (this.alertEl.querySelector('[data-a=go]') as HTMLElement).onclick = () => {
+      this.alertEl.classList.remove('on');
+      onAccept();
+    };
+    (this.alertEl.querySelector('[data-a=later]') as HTMLElement).onclick = () => {
+      this.alertEl.classList.remove('on');
+      onLater();
+    };
+  }
+
+  clearAlert() {
+    this.alertEl.classList.remove('on');
+  }
+
+  update(dt: number) {
+    if (this.radioT > 0) {
+      this.radioT -= dt;
+      if (this.radioT <= 0) this.nextRadio();
+    }
+    if (this.toastT > 0) {
+      this.toastT -= dt;
+      if (this.toastT <= 0) this.toastEl.classList.remove('on');
+    }
+  }
+}
