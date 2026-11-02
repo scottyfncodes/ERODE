@@ -140,6 +140,7 @@ export class PiecesView {
     for (const e of this.meshes.values()) {
       this.group.remove(e.root);
       (e.mesh.material as MeshStandardMaterial).dispose();
+      for (const c of e.mesh.children) ((c as Mesh).material as ShaderMaterial).dispose();
     }
     this.meshes.clear();
   }

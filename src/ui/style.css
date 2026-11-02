@@ -1182,6 +1182,12 @@ button {
 }
 
 @media (max-height: 520px) {
+  .arcade-mark {
+    font-size: 64px;
+  }
+  .title-tag {
+    margin-top: 8px;
+  }
   .size-box {
     top: calc(64px + var(--safe-t));
   }
