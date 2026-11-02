@@ -734,6 +734,7 @@ export class Game {
     this.steerTouch = 0;
     this.steerButtons = 0;
     this.props.reset();
+    this.anticipated.clear();
     this.select(null);
     this.ui.tip(null);
     this.ui.hidePlanning();
@@ -820,6 +821,7 @@ export class Game {
     for (const e of sim.drainEvents()) this.handleEvent(e, true);
     const states = this.statesFromSim(sim);
     this.pieces.sync(states);
+    this.groundFx(sim, dt);
     this.followFrom(states, sim.leader?.id ?? -1, (id) => {
       const p = sim.pieces.get(id);
       if (!p) return new Vector3();
@@ -853,6 +855,47 @@ export class Game {
   }
   private lastStage = 0;
   private hitStopUntil = 0;
+  private anticipated = new Set<string>();
+  private get targets() {
+    return this.level.formations.filter((f) => f.hardness >= 1.5);
+  }
+  private sprayAcc = 0;
+
+  /** Gravel spray under a grinding stone, and a breath of slow-motion before a big hit. */
+  private groundFx(sim: Simulation, dt: number) {
+    const h = sim.hero;
+    if (!h) return;
+    const t = h.body.translation();
+    const v = h.body.linvel();
+    const vel = new Vector3(v.x, v.y, v.z);
+    const sp = vel.length();
+    const grounded = sim.step - h.lastContactStep < 4 && !h.wet;
+    if (grounded && sp > 6) {
+      this.sprayAcc += dt * Math.min(1.5, sp / 12) * (0.5 + Math.min(1, h.size));
+      const surf = h.contactSurface;
+      const col =
+        surf === 'snow' ? new Color(0.95, 0.97, 1) : surf === 'sand' ? new Color(0.95, 0.82, 0.58) : surf === 'meadow' ? new Color(0.42, 0.36, 0.22) : new Color(0.62, 0.56, 0.48);
+      while (this.sprayAcc > 0.02) {
+        this.sprayAcc -= 0.02;
+        const r = h.shape.radius * h.physScale;
+        this.effects.spray(new Vector3(t.x, t.y - r * 0.8, t.z), vel, 1, col);
+      }
+    }
+    if (sp < 8) return;
+    const dir = vel.clone().normalize();
+    const r = h.shape.radius * h.physScale;
+    for (const f of this.targets) {
+      if (this.anticipated.has(f.id)) continue;
+      const rel = new Vector3(f.position[0] - t.x, 0, f.position[1] - t.z);
+      const along = rel.dot(new Vector3(dir.x, 0, dir.z));
+      if (along <= 0 || along / sp > 0.32) continue;
+      const lateral = rel.clone().sub(new Vector3(dir.x, 0, dir.z).multiplyScalar(along)).length();
+      if (lateral > Math.max(f.size[0], f.size[2]) * 0.5 + r + 0.4) continue;
+      this.anticipated.add(f.id);
+      this.slowUntil = this.now + 0.4;
+      this.cam.punchIn(this.now);
+    }
+  }
   private steerKeys = { left: false, right: false };
   private steerTouch = 0;
   private steerButtons = 0;
@@ -941,6 +984,8 @@ export class Game {
         break;
       case 'fracture': {
         this.squashHero(0.45, live);
+        this.effects.ring(pos, 9 + e.intensity * 8, new Color(1, 0.93, 0.82));
+        this.effects.ring(pos, 5 + e.intensity * 4, new Color(0.9, 0.8, 0.65));
 
         this.audio.fracture(e.intensity * att + 0.3, pan);
         this.effects.dust(pos, 0.6 + e.intensity * 0.6);
@@ -966,11 +1011,14 @@ export class Game {
       case 'impact':
         if (e.intensity > 0.25) this.squashHero(e.intensity * 0.35, live);
         this.audio.impact(Math.min(1, e.intensity * 1.3) * att, e.material === 'terrain' ? 'granite' : (e.material as 'granite'), pan);
+        // minor knocks stay quiet; heavy landings slam
         if (e.intensity > 0.3) this.effects.dust(pos, e.intensity * 0.45, e.material === 'wood' ? new Color(0.5, 0.42, 0.32) : undefined);
+        if (e.intensity > 0.65 && e.material === 'terrain') this.effects.ring(pos, 4 + e.intensity * 4, new Color(0.92, 0.88, 0.8));
         if (e.intensity > 0.35) this.cam.shake(e.intensity * 0.5);
         break;
       case 'chip':
         this.squashHero(0.2 + e.intensity * 0.3, live);
+        if (e.intensity > 0.45) this.effects.ring(pos, 3 + e.intensity * 5, new Color(0.95, 0.9, 0.82));
         this.audio.fracture(Math.min(1, e.intensity) * att * 0.8 + 0.15, pan);
         this.effects.grit(pos, 0.5 + e.intensity * 0.6);
         this.effects.dust(pos, 0.25 + e.intensity * 0.3);
@@ -994,6 +1042,9 @@ export class Game {
         break;
       }
       case 'stage':
+        this.effects.ring(pos, 6, new Color(0.6, 0.95, 1.0));
+        this.effects.grit(pos, 0.6);
+        if (live) this.cam.punchIn(this.now);
         if (fx) {
           this.ui.bigBanner(`${(e.label ?? '').toUpperCase()}!`, `+${(e.points ?? 0).toLocaleString('en-US')}`, 1700);
           this.audio.stageUp(e.intensity);

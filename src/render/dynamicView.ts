@@ -1,6 +1,9 @@
 import {
   AdditiveBlending,
   BackSide,
+  DoubleSide,
+  MeshBasicMaterial,
+  RingGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -170,6 +173,50 @@ export class Effects {
   private size = new Float32Array(MAX_P);
   private rng = mulberry32(12345);
   private ground: (x: number, z: number) => number;
+  private rings: { mesh: Mesh; t: number; life: number; size: number }[] = [];
+
+  /** A shock ring that races out across the ground from a heavy hit. */
+  ring(at: Vector3, size: number, color = new Color(1, 0.95, 0.85)) {
+    let r = this.rings.find((q) => !q.mesh.visible);
+    if (!r) {
+      if (this.rings.length >= 8) r = this.rings[0];
+      else {
+        const mesh = new Mesh(
+          new RingGeometry(0.82, 1, 48),
+          new MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, side: DoubleSide, fog: true }),
+        );
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.renderOrder = 6;
+        this.group.add(mesh);
+        r = { mesh, t: 0, life: 0.6, size };
+        this.rings.push(r);
+      }
+    }
+    r.mesh.visible = true;
+    r.t = 0;
+    r.size = size;
+    r.life = 0.45 + size * 0.04;
+    (r.mesh.material as MeshBasicMaterial).color.copy(color);
+    r.mesh.position.set(at.x, this.ground(at.x, at.z) + 0.15, at.z);
+  }
+
+  /** Gravel kicked up behind a stone grinding over rough ground. */
+  spray(at: Vector3, vel: Vector3, amount: number, color = new Color(0.62, 0.56, 0.48)) {
+    const n = Math.floor(amount * 3 + this.rng());
+    for (let i = 0; i < n; i++) {
+      const back = vel.clone().multiplyScalar(-0.15);
+      this.spawn({
+        pos: at.clone().add(new Vector3((this.rng() - 0.5) * 0.8, 0, (this.rng() - 0.5) * 0.8)),
+        vel: back.add(new Vector3((this.rng() - 0.5) * 3, 1.5 + this.rng() * 3, (this.rng() - 0.5) * 3)),
+        maxLife: 0.5 + this.rng() * 0.4,
+        size: 0.08 + this.rng() * 0.1,
+        color: color.clone().multiplyScalar(0.8 + this.rng() * 0.4),
+        alpha: 0.95,
+        drag: 0.6,
+        gravity: 9.8,
+      });
+    }
+  }
 
   constructor(ground: (x: number, z: number) => number) {
     this.ground = ground;
@@ -342,9 +389,22 @@ export class Effects {
 
   clear() {
     for (const p of this.parts) p.alive = false;
+    for (const r of this.rings) r.mesh.visible = false;
   }
 
   update(dt: number) {
+    for (const r of this.rings) {
+      if (!r.mesh.visible) continue;
+      r.t += dt;
+      const k = r.t / r.life;
+      if (k >= 1) {
+        r.mesh.visible = false;
+        continue;
+      }
+      const e = 1 - Math.pow(1 - k, 3);
+      r.mesh.scale.setScalar(0.5 + e * r.size);
+      (r.mesh.material as MeshBasicMaterial).opacity = 0.55 * (1 - k);
+    }
     let n = 0;
     for (const p of this.parts) {
       if (!p.alive) continue;
