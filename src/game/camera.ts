@@ -2,7 +2,7 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import type { LevelDef } from '../levels/types';
 import { clamp } from '../sim/geom';
 
-export type CamMode = 'intro' | 'plan' | 'follow' | 'aftermath';
+export type CamMode = 'intro' | 'plan' | 'follow' | 'aftermath' | 'release' | 'orbit';
 
 interface Rig {
   target: Vector3;
@@ -50,14 +50,19 @@ export class CameraDirector {
     return { target: r.target.clone(), yaw: r.yaw, pitch: r.pitch, dist: r.dist };
   }
 
-  setMode(m: CamMode) {
+  /** where the release shot and the beach orbit look */
+  subject = new Vector3();
+  /** the course direction at the subject (yaw) */
+  subjectYaw = 0;
+
+  setMode(m: CamMode, blend = false) {
     if (m !== 'follow' && this.mode === 'follow') {
       this.cam.fov = this.baseFov;
       this.cam.updateProjectionMatrix();
     }
     this.mode = m;
     if (m === 'follow') {
-      this.snapNext = true;
+      this.snapNext = !blend;
       this.followYaw = this.cur.yaw;
       this.closeUntil = 0;
       this.pullBackUntil = 0;
@@ -141,7 +146,9 @@ export class CameraDirector {
   /** the lens the scene rig chose for this screen; the follow camera widens it with speed */
   baseFov = 50;
 
-  update(dt: number, now: number, follow?: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number }) {
+  orbitDist = 10;
+
+  update(dt: number, now: number, follow?: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number; wet?: boolean }) {
     this.time += dt;
     let k = 3;
     if (this.mode === 'intro') {
@@ -174,6 +181,11 @@ export class CameraDirector {
       const r = Math.max(0.03, follow.size ?? 1);
       let dist = 1.1 + r * 6.5 + Math.min(r * 4, sp * 0.12) + Math.min(6, sp * 0.06);
       let pitch = 0.42 + Math.min(0.26, r * 0.13);
+      // riding the river: lower and closer, with the water racing past
+      if (follow.wet) {
+        pitch -= 0.1;
+        dist *= 0.85;
+      }
       if (now < this.closeUntil) {
         dist *= 0.8;
         pitch = 0.6;
@@ -196,6 +208,14 @@ export class CameraDirector {
         this.desired.target.copy(follow.focus);
         this.cur = this.cloneRig(this.desired);
       }
+    } else if (this.mode === 'release') {
+      // the break-off, seen from the side: the boulder tips and goes over
+      this.desired = { target: this.subject.clone(), yaw: this.subjectYaw + 1.15, pitch: 0.18, dist: 11 };
+      k = 2.5;
+    } else if (this.mode === 'orbit') {
+      // the arrival: a slow turn around the stone where it came to rest
+      this.desired = { target: this.subject.clone(), yaw: this.subjectYaw + this.time * 0.18, pitch: 0.32, dist: this.orbitDist };
+      k = 1.2;
     } else if (this.mode === 'aftermath') {
       k = 1.4;
     }

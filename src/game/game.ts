@@ -762,7 +762,12 @@ export class Game {
     this.slowUntil = 0;
     this.effects.clear();
     this.pieces.clear();
-    this.cam.setMode('follow');
+    // the release: a side-on shot of the boulder breaking away, then into the chase
+    const rb = restingBoulder(this.level);
+    this.cam.subject.set(rb.pos[0], rb.pos[1], rb.pos[2]);
+    this.cam.subjectYaw = this.courseYawAt(rb.pos[0], rb.pos[2]);
+    this.cam.setMode('release');
+    this.releaseUntil = this.now + 1.4;
     this.ui.showRun(this.level.zones ?? [], this.sim.nudgesLeft);
     this.audio.release();
     this.audio.startDrums();
@@ -822,6 +827,14 @@ export class Game {
     const states = this.statesFromSim(sim);
     this.pieces.sync(states);
     this.groundFx(sim, dt);
+    if (this.cam.mode === 'release') {
+      const h = sim.hero;
+      if (h) {
+        const t = h.body.translation();
+        this.cam.subject.set(t.x, t.y, t.z);
+      }
+      if (this.now > this.releaseUntil) this.cam.setMode('follow', true);
+    }
     this.followFrom(states, sim.leader?.id ?? -1, (id) => {
       const p = sim.pieces.get(id);
       if (!p) return new Vector3();
@@ -855,6 +868,13 @@ export class Game {
   }
   private lastStage = 0;
   private hitStopUntil = 0;
+  private releaseUntil = 0;
+
+  private courseYawAt(x: number, z: number): number {
+    if (!this.coursePl) return 0;
+    const h = pathDistance(this.coursePl, x, z);
+    return Math.atan2(h.tx, h.tz);
+  }
   private anticipated = new Set<string>();
   private get targets() {
     return this.level.formations.filter((f) => f.hardness >= 1.5);
@@ -927,7 +947,8 @@ export class Game {
       const h = pathDistance(this.coursePl, focus.x, focus.z);
       courseYaw = Math.atan2(h.tx, h.tz);
     }
-    this.followInfo = { focus: focus.add(new Vector3(0, r * 0.4, 0)), vel, spread: Math.min(18, spread), small: r < 0.3, size: r, courseYaw };
+    const wet = this.sim?.hero?.wet ?? false;
+    this.followInfo = { focus: focus.add(new Vector3(0, r * 0.4, 0)), vel, spread: Math.min(18, spread), small: r < 0.3, size: r, courseYaw, wet };
     let rolling = 0;
     let gravel = 0;
     for (const s of states) {
@@ -941,7 +962,7 @@ export class Game {
     this.rolling = Math.min(1, rolling);
     this.gravel = Math.min(1, gravel);
   }
-  private followInfo: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number } | undefined;
+  private followInfo: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number; wet?: boolean } | undefined;
   private coursePlCache: ReturnType<typeof makePolyline> | null | undefined;
   private get coursePl() {
     if (this.coursePlCache === undefined) this.coursePlCache = this.level.terrain.course ? makePolyline(this.level.terrain.course) : null;
@@ -1120,10 +1141,19 @@ export class Game {
     const r = this.result!;
     this.state = 'results';
     this.ui.hideRun();
-    this.cam.setMode('aftermath');
-    // frame the end of the run, with a little of the path that led there
-    const tail = r.trajectory.slice(-12).map((p) => new Vector3(...p));
-    this.cam.frameAftermath([...finalPositions, ...tail]);
+    const end = finalPositions[0];
+    if (r.landed && end) {
+      // the arrival: circle the stone on the sand, close for a pebble, wider for a boulder
+      this.cam.subject.copy(end);
+      this.cam.subjectYaw = this.courseYawAt(end.x, end.z);
+      this.cam.orbitDist = Math.max(3.5, Math.min(18, 2.5 + r.size * 7));
+      this.cam.setMode('orbit');
+    } else {
+      this.cam.setMode('aftermath');
+      // frame the end of the run, with a little of the path that led there
+      const tail = r.trajectory.slice(-12).map((p) => new Vector3(...p));
+      this.cam.frameAftermath([...finalPositions, ...tail]);
+    }
     this.drawTrails();
     this.addFractureMarkers();
     this.ui.showResults(r, explainRun(r, this.level, this.plan), this.lastBest);

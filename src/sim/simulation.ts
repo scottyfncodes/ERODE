@@ -604,14 +604,18 @@ export class Simulation {
       tz = this.courseHit.tz;
     const m = p.body.mass();
     const v = p.body.linvel();
-    const control = grounded ? 1 : 0.55;
+    // in the water the current has a say; in the air you have a little
+    const control = p.wet ? 0.6 : grounded ? 1 : 0.55;
     // Steering targets a sideways speed: full lock = 11 m/s across the course. The stone
     // gets there quickly and holds it, so input maps directly to where it goes.
     const side = v.x * rx + v.z * rz;
     let steerAcc = 0;
+    // weight: a boulder carves wide and answers slowly; a pebble darts
+    const smallness = 1 - Math.min(1, p.size / this.level.boulder.radius);
     if (Math.abs(this.steer) > 0.02) {
-      const want = this.steer * 11;
-      steerAcc = Math.max(-26, Math.min(26, (want - side) * 5)) * control;
+      const want = this.steer * (8 + 5 * smallness);
+      const resp = 3 + 4 * smallness;
+      steerAcc = Math.max(-26, Math.min(26, (want - side) * resp)) * control;
     } else if (grounded) {
       // let go: sideways drift settles a little so it tracks straight
       steerAcc = -side * 0.8;
