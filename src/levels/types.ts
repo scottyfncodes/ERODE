@@ -1,7 +1,7 @@
 import type { Vec2 } from '../sim/geom';
 
 /** Surface materials. Hardness scales how violently an impact loads the rock. */
-export type SurfaceKind = 'meadow' | 'soil' | 'scree' | 'bedrock' | 'streambed' | 'snow' | 'sand';
+export type SurfaceKind = 'meadow' | 'soil' | 'scree' | 'bedrock' | 'streambed' | 'snow' | 'sand' | 'mud' | 'ash' | 'ice';
 
 export interface CarveFeature {
   type: 'carve' | 'ridge';
@@ -121,9 +121,14 @@ export interface BranchesObject extends BaseObject {
   span: number;
   seed: number;
   /** how it looks: a tangle of branches, a stack of trunks, or a beaver dam */
-  style?: 'deadfall' | 'logjam' | 'beaver' | 'debris';
+  style?: 'deadfall' | 'logjam' | 'beaver' | 'debris' | 'fence' | 'trestle';
   /** barrier height (m) */
   height?: number;
+  /**
+   * Momentum (kg·m/s) needed to smash straight through it during the descent.
+   * Absent: it only gives way to a planned clear.
+   */
+  breakMomentum?: number;
 }
 
 export interface TreeObject extends BaseObject {
@@ -142,6 +147,8 @@ export interface SoilObject extends BaseObject {
   radius: [number, number];
   height: number;
   yaw: number;
+  /** what the bank is: earth (default), a snowbank or an ash drift — all cushion an impact */
+  material?: 'soil' | 'snow' | 'ash';
   /** if this water is running, the bank is saturated and slumps when struck */
   saturatedBy?: string;
   seed: number;
@@ -152,6 +159,8 @@ export interface OutcropObject extends BaseObject {
   hardness?: number;
   /** label used for the action button */
   actionLabel?: string;
+  /** what it's made of (look) */
+  rock?: RockKind;
   type: 'outcrop';
   position: Vec2;
   size: [number, number, number];
@@ -199,7 +208,52 @@ export interface Formation {
   sink?: number;
   /** a level table of rock: sits on the highest ground beneath it instead of its centre */
   flat?: boolean;
+  /** what it is made of (look + material behaviour) */
+  rock?: RockKind;
+  /** one side of a narrow passage (named in the cause when a stone wedges there) */
+  gap?: boolean;
 }
+
+export type RockKind = 'granite' | 'sandstone' | 'basalt' | 'obsidian' | 'limestone' | 'ice';
+
+/** A named way down. The run is credited with a route once it passes every gate in order. */
+export interface RouteDef {
+  id: string;
+  name: string;
+  /** one line for the planning card */
+  hint: string;
+  /** boxes in x/z the boulder must pass through */
+  gates: { x: [number, number]; z: [number, number] }[];
+  /** waypoints for the demo pilot and the survey flyover */
+  path: Vec2[];
+}
+
+export type ObjectiveDef =
+  | { id: string; type: 'noTrees'; label: string }
+  | { id: string; type: 'route'; route: string; label: string }
+  | { id: string; type: 'smash'; object: string; label: string }
+  | { id: string; type: 'speed'; kmh: number; label: string }
+  | { id: string; type: 'retain'; fraction: number; label: string }
+  | { id: string; type: 'moves'; max: number; label: string }
+  | { id: string; type: 'noMajor'; label: string }
+  | { id: string; type: 'time'; seconds: number; label: string };
+
+/** Light and air for a stretch of a level, keyed by z. */
+export interface AtmosKey {
+  z: number;
+  fog: [number, number, number];
+  density: number;
+  sky: [number, number, number];
+  zenith: [number, number, number];
+  ground: [number, number, number];
+  sun: [number, number, number];
+  sunI: number;
+  hemiI: number;
+  exposure: number;
+}
+
+/** Terrain colour overrides for an environment. */
+export type TerrainPalette = Partial<Record<SurfaceKind | 'forest' | 'rock' | 'strata' | 'valley', [number, number, number]>>;
 
 export interface Region {
   name: string;
@@ -215,7 +269,26 @@ export interface Zone {
 }
 
 export interface LevelDef {
+  /** environment name shown on the level card */
+  environment: string;
+  /** medal thresholds: fraction of starting mass retained */
+  medals: { silver: number; gold: number; platinum: number };
+  objectives: ObjectiveDef[];
+  routes: RouteDef[];
+  /** crossing this z (inside x, if given) finishes the descent */
+  finish: { z: number; x?: [number, number]; name: string };
+  atmos: AtmosKey[];
+  palette?: TerrainPalette;
+  /**
+   * Narrow passages. A stone fits when its diameter (2 × radius) is no wider than `width`;
+   * otherwise it wedges there and the run ends. Build the walls a little wider apart than the
+   * widest a tumbling stone could be, and let this rule decide.
+   */
+  passages?: { name: string; x: number; z: number; width: number }[];
+  /** named sections of the descent (survey chips, HUD) */
   zones?: Zone[];
+  /** smashable pines and loose stones along the run */
+  props?: { trees: { z: [number, number]; density: number }[]; rocks: number; spread?: number };
   sea?: { level: number; shoreZ: number };
   /** the beach: landing here finishes the run */
   beach?: { z: [number, number] };
@@ -232,12 +305,7 @@ export interface LevelDef {
   objects: LevelObject[];
   formations: Formation[];
   regions: Region[];
-  objective: {
-    waterId: string;
-    minMassFraction: number;
-    minFractures: number;
-  };
-  stars: { deliveredFraction: number; maxInterventions: number };
+  /** planning moves available */
   budget: number;
   /** decorative tree scatter */
   forest: { count: number; seed: number; keepOut: { path: Vec2[]; width: number }[] };

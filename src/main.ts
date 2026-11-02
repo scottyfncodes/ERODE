@@ -1,5 +1,4 @@
 import { loadRapier } from './sim/rapier';
-import { SUMMIT_TO_SEA } from './levels/summitToSea';
 import { Game } from './game/game';
 import { BRAND, wordmark } from './ui/brand';
 
@@ -39,12 +38,14 @@ async function boot() {
   const R = await loadRapier();
   await nextFrame();
   const canvas = document.getElementById('view') as HTMLCanvasElement;
-  const game = new Game(canvas, document.getElementById('ui')!, document.getElementById('markers')!, R, SUMMIT_TO_SEA, progress);
+  const game = new Game(canvas, document.getElementById('ui')!, document.getElementById('markers')!, R, progress);
   await nextFrame();
   progress(1, 'Ready');
   game.start();
   // debug handle for the scripts in /scripts
-  (window as unknown as { rockslide: unknown }).rockslide = game.debug();
+  const handle = game.debug();
+  (window as unknown as { rockslide: unknown; erode: unknown }).rockslide = handle;
+  (window as unknown as { erode: unknown }).erode = handle;
   setTimeout(() => loading.classList.add('gone'), 250);
 }
 

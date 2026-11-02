@@ -1,23 +1,29 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type RAPIER_T from '@dimforge/rapier3d-deterministic-compat';
 import { loadRapier } from '../src/sim/rapier';
-import { Simulation, STAGES, stageOf, gradeFor, FRAME, type SimResult } from '../src/sim/simulation';
-import { SUMMIT_TO_SEA as L } from '../src/levels/summitToSea';
-import { defaultPlan } from '../src/sim/plan';
+import { Simulation, FRAME, restingBoulder, type SimResult } from '../src/sim/simulation';
+import { PINE_HOLLOW as L } from '../src/levels/pineHollow';
+import { LEVELS, LEVEL_TESTS } from '../src/levels/index';
+import { GRANITE_RIDGE } from '../src/levels/graniteRidge';
+import { defaultPlan, sanitizePlan } from '../src/sim/plan';
 import { loadLevelData } from '../src/sim/levelData';
 import { makeAutopilot } from '../src/sim/autopilot';
+import { COMPOSITIONS, composition, severityOf, type CompositionId } from '../src/sim/composition';
+import { recordResult, type Progress } from '../src/game/progress';
+import type { Plan } from '../src/levels/types';
 
 let R: typeof RAPIER_T;
 beforeAll(async () => {
   R = await loadRapier();
 });
 
-type Mode = 'none' | 'line' | 'aim';
-function drive(mode: Mode, watch?: (sim: Simulation) => void) {
-  const sim = new Simulation(R, L, defaultPlan(L));
-  const pilot = mode === 'none' ? null : makeAutopilot(sim, mode);
+const GOOD: Plan = { 'loose-gully': { type: 'rock', removed: true, x: 11.5, z: 96 }, 'ledge-log': { type: 'log', yaw: 2.36, x: 2, z: 197 } };
+
+function drive(plan: Plan, route: string, comp: CompositionId = 'granite', watch?: (sim: Simulation) => void) {
+  const sim = new Simulation(R, L, sanitizePlan(L, plan), { composition: comp });
+  const pilot = makeAutopilot(sim, route);
   while (!sim.done) {
-    if (pilot) sim.steer = pilot();
+    sim.steer = pilot();
     sim.stepOnce();
     watch?.(sim);
   }
@@ -27,107 +33,167 @@ function drive(mode: Mode, watch?: (sim: Simulation) => void) {
   return { r, rec };
 }
 
-describe('the course', () => {
+describe('the mountains', () => {
+  it('every level is well formed', () => {
+    const ids = new Set<string>();
+    for (const l of LEVELS) {
+      expect(ids.has(l.id)).toBe(false);
+      ids.add(l.id);
+      expect(l.routes.length).toBeGreaterThanOrEqual(2);
+      expect(l.objectives.length).toBeGreaterThanOrEqual(3);
+      expect(l.medals.silver).toBeLessThan(l.medals.gold);
+      expect(l.medals.gold).toBeLessThan(l.medals.platinum);
+      expect(l.finish.z).toBeGreaterThan(l.boulder.position[1]);
+      expect(l.finish.z).toBeLessThan(l.terrain.bounds.z[1]);
+      for (const o of l.objectives) if (o.type === 'route') expect(l.routes.some((r) => r.id === o.route)).toBe(true);
+      for (const o of l.objectives) if (o.type === 'smash') expect(l.objects.some((q) => q.id === o.object)).toBe(true);
+    }
+  });
   it('physics mesh matches the height function', () => {
     const d = loadLevelData(L);
     for (const [i, j] of [
       [10, 10],
-      [48, 500],
-      [80, 1000],
+      [48, 200],
+      [80, 380],
     ]) {
       const x = d.grid.x0 + i * d.grid.cell,
         z = d.grid.z0 + j * d.grid.cell;
       expect(d.heightAt(x, z)).toBeCloseTo(d.terrain.height(x, z), 3);
     }
   });
-  it('runs from a high summit to the sea, over a real waterfall', () => {
-    const d = loadLevelData(L);
-    expect(d.heightAt(0, -14) - d.heightAt(4, 1060)).toBeGreaterThan(250);
-    expect(d.heightAt(0, 470) - d.heightAt(0.5, 482)).toBeGreaterThan(20);
-  });
-  it('rivers never flow uphill', () => {
-    const d = loadLevelData(L);
-    for (const w of d.water) for (let i = 1; i < w.bed.length; i++) expect(w.bed[i]).toBeLessThanOrEqual(w.bed[i - 1]);
-  });
 });
 
-describe('size stages', () => {
-  it('runs Boulder → Fragment → Rock → Pebble → Gravel → Sand', () => {
-    expect(STAGES.map((s) => s.name)).toEqual(['Boulder', 'Fragment', 'Rock', 'Pebble', 'Gravel', 'Sand']);
-    expect(stageOf(2)).toBe(0);
-    expect(stageOf(0.3)).toBe(2);
-    expect(stageOf(0.01)).toBe(4);
-    expect(stageOf(0.0005)).toBe(5);
-    expect(gradeFor(500000)).toBe('S');
-    expect(gradeFor(1000)).toBe('D');
+describe('mass', () => {
+  it('starting mass is the boulder volume times the stone density', () => {
+    const v = restingBoulder(L).shape.volume;
+    for (const c of COMPOSITIONS) {
+      const sim = new Simulation(R, L, defaultPlan(L), { composition: c.id });
+      expect(sim.startMass).toBeCloseTo(v * c.density * 1000, 0);
+      sim.dispose();
+    }
+    expect(composition('basalt').density).toBeGreaterThan(composition('sandstone').density);
   });
-});
 
-describe('the run', () => {
-  it('is deterministic for the same inputs', () => {
-    const a = drive('line').r;
-    const b = drive('line').r;
-    expect(a.score).toBe(b.score);
-    expect(a.size).toBeCloseTo(b.size, 9);
+  it('severity bands follow the share of mass lost', () => {
+    expect(severityOf(100, 10000)).toBe('minor');
+    expect(severityOf(300, 10000)).toBe('moderate');
+    expect(severityOf(900, 10000)).toBe('major');
+  });
+
+  it('the descent is deterministic for the same plan', () => {
+    const a = drive(GOOD, 'gully').r;
+    const b = drive(GOOD, 'gully').r;
+    expect(a.mass).toBe(b.mass);
+    expect(a.duration).toBe(b.duration);
   }, 120000);
 
-  it('left unsteered, an obstacle stops it before the beach', () => {
-    const { r } = drive('none');
-    expect(r.landed).toBe(false);
+  it('a good plan reaches the bottom with a medal, and the ledger adds up', () => {
+    const { r } = drive(GOOD, 'gully');
+    expect(r.finished).toBe(true);
+    expect(['silver', 'gold', 'platinum']).toContain(r.medal);
+    expect(r.retained).toBeGreaterThan(0.8);
+    expect(r.retained).toBeLessThan(1);
+    expect(r.massLost).toBeCloseTo(r.startMass - r.mass, 3);
+    // every kilogram is accounted for by impacts, fractures or wear
+    expect(r.impactLoss + r.splitLoss + r.abrasionLoss).toBeCloseTo(r.massLost, -1);
+    expect(r.route).toBe('gully');
+    expect(r.objectives.find((o) => o.id === 'route-gully')?.done).toBe(true);
   }, 120000);
 
-  it('steering through the gaps carries it to the beach', () => {
-    const { r } = drive('line');
-    expect(r.landed).toBe(true);
-    expect(r.distance).toBeGreaterThan(1000);
+  it('the boulder only ever loses mass, and its collider shrinks with it', () => {
+    let last = Infinity;
+    let firstScale = 1;
+    let lastScale = 1;
+    drive(GOOD, 'gully', 'granite', (sim) => {
+      const h = sim.hero;
+      if (!h || sim.crossed) return;
+      const m = sim.massOf(h);
+      expect(m).toBeLessThanOrEqual(last + 1e-6);
+      last = m;
+      if (sim.step === 1) firstScale = h.physScale;
+      lastScale = h.physScale;
+    });
+    expect(lastScale).toBeLessThan(firstScale);
   }, 120000);
 
-  it('aiming for the rocks grinds it much smaller', () => {
-    const line = drive('line').r;
-    const aim = drive('aim').r;
-    expect(aim.size).toBeLessThan(line.size);
-    expect(aim.stage).toBeGreaterThanOrEqual(4); // gravel or better; sand needs sharper aim than the autopilot
+  it('a barrier stops a stone that lacks the momentum, and a heavy fast one bursts through', () => {
+    const granite = drive({}, 'forest', 'granite').r;
+    expect(granite.smashed).toContain('logjam');
+    const sand = drive({}, 'forest', 'sandstone').r;
+    expect(sand.smashed).not.toContain('logjam');
+    expect(sand.finished).toBe(false);
+    expect(sand.cause).toMatch(/log jam/);
   }, 180000);
 
-  it('the hero only ever shrinks, and wears smoother in the water', () => {
-    let last = Infinity;
-    let heroId = -1;
-    let maxSmooth = 0;
-    drive('line', (sim) => {
-      const h = sim.hero;
-      if (!h) return;
-      if (h.id === heroId) expect(h.size).toBeLessThanOrEqual(last + 1e-9);
-      heroId = h.id;
-      last = h.size;
-      maxSmooth = Math.max(maxSmooth, h.smooth);
-    });
-    expect(maxSmooth).toBeGreaterThan(0.3);
-  }, 120000);
-
-  it('the camera hero is always the largest stone', () => {
-    drive('aim', (sim) => {
-      if (sim.step % 60) return;
-      const h = sim.hero;
-      if (!h) return;
-      const hz = h.body.translation().z;
-      for (const p of sim.pieces.values())
-        if (p.kind === 'stone' && p.id !== h.id && p.body.translation().z > hz - 8) expect(p.size).toBeLessThanOrEqual(h.size * 1.1);
-    });
-  }, 120000);
-
-  it('crashes throw real chips off, with their own geometry', () => {
-    const { rec } = drive('aim');
-    const chips = rec.tracks.filter((t) => t.kind === 'chip');
-    expect(chips.length).toBeGreaterThan(2);
-    expect(chips.every((t) => t.shape.volume < rec.tracks.find((x) => x.kind === 'stone')!.shape.volume)).toBe(true);
-  }, 120000);
-
-  it('records aligned replay frames with a hero per frame', () => {
-    const { rec } = drive('line');
+  it('records aligned replay frames with a hero and a mass per frame', () => {
+    const { rec } = drive(GOOD, 'gully');
     expect(rec.leader.length).toBe(rec.frames);
+    expect(rec.mass.length).toBe(rec.frames);
     for (const t of rec.tracks) {
       expect(Number.isInteger(t.data.length / FRAME)).toBe(true);
       expect(t.data.every(Number.isFinite)).toBe(true);
     }
+  }, 120000);
+});
+
+describe('progression', () => {
+  it('medals, records and unlocks come from real results', () => {
+    const p: Progress = { v: 3, levels: {}, settings: { sound: true, music: true }, tutorial: { selected: false, released: false, reviewed: false }, composition: 'granite' };
+    const base = { finished: true, composition: 'granite', duration: 50, route: L.routes[0].id, objectives: [], mass: 9000, retained: 0.9, medal: 'gold' } as unknown as SimResult;
+    const a = recordResult(p, LEVELS, L, base);
+    expect(a.firstFinish).toBe(true);
+    expect(a.unlockedCompositions).toContain('Sandstone');
+    expect(p.levels[L.id].medal).toBe('gold');
+    const worse = recordResult(p, LEVELS, L, { ...base, retained: 0.7, mass: 7000, medal: 'bronze', duration: 40 } as SimResult);
+    expect(worse.bestRetained).toBe(false);
+    expect(worse.bestTime).toBe(true);
+    expect(p.levels[L.id].medal).toBe('gold');
+    expect(p.levels[L.id].bestRetained).toBe(0.9);
+    const dnf = recordResult(p, LEVELS, L, { ...base, finished: false, retained: 0.99, medal: 'none' } as SimResult);
+    expect(dnf.bestRetained).toBe(false);
+    expect(p.levels[L.id].bestRetained).toBe(0.9);
+  });
+});
+
+describe('every mountain', () => {
+  it('can be finished with a medal by at least one planned route', () => {
+    for (const level of LEVELS) {
+      const tests = LEVEL_TESTS[level.id];
+      let best = 0;
+      for (const t of tests) {
+        const sim = new Simulation(R, level, sanitizePlan(level, t.plan));
+        const pilot = makeAutopilot(sim, t.route);
+        while (!sim.done) {
+          sim.steer = pilot();
+          sim.stepOnce();
+        }
+        if (sim.result!.finished) best = Math.max(best, sim.result!.retained);
+        sim.dispose();
+        if (best >= level.medals.silver) break;
+      }
+      expect(best, level.id).toBeGreaterThanOrEqual(level.medals.silver);
+    }
+  }, 600000);
+
+  it('a narrow passage refuses a full-size stone and admits a worn one', () => {
+    const tests = LEVEL_TESTS[GRANITE_RIDGE.id];
+    const run = (name: string) => {
+      const t = tests.find((q) => q.name === name)!;
+      const sim = new Simulation(R, GRANITE_RIDGE, sanitizePlan(GRANITE_RIDGE, t.plan));
+      const pilot = makeAutopilot(sim, t.route);
+      while (!sim.done) {
+        sim.steer = pilot();
+        sim.stepOnce();
+      }
+      const r = sim.result!;
+      sim.dispose();
+      return r;
+    };
+    const asFound = run('needle as found');
+    expect(asFound.finished).toBe(false);
+    expect(asFound.cause).toMatch(/Wedged in the Needle/);
+    const worn = run('needle, sentinel');
+    expect(worn.finished).toBe(true);
+    expect(worn.route).toBe('needle');
   }, 120000);
 });

@@ -4,13 +4,13 @@ import { fbm2 } from '../sim/noise';
 import { pathDistance, smoothstep } from '../sim/geom';
 import { createTerrainMaterial, shared } from './materials';
 
-const C = {
+const BASE = {
   meadow: new Color(0.3, 0.52, 0.13),
   meadowDry: new Color(0.58, 0.6, 0.2),
   forest: new Color(0.1, 0.3, 0.12),
   forestFloor: new Color(0.2, 0.32, 0.12),
   scree: new Color(0.58, 0.48, 0.38),
-  bedrock: new Color(0.6, 0.55, 0.5),
+  bedrock: new Color(0.52, 0.48, 0.44),
   soil: new Color(0.45, 0.3, 0.17),
   streambed: new Color(0.35, 0.3, 0.24),
   snow: new Color(0.95, 0.97, 1.0),
@@ -20,7 +20,26 @@ const C = {
   strata: new Color(0.62, 0.42, 0.32),
   wet: new Color(0.2, 0.2, 0.17),
   wetSand: new Color(0.72, 0.58, 0.38),
+  mud: new Color(0.3, 0.22, 0.14),
+  ash: new Color(0.3, 0.29, 0.28),
+  ice: new Color(0.72, 0.86, 0.95),
 };
+type Palette = typeof BASE;
+let C: Palette = BASE;
+
+/** The level's colours: the base palette with its environment's overrides. */
+function paletteFor(data: LevelData): Palette {
+  const out = {} as Palette;
+  for (const k of Object.keys(BASE) as (keyof Palette)[]) out[k] = BASE[k].clone();
+  const p = data.level.palette ?? {};
+  for (const [k, v] of Object.entries(p)) {
+    const key = k as keyof Palette;
+    if (out[key] && v) out[key].setRGB(v[0], v[1], v[2]);
+    if (key === 'meadow' && v) out.meadowDry.setRGB(v[0], v[1], v[2]).lerp(new Color(0.6, 0.58, 0.3), 0.35);
+    if (key === 'forest' && v) out.forestFloor.setRGB(v[0], v[1], v[2]).multiplyScalar(1.3);
+  }
+  return out;
+}
 
 function surfaceColor(kind: string, x: number, z: number, out: Color): Color {
   const n = fbm2(x / 9, z / 9, 2, 5) * 0.5 + 0.5;
@@ -39,6 +58,12 @@ function surfaceColor(kind: string, x: number, z: number, out: Color): Color {
       return out.copy(C.snow);
     case 'sand':
       return out.copy(C.sand).multiplyScalar(0.94 + n * 0.1);
+    case 'mud':
+      return out.copy(C.mud).multiplyScalar(0.85 + n * 0.25);
+    case 'ash':
+      return out.copy(C.ash).multiplyScalar(0.85 + n * 0.3);
+    case 'ice':
+      return out.copy(C.ice).lerp(C.snow, n * 0.4);
     default:
       return out.copy(C.meadow);
   }
@@ -48,6 +73,7 @@ const CHUNK = 80;
 
 export function buildTerrain(data: LevelData, withFar: boolean): Group {
   const group = new Group();
+  C = paletteFor(data);
   const { grid, terrain } = data;
   const mat = createTerrainMaterial();
   const b = terrain.spec.bounds;
@@ -78,7 +104,7 @@ export function buildTerrain(data: LevelData, withFar: boolean): Group {
       // exposed faces show their geology: layered strata, warmer and bolder in the gorge
       const steep = smoothstep(0.86, 0.6, ny);
       if (steep > 0) {
-        const gorge = smoothstep(440, 480, z) * (1 - smoothstep(640, 720, z));
+        const gorge = sea ? smoothstep(440, 480, z) * (1 - smoothstep(640, 720, z)) : data.level.palette?.strata ? 0.6 : 0;
         const band = Math.sin(y * (1.1 + gorge * 0.6) + fbm2(x / 20, z / 20, 2, 33) * 3);
         stra.copy(C.rock).lerp(C.strata, 0.25 + gorge * 0.6).multiplyScalar(0.78 + 0.24 * band + gorge * 0.08 * Math.sign(band));
         c.lerp(stra, steep * 0.8);
@@ -168,8 +194,8 @@ export function buildTerrain(data: LevelData, withFar: boolean): Group {
         const rocky = smoothstep(0.66, 0.48, nm[1]);
         if (y < 3) c.copy(C.valley).lerp(C.meadowDry, nv * 0.7);
         else c.copy(C.forest).lerp(C.meadow, smoothstep(0.5, 0.75, nv) * 0.7);
-        c.lerp(C.meadowDry, smoothstep(170, 210, y) * 0.6);
-        c.lerp(C.rock, Math.max(rocky, smoothstep(200, 250, y) * 0.7));
+        c.lerp(C.meadowDry, smoothstep(snowLine - 100, snowLine - 60, y) * 0.6);
+        c.lerp(C.rock, Math.max(rocky, smoothstep(snowLine - 70, snowLine - 20, y) * 0.7));
         c.lerp(C.snow, snowy * (nm[1] > 0.6 ? 1 : 0.45));
         if (sea && y < sea.level + 1.5) c.copy(C.sand).lerp(C.wetSand, smoothstep(sea.level + 1.5, sea.level - 1, y));
         fcol[k * 3] = c.r;

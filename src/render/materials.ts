@@ -42,6 +42,41 @@ function inject(shader: WebGLProgramParametersWithUniforms, vertexDecl: string, 
 export interface RockUniforms {
   uSmooth: IUniform<number>;
   uRadius: IUniform<number>;
+  /** stone colour, speckle colour and glassiness: what the rock is made of */
+  uBase?: IUniform<Color>;
+  uSpeck?: IUniform<Color>;
+  uGloss?: IUniform<number>;
+}
+
+export interface RockLook {
+  tint: [number, number, number];
+  speck: [number, number, number];
+  gloss: number;
+}
+
+export const ROCK_LOOKS: Record<string, RockLook> = {
+  granite: { tint: [0.47, 0.41, 0.365], speck: [0.72, 0.58, 0.5], gloss: 0.05 },
+  sandstone: { tint: [0.66, 0.4, 0.25], speck: [0.85, 0.62, 0.42], gloss: 0 },
+  basalt: { tint: [0.17, 0.17, 0.18], speck: [0.3, 0.29, 0.3], gloss: 0.12 },
+  obsidian: { tint: [0.06, 0.05, 0.07], speck: [0.2, 0.17, 0.26], gloss: 0.9 },
+  limestone: { tint: [0.74, 0.72, 0.64], speck: [0.88, 0.86, 0.78], gloss: 0.04 },
+  ice: { tint: [0.62, 0.78, 0.9], speck: [0.86, 0.94, 1.0], gloss: 0.7 },
+};
+
+export function rockUniforms(look: RockLook = ROCK_LOOKS.granite): Required<RockUniforms> {
+  return {
+    uSmooth: { value: 0 },
+    uRadius: { value: 1 },
+    uBase: { value: new Color(...look.tint) },
+    uSpeck: { value: new Color(...look.speck) },
+    uGloss: { value: look.gloss },
+  };
+}
+
+export function setRockLook(u: RockUniforms, look: RockLook) {
+  u.uBase?.value.setRGB(...look.tint);
+  u.uSpeck?.value.setRGB(...look.speck);
+  if (u.uGloss) u.uGloss.value = look.gloss;
 }
 
 /**
@@ -51,10 +86,16 @@ export interface RockUniforms {
 export function createRockMaterial(opts: { tint?: Color; scale?: number; uniforms?: RockUniforms } = {}): MeshStandardMaterial {
   const m = new MeshStandardMaterial({ color: opts.tint ?? new Color(1, 1, 1), roughness: 0.9, metalness: 0 });
   const scale = (opts.scale ?? 1).toFixed(3);
-  const u = opts.uniforms ?? { uSmooth: { value: 0 }, uRadius: { value: 1 } };
+  const u = opts.uniforms ?? rockUniforms();
+  u.uBase ??= { value: new Color(...ROCK_LOOKS.granite.tint) };
+  u.uSpeck ??= { value: new Color(...ROCK_LOOKS.granite.speck) };
+  u.uGloss ??= { value: ROCK_LOOKS.granite.gloss };
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSmooth = u.uSmooth;
     shader.uniforms.uRadius = u.uRadius;
+    shader.uniforms.uBase = u.uBase!;
+    shader.uniforms.uSpeck = u.uSpeck!;
+    shader.uniforms.uGloss = u.uGloss!;
     inject(
       shader,
       'attribute vec3 rockPos; attribute float fresh; varying vec3 vRockPos; varying float vFresh; uniform float uSmooth; uniform float uRadius; varying float vSmooth;',
@@ -63,7 +104,7 @@ export function createRockMaterial(opts: { tint?: Color; scale?: number; uniform
       float sm = uSmooth * 0.8;
       vec3 round = normalize(position) * uRadius * vec3(1.08, 0.82, 1.0);
       transformed = mix(transformed, round, sm);`,
-      'varying vec3 vRockPos; varying float vFresh; varying float vSmooth;',
+      'varying vec3 vRockPos; varying float vFresh; varying float vSmooth; uniform vec3 uBase; uniform vec3 uSpeck; uniform float uGloss;',
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <beginnormal_vertex>',
@@ -79,18 +120,18 @@ export function createRockMaterial(opts: { tint?: Color; scale?: number; uniform
         float n2 = eNoise3(rp * 8.0);
         float n3 = eNoise3(rp * 21.0 + 3.1);
         float n4 = eNoise3(rp * 15.0 + 7.7);
-        vec3 base = mix(vec3(0.38, 0.35, 0.33), vec3(0.56, 0.47, 0.4), smoothstep(0.35, 0.65, n1));
-        base = mix(base, vec3(0.72, 0.58, 0.5), smoothstep(0.55, 0.62, n2) * 0.3);
-        base = mix(base, vec3(0.28, 0.25, 0.24), smoothstep(0.86, 0.9, n3) * 0.45);
-        float lich = smoothstep(0.52, 0.68, eFbm3(rp * 1.6 + 3.0));
+        vec3 base = mix(uBase * vec3(0.81, 0.85, 0.9), uBase * vec3(1.19, 1.15, 1.1), smoothstep(0.35, 0.65, n1));
+        base = mix(base, uSpeck, smoothstep(0.55, 0.62, n2) * 0.3);
+        base = mix(base, uBase * 0.6, smoothstep(0.86, 0.9, n3) * 0.45);
+        float lich = smoothstep(0.52, 0.68, eFbm3(rp * 1.6 + 3.0)) * (1.0 - uGloss);
         vec3 weathered = base * vec3(0.74, 0.73, 0.70);
         weathered = mix(weathered, vec3(0.60, 0.60, 0.46), lich * 0.5);
-        weathered = mix(weathered, vec3(0.72, 0.46, 0.20), smoothstep(0.72, 0.86, eFbm3(rp * 3.0 + 9.0)) * 0.55);
+        weathered = mix(weathered, vec3(0.72, 0.46, 0.20), smoothstep(0.72, 0.86, eFbm3(rp * 3.0 + 9.0)) * 0.55 * (1.0 - uGloss));
         weathered *= 0.85 + 0.3 * eFbm3(rp * 0.4 + 11.0);
         vec3 freshCol = base * vec3(1.12, 1.08, 1.05);
         vec3 rockCol = mix(weathered, freshCol, vFresh);
         // polished pebble: lichen gone, even tone, faint banding
-        vec3 polished = mix(vec3(0.52, 0.5, 0.47), vec3(0.66, 0.6, 0.55), n1) * (0.92 + 0.08 * sin(rp.y * 9.0 + n2 * 3.0));
+        vec3 polished = mix(uBase * 1.05, uSpeck * 0.95, n1) * (0.92 + 0.08 * sin(rp.y * 9.0 + n2 * 3.0));
         polished = mix(polished, base * 1.05, 0.35);
         diffuseColor.rgb *= mix(rockCol, polished, smoothstep(0.15, 0.9, vSmooth));
         `,
@@ -105,7 +146,7 @@ export function createRockMaterial(opts: { tint?: Color; scale?: number; uniform
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
-        roughnessFactor = mix(mix(0.95, 0.72, vFresh) - n3 * 0.08, 0.42, vSmooth);
+        roughnessFactor = mix(mix(mix(0.95, 0.72, vFresh) - n3 * 0.08, 0.42, vSmooth), 0.12 + n3 * 0.1, uGloss);
         `,
       );
   };

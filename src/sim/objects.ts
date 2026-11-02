@@ -13,7 +13,7 @@ export interface Material {
   friction: number;
   restitution: number;
   label: string;
-  kind: 'wood' | 'branches' | 'soil' | 'granite' | 'ice';
+  kind: 'wood' | 'branches' | 'soil' | 'granite' | 'ice' | 'snow';
 }
 
 export type ColliderPart =
@@ -43,6 +43,10 @@ export const MATERIALS = {
   spur: { hardness: 1.05, friction: 0.7, restitution: 0.12, label: 'the cracked spur', kind: 'granite' },
   ice: { hardness: 0.62, friction: 0.03, restitution: 0.05, label: 'ice', kind: 'ice' },
   loose: { hardness: 0.85, friction: 0.75, restitution: 0.15, label: 'a loose stone', kind: 'granite' },
+  snowbank: { hardness: 0.08, friction: 1.0, restitution: 0.0, label: 'the snowbank', kind: 'snow' },
+  ashbank: { hardness: 0.1, friction: 1.0, restitution: 0.0, label: 'the ash drift', kind: 'soil' },
+  fence: { hardness: 0.22, friction: 0.8, restitution: 0.05, label: 'the timber fence', kind: 'wood' },
+  trestle: { hardness: 0.3, friction: 0.8, restitution: 0.05, label: 'the old trestle', kind: 'wood' },
 } satisfies Record<string, Material>;
 
 const UP = new Vector3(0, 1, 0);
@@ -233,11 +237,22 @@ export function resolveObjects(level: LevelDef, plan: Plan, h: HeightFn): Resolv
         if (st.type !== 'branches' || st.removed) break;
         const y = h(o.position[0], o.position[1]);
         const bh = o.height ?? 2.2;
-        const mat = o.style === 'logjam' ? { ...MATERIALS.log, label: 'the log jam' } : o.style === 'beaver' ? { ...MATERIALS.branches, label: 'the beaver dam' } : o.style === 'debris' ? { ...MATERIALS.branches, label: 'the debris dam' } : MATERIALS.branches;
+        const mat =
+          o.style === 'logjam'
+            ? { ...MATERIALS.log, label: 'the log jam' }
+            : o.style === 'beaver'
+              ? { ...MATERIALS.branches, label: 'the beaver dam' }
+              : o.style === 'debris'
+                ? { ...MATERIALS.branches, label: 'the debris dam' }
+                : o.style === 'fence'
+                  ? { ...MATERIALS.fence, label: `the ${o.name.toLowerCase()}` }
+                  : o.style === 'trestle'
+                    ? { ...MATERIALS.trestle, label: `the ${o.name.toLowerCase()}` }
+                    : MATERIALS.branches;
         r.parts.push({
           part: {
             shape: 'box',
-            half: [o.span / 2, bh / 2, o.style === 'logjam' ? 1.4 : 1.0],
+            half: [o.span / 2, bh / 2, o.style === 'logjam' ? 1.4 : o.style === 'fence' ? 0.35 : 1.0],
             pos: [o.position[0], y + bh / 2 - 0.5, o.position[1]],
             quat: quatYaw(o.yaw),
           },
@@ -285,7 +300,7 @@ export function resolveObjects(level: LevelDef, plan: Plan, h: HeightFn): Resolv
         const y = h(o.position[0], o.position[1]) - 0.15;
         r.parts.push({
           part: { shape: 'hull', piece, pos: [o.position[0], y, o.position[1]], quat: quatYaw(o.yaw) },
-          material: MATERIALS.soil,
+          material: o.material === 'snow' ? { ...MATERIALS.snowbank, label: `the ${o.name.toLowerCase()}` } : o.material === 'ash' ? { ...MATERIALS.ashbank, label: `the ${o.name.toLowerCase()}` } : MATERIALS.soil,
         });
         r.saturated = !!o.saturatedBy && water.has(o.saturatedBy);
         break;
@@ -352,7 +367,7 @@ export function resolveObjects(level: LevelDef, plan: Plan, h: HeightFn): Resolv
       parts: [
         {
           part: { shape: 'hull', piece, pos: [f.position[0], y, f.position[1]], quat: quatYaw(f.yaw) },
-          material: { hardness: f.hardness, friction: 0.72, restitution: 0.12, label: f.name, kind: 'granite' },
+          material: { hardness: f.hardness, friction: f.rock === 'ice' ? 0.1 : 0.72, restitution: 0.12, label: f.name, kind: f.rock === 'ice' ? 'ice' : 'granite' },
         },
       ],
     });
