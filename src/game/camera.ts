@@ -210,7 +210,7 @@ export class CameraDirector {
       }
     } else if (this.mode === 'release') {
       // the break-off, seen from the side: the boulder tips and goes over
-      this.desired = { target: this.subject.clone(), yaw: this.subjectYaw + 1.15, pitch: 0.18, dist: 11 };
+      this.desired = { target: this.subject.clone(), yaw: this.subjectYaw + 1.15, pitch: 0.26, dist: 12 };
       k = 2.5;
     } else if (this.mode === 'orbit') {
       // the arrival: a slow turn around the stone where it came to rest

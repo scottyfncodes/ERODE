@@ -123,6 +123,12 @@ export interface SimResult {
   smashes: number;
   chips: number;
   trees: number;
+  /** size of the boulder at the summit (radius, m) */
+  startSize: number;
+  /** loose boulders bowled over */
+  bowled: number;
+  /** fraction of the original boulder's volume no longer in the stone you finished with */
+  massLost: number;
   maxCombo: number;
   airTime: number;
   waterTime: number;
@@ -182,6 +188,7 @@ export class Simulation {
   private bowled = new Set<number>();
   private heroId = 1;
   private startZ: number;
+  private originalVolume: number;
   private finishZ: number;
   private maxZ: number;
   private heroStill = 0;
@@ -262,6 +269,7 @@ export class Simulation {
     const pose = restingBoulder(level);
     const boulder = this.spawn('stone', pose.shape, pose.pos, [0, 0, 0, 1], [0, 0, 0], [0, 0, 0], 0, null);
     this.heroId = boulder.id;
+    this.originalVolume = pose.shape.volume;
     this.startZ = pose.pos[2];
     this.maxZ = this.startZ;
     this.finishZ = level.beach?.z[0] ?? level.terrain.bounds.z[1];
@@ -1095,6 +1103,9 @@ export class Simulation {
       smashes: this.smashes,
       chips: this.chips,
       trees: this.treesFelled,
+      bowled: this.bowled.size,
+      startSize: this.level.boulder.radius,
+      massLost: hero ? 1 - (hero.shape.volume * Math.pow(hero.size / hero.shape.radius, 3)) / this.originalVolume : 1,
       maxCombo: this.maxCombo,
       airTime: this.totalAir,
       waterTime: this.waterSteps * DT,

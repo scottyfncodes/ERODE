@@ -190,7 +190,47 @@ export const SUMMIT_TO_SEA: LevelDef = {
     },
   ],
   objects: [
-    // obstacles with gaps: steer through, or the run ends here
+    // smashers: set them in the line before the release to break the stone down
+    {
+      id: 'tooth-a',
+      type: 'outcrop',
+      name: 'Granite tooth',
+      hint: 'A blade of hard granite at the edge of the face. Set it in the line and the boulder hits it at full speed.',
+      actionLabel: 'Set it in the line',
+      hardness: 2.0,
+      position: [14, 84],
+      size: [3.2, 5, 3],
+      yaw: 12 * deg,
+      splitTo: [1.5, 84],
+      seed: 451,
+    },
+    {
+      id: 'tooth-b',
+      type: 'outcrop',
+      name: 'Granite tooth',
+      hint: 'Another blade of granite, lower on the scree. A second hit before the forest.',
+      actionLabel: 'Set it in the line',
+      hardness: 2.0,
+      position: [-17, 186],
+      size: [3.2, 5, 3],
+      yaw: -20 * deg,
+      splitTo: [-1.5, 188],
+      seed: 452,
+    },
+    {
+      id: 'crusher-a',
+      type: 'outcrop',
+      name: 'Crusher rock',
+      hint: 'A jagged rock on the riverbank. Roll it into the rapids and the current grinds everything against it.',
+      actionLabel: 'Roll it into the rapids',
+      hardness: 2.0,
+      position: [-14, 712],
+      size: [2.6, 2.6, 2.6],
+      yaw: 30 * deg,
+      splitTo: [7.6, 704],
+      seed: 453,
+    },
+    // obstacles with gaps: steer through, clear them with a move, or the run ends here
     {
       id: 'logjam',
       type: 'branches',
@@ -262,7 +302,7 @@ export const SUMMIT_TO_SEA: LevelDef = {
   ],
   objective: { waterId: 'river', minMassFraction: 0, minFractures: 0 },
   stars: { deliveredFraction: 0.7, maxInterventions: 8 },
-  budget: 8,
+  budget: 3,
   forest: {
     count: 1500,
     seed: 909,

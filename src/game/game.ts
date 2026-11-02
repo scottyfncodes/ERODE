@@ -121,7 +121,8 @@ export class Game {
       action: (k) => this.doAction(k),
       closeContext: () => this.select(null),
       replay: () => this.startReplay(),
-      adjust: () => this.startRun(),
+      adjust: () => this.toPlanning(),
+      retry: () => this.startRun(),
       pause: () => this.togglePause(),
       skip: () => this.toggleFast(),
       scrub: (f) => this.scrub(f),
@@ -314,7 +315,7 @@ export class Game {
     this.audio.unlock();
     this.audio.click();
     this.ui.hideTitle();
-    this.startRun();
+    this.toPlanning();
   }
 
   private toTitle() {
@@ -360,10 +361,10 @@ export class Game {
       const touch = window.matchMedia('(pointer: coarse)').matches;
       this.ui.tip(
         touch
-          ? 'Tap the glowing objects: red ones block the run, orange ones smash it. Swipe to fly down the mountain.'
-          : 'Click the glowing objects: red ones block the run, orange ones smash it. Drag to fly down the mountain.',
+          ? 'Plan the descent: tap the glowing rocks to set them in the line, or clear a blocker. Three moves. Swipe to look down the mountain.'
+          : 'Plan the descent: click the glowing rocks to set them in the line, or clear a blocker. Three moves. Drag to look down the mountain.',
       );
-    } else if (!this.progress.tutorial.released) this.ui.tip('Hit BREAK IT LOOSE and see how far it goes.', 5000);
+    } else if (!this.progress.tutorial.released) this.ui.tip('Ready? Break it loose — then drag left and right to steer.', 5000);
   }
 
   /** Fly the planning camera to a stretch of the course. */
@@ -834,7 +835,7 @@ export class Game {
         const t = h.body.translation();
         this.cam.subject.set(t.x, t.y, t.z);
       }
-      if (this.now > this.releaseUntil) this.cam.setMode('follow', true);
+      if (this.now > this.releaseUntil) this.cam.setMode('follow');
     }
     this.followFrom(states, sim.leader?.id ?? -1, (id) => {
       const p = sim.pieces.get(id);
