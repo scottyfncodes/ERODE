@@ -93,7 +93,7 @@ export const CINDER_CONE: LevelDef = {
   name: 'Cinder Cone',
   tagline: 'Black ash, basalt and glass. Too fast and the mountain shreds you; too slow and it buries you.',
   objectiveText: 'Get down the cone in one piece — manage your speed.',
-  medals: { silver: 0.6, gold: 0.78, platinum: 0.9 },
+  medals: { silver: 0.6, gold: 0.8, platinum: 0.88 },
   budget: 3,
   finish: { z: 300, name: 'the ash fan' },
   objectives: [

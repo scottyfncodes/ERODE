@@ -1509,6 +1509,7 @@ svg {
   border-color: rgba(255, 138, 91, 0.5);
 }
 .marker.route {
+  transform: translate(-50%, 40%);
   font-size: 11.5px;
 }
 .marker.route.r0 {

@@ -984,7 +984,7 @@ export class Game {
     this.cam.subject.set(rb.pos[0], rb.pos[1], rb.pos[2]);
     this.cam.subjectYaw = this.courseYawAt(rb.pos[0], rb.pos[2]);
     this.cam.setMode('release');
-    this.releaseUntil = this.now + 1.3;
+    this.releaseUntil = this.now + 1.1;
     this.ui.showRun(this.level.zones ?? [], this.sim.startMass, this.level.medals);
     this.audio.release();
     this.audio.riser(1.2);
@@ -1359,7 +1359,7 @@ export class Game {
           }
         }
         const el = `route r${i % ROUTE_COLORS.length}`;
-        this.addMarker(r.name, new Vector3(p[0], this.data.heightAt(p[0], p[1]) + 2.5, p[1]), el);
+        this.addMarker(r.name, new Vector3(p[0], this.data.heightAt(p[0], p[1]) + 1, p[1]), el);
       });
   }
   private updateMarkers() {
@@ -1577,6 +1577,11 @@ export class Game {
       replay: () => this.startReplay(),
       adjust: () => this.toPlanning(),
       snapCamera: () => this.cam.snap(),
+      camInfo: () => {
+        const h = this.sim?.hero?.body.translation();
+        const c = this.rig.camera.position;
+        return { mode: this.cam.mode, step: this.sim?.step, hero: h && [h.x, h.y, h.z].map((v) => +v.toFixed(1)), cam: [c.x, c.y, c.z].map((v) => +v.toFixed(1)) };
+      },
       unlockAll: () => {
         for (const l of LEVELS) {
           const lp = levelProgress(this.progress, l.id);

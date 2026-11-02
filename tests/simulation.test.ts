@@ -3,7 +3,8 @@ import type RAPIER_T from '@dimforge/rapier3d-deterministic-compat';
 import { loadRapier } from '../src/sim/rapier';
 import { Simulation, FRAME, restingBoulder, type SimResult } from '../src/sim/simulation';
 import { PINE_HOLLOW as L } from '../src/levels/pineHollow';
-import { LEVELS } from '../src/levels/index';
+import { LEVELS, LEVEL_TESTS } from '../src/levels/index';
+import { GRANITE_RIDGE } from '../src/levels/graniteRidge';
 import { defaultPlan, sanitizePlan } from '../src/sim/plan';
 import { loadLevelData } from '../src/sim/levelData';
 import { makeAutopilot } from '../src/sim/autopilot';
@@ -152,4 +153,47 @@ describe('progression', () => {
     expect(dnf.bestRetained).toBe(false);
     expect(p.levels[L.id].bestRetained).toBe(0.9);
   });
+});
+
+describe('every mountain', () => {
+  it('can be finished with a medal by at least one planned route', () => {
+    for (const level of LEVELS) {
+      const tests = LEVEL_TESTS[level.id];
+      let best = 0;
+      for (const t of tests) {
+        const sim = new Simulation(R, level, sanitizePlan(level, t.plan));
+        const pilot = makeAutopilot(sim, t.route);
+        while (!sim.done) {
+          sim.steer = pilot();
+          sim.stepOnce();
+        }
+        if (sim.result!.finished) best = Math.max(best, sim.result!.retained);
+        sim.dispose();
+        if (best >= level.medals.silver) break;
+      }
+      expect(best, level.id).toBeGreaterThanOrEqual(level.medals.silver);
+    }
+  }, 600000);
+
+  it('a narrow passage refuses a full-size stone and admits a worn one', () => {
+    const tests = LEVEL_TESTS[GRANITE_RIDGE.id];
+    const run = (name: string) => {
+      const t = tests.find((q) => q.name === name)!;
+      const sim = new Simulation(R, GRANITE_RIDGE, sanitizePlan(GRANITE_RIDGE, t.plan));
+      const pilot = makeAutopilot(sim, t.route);
+      while (!sim.done) {
+        sim.steer = pilot();
+        sim.stepOnce();
+      }
+      const r = sim.result!;
+      sim.dispose();
+      return r;
+    };
+    const asFound = run('needle as found');
+    expect(asFound.finished).toBe(false);
+    expect(asFound.cause).toMatch(/Wedged in the Needle/);
+    const worn = run('needle, sentinel');
+    expect(worn.finished).toBe(true);
+    expect(worn.route).toBe('needle');
+  }, 120000);
 });
