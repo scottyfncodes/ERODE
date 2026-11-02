@@ -1,912 +1,1485 @@
-import { Color, Group, Vector3, type Material, type Mesh, type Object3D } from 'three';
-import type { LevelDef } from '../levels/types';
-import { LEVELS, levelById } from '../levels/index';
-import { loadLevelData, type LevelData } from '../sim/levelData';
-import { pathPointAt, makePolyline, clamp, type Polyline } from '../sim/geom';
-import { generateBoulder } from '../sim/fracture';
-import { COMPOSITIONS, composition, type CompositionId } from '../sim/composition';
-import { RunSim, DT, KIND_LABEL, type RunEvent, type RunResult } from '../run/runner';
-import { layoutLevel, type Layout } from '../run/layout';
-import { createSceneRig, detectQuality, type Quality, type SceneRig } from '../render/scene';
-import { buildTerrain } from '../render/terrainView';
-import { buildVegetation } from '../render/vegetation';
-import { buildWater, type WaterView } from '../render/waterView';
-import { DestructView } from '../render/destructView';
-import { Effects, PiecesView, Trails } from '../render/dynamicView';
-import { shared, type RockLook } from '../render/materials';
-import { CameraDirector, type ChaseInfo } from './camera';
-import { compositionUnlocked, levelProgress, levelUnlocked, loadProgress, MEDALS, recordResult, saveProgress, type Medal, type Progress, type Records } from './progress';
+import * as THREE from 'three';
 import { AudioEngine } from '../audio/audio';
-import { UI, pts, type MountainCard } from '../ui/ui';
-import { wordmark } from '../ui/brand';
+import { Input } from '../core/input';
+import { forwardSpeed, glideSpeed, newGlider, SKIS, SLED, stepGlider, type Glider } from '../actors/glide';
+import { HELI, heliAgl, newHeli, stepHeli, type Heli } from '../actors/heli';
+import { newHusky, pet, startTrack, stepHusky, type Husky, type Scent } from '../actors/husky';
+import { newWalker, stepWalker, type Walker } from '../actors/walker';
+import { Snowpack, simulateRelease } from '../missions/avalanche';
+import { FAMILY_LABEL, mission, MISSIONS, type MissionDef, type Vehicle } from '../missions/catalog';
+import { currentStep, fire, fireState, interact, interactables, navTarget, newRun, tickRun, type RunEvent } from '../missions/runner';
+import { BADGES, item, RANKS, type Group } from '../progress/catalog';
+import { available, build, buy, complete, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
+import { PatrollerMesh, type Pose } from '../render/characterMesh';
+import { ForestView } from '../render/forestView';
+import { Particles, Snowfall, Tracks } from '../render/fx';
+import { HeliMesh } from '../render/heliMesh';
+import { HuskyMesh } from '../render/huskyMesh';
+import { shared } from '../render/materials';
+import { AvalancheView, Markers } from '../render/markers';
+import { catMesh, MissionProps } from '../render/missionProps';
+import { detectQuality, Rig } from '../render/rig';
+import { SledMesh } from '../render/sledMesh';
+import { StationView } from '../render/stationView';
+import { buildTerrain, snowUniforms } from '../render/terrainView';
+import { drawTopo } from '../render/topoMap';
+import { WorldView } from '../render/worldView';
+import { Hud } from '../ui/hud';
+import { Panels } from '../ui/panels';
+import type { Colliders } from '../world/colliders';
+import { plantForest, TreeGrid, type Tree } from '../world/forest';
+import { CHARGE_SPOTS, elevation } from '../world/places';
+import { buildColliders, HQ, inGarage, inLodge, SPOTS, UPGRADES, type UpgradeId } from '../world/station';
+import { getTerrain, SURFACE_LABEL, type Terrain } from '../world/terrain';
+import { avalancheDanger, clock, conditions, DANGER_LABEL, nextDay, SKY_LABEL, tickWeather, type Conditions } from '../world/weather';
+import { FollowCamera } from './camera';
 
-type State = 'title' | 'mountains' | 'ready' | 'run' | 'results';
+type Mode = 'foot' | 'sled' | 'heli' | 'skis';
 
-/** Everything that belongs to one mountain, rebuilt when the player moves to another. */
-interface World {
-  level: LevelDef;
-  data: LevelData;
-  layout: Layout;
-  group: Group;
-  water: WaterView;
-  destruct: DestructView;
-  effects: Effects;
-  trails: Trails;
-  guides: Trails;
-  paths: Map<string, Polyline>;
+interface Act {
+  id: string;
+  label: string;
+  hold: number;
+  red?: boolean;
+  enabled?: boolean;
+  run: () => void;
+  /** working pose and sound while holding */
+  work?: 'saw' | 'dig' | 'fix';
 }
 
-const GUIDE = [new Color(1, 0.84, 0.5), new Color(0.6, 0.86, 1), new Color(0.85, 0.7, 1)];
+const storage = (): Store | null => {
+  try {
+    const s = window.localStorage;
+    s.setItem('__t', '1');
+    s.removeItem('__t');
+    return s;
+  } catch {
+    return null;
+  }
+};
 
 export class Game {
-  private rig: SceneRig;
-  private quality: Quality;
-  private cam: CameraDirector;
-  private w!: World;
-  private pieces = new PiecesView();
+  private rig: Rig;
+  private terrain: Terrain;
+  private trees: Tree[];
+  private grid: TreeGrid;
+  private solid: Colliders;
+  private station: StationView;
+  private world: WorldView;
+  private markers: Markers;
+  private avView: AvalancheView;
+  private props: MissionProps;
+  private particles: Particles;
+  private snowfall: Snowfall;
+  private tracks: Tracks;
+  private player = new PatrollerMesh();
+  private dogMesh = new HuskyMesh();
+  private sledMesh = new SledMesh();
+  private heliMesh = new HeliMesh();
+  private pepperHeld = catMesh();
+  private walker: Walker;
+  private sled: Glider;
+  private skis: Glider;
+  private heli: Heli;
+  private dog: Husky;
+  private mode: Mode = 'foot';
+  private pack: Snowpack;
+  private input: Input;
+  private hud: Hud;
+  private panels: Panels;
   private audio = new AudioEngine();
-  private ui: UI;
-  private progress: Progress;
-  private state: State = 'title';
-  private sim: RunSim | null = null;
-  private result: RunResult | null = null;
-  private records: Records | null = null;
-  private acc = 0;
-  private timeScale = 1;
-  private slowUntil = 0;
-  private slowTo = 1;
-  private paused = false;
-  private menuOpen = false;
-  private fast = false;
-  private now = 0;
-  private last = 0;
-  private hudTimer = 0;
-  private sprayAcc = 0;
-  private lastSound = new Map<string, number>();
-  private resultsShown = true;
-  private resultsTimer = 0;
-  private guideFor = '';
-  private loadingEl = document.getElementById('loading');
-  private automation = navigator.webdriver === true;
+  private cam: FollowCamera;
+  private p: Profile;
+  private store = storage();
+  private topo: HTMLCanvasElement;
+  private state: 'title' | 'play' = 'title';
+  private last = performance.now();
+  private time = 0;
+  private holdId = '';
+  private holdT = 0;
+  private saveT = 0;
+  private watching = 0;
+  private watchSkip = false;
+  private cond: Conditions;
+  private indoors = 0;
+  private stepClock = 0;
+  private seat = new THREE.Vector3();
+  private tmp = new THREE.Vector3();
+  private smokeT = 0;
+  private rng = Math.random;
+  private passengerVisible = false;
+  private alertShown: string | null = null;
+  private fps = 60;
+  /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
+  private realDt = 0;
 
-  constructor(canvas: HTMLCanvasElement, uiRoot: HTMLElement, onProgress: (f: number, label: string) => void) {
-    this.progress = loadProgress();
-    const idx = LEVELS.findIndex((l) => l.id === this.progress.lastLevel);
-    const level = idx >= 0 && levelUnlocked(this.progress, LEVELS, idx) ? LEVELS[idx] : LEVELS[0];
-    if (!compositionUnlocked(this.progress, this.progress.composition)) this.progress.composition = 'granite';
-    onProgress(0.15, 'Raising the mountain…');
-    this.quality = detectQuality();
-    this.rig = createSceneRig(canvas, level, this.quality);
-    this.rig.scene.add(this.pieces.group);
-    this.buildWorld(level, onProgress);
-    this.cam = new CameraDirector(this.rig.camera, level, this.w.data.heightAt);
-    this.audio.setSound(this.progress.settings.sound);
-    this.audio.setMusic(this.progress.settings.music);
-    this.applyLook();
-
-    this.ui = new UI(uiRoot, {
-      play: () => this.showMountains(),
-      pickLevel: (id) => void this.pickLevel(id),
-      mountains: () => this.showMountains(),
-      release: () => this.startRun(),
-      menu: () => this.openMenu(),
-      retry: () => this.startRun(),
-      next: () => this.nextLevel(),
-      pause: () => this.togglePause(),
-      toggleSound: () => this.setSound(!this.progress.settings.sound),
-      toggleMusic: () => this.setMusic(!this.progress.settings.music),
-      toTitle: () => this.toTitle(),
-      resumeFromMenu: () => this.closeMenu(),
-      composition: (id) => this.setComposition(id),
-      choose: (side) => this.choose(side),
-    });
-
-    // during a run: the left or right of the screen picks that way at a fork
-    canvas.addEventListener('pointerdown', (e) => {
-      this.audio.unlock();
-      if (this.state === 'run' && this.sim?.decision) {
-        const x = e.clientX / Math.max(1, canvas.clientWidth);
-        const n = this.sim.decision.options.length;
-        this.choose(n === 3 && x > 0.36 && x < 0.64 ? 'centre' : x < 0.5 ? 'left' : 'right');
-      } else if (this.state === 'results' && !this.resultsShown) this.revealResults();
-    });
-    window.addEventListener('keydown', (e) => this.key(e));
-    const unlock = () => this.audio.unlock();
-    for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) window.addEventListener(ev, unlock, { passive: true });
-    window.addEventListener('resize', () => this.resize());
-    window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 250));
+  constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void) {
+    this.p = loadProfile(this.store) ?? newProfile();
+    this.rig = new Rig(canvas, detectQuality(this.p.settings.quality));
+    progress(0.15, 'Raising the mountains');
+    this.terrain = getTerrain();
+    this.solid = buildColliders();
+    progress(0.35, 'Planting the forest');
+    this.trees = plantForest(this.terrain, this.rig.quality.trees);
+    // collisions use the same trees you see
+    this.grid = new TreeGrid(this.trees);
+    progress(0.5, 'Drawing the map');
+    this.topo = drawTopo(this.terrain, 640);
+    const scene = this.rig.scene;
+    scene.add(buildTerrain(this.terrain));
+    scene.add(new ForestView(this.trees).group);
+    progress(0.7, 'Lighting the stove');
+    this.station = new StationView(this.terrain, this.topo);
+    this.world = new WorldView(this.terrain);
+    this.markers = new Markers(this.terrain);
+    this.avView = new AvalancheView();
+    this.props = new MissionProps(this.terrain);
+    this.particles = new Particles(this.rig.quality.tier === 'low' ? 1600 : 2600);
+    this.snowfall = new Snowfall(this.rig.quality.snowflakes);
+    this.tracks = new Tracks(this.terrain, this.rig.quality.tier === 'low' ? 1100 : 1800);
+    scene.add(this.station.group, this.world.group, this.markers.group, this.avView.group, this.props.group, this.particles.points, this.snowfall.points, this.tracks.mesh);
+    scene.add(this.player.group, this.dogMesh.group, this.sledMesh.group, this.heliMesh.group);
+    progress(0.85, 'Waking Koda');
+    this.pack = new Snowpack(this.terrain);
+    const pl = this.p.player;
+    this.walker = newWalker(pl.x, pl.z, pl.yaw, this.terrain);
+    this.sled = newGlider(this.p.sled.x, this.p.sled.z, this.p.sled.yaw, this.terrain);
+    this.skis = newGlider(pl.x, pl.z, pl.yaw, this.terrain);
+    this.heli = newHeli(this.p.heli.x, this.p.heli.z, this.p.heli.yaw, this.terrain);
+    this.dog = newHusky(pl.x + 1.5, pl.z + 1, this.terrain);
+    this.cam = new FollowCamera(this.rig.camera, this.terrain);
+    this.input = new Input(canvas);
+    this.hud = new Hud(ui, this.input);
+    this.panels = new Panels(ui, this.topo.toDataURL('image/png'));
+    this.cond = conditions(this.p.weather);
+    this.bindHud();
+    this.applyProfile();
+    window.addEventListener('resize', () => this.rig.resize());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
+        this.save();
         this.audio.suspend();
-        if (this.state === 'run' && !this.paused) this.togglePause();
       } else this.audio.resume();
     });
-    this.resize();
-    onProgress(0.9, 'Placing the boulder…');
+    window.addEventListener('pagehide', () => this.save());
   }
 
-  private get level(): LevelDef {
-    return this.w.level;
-  }
-  private get comp() {
-    return composition(this.progress.composition);
+  // ------------------------------------------------------------------ setup
+
+  private bindHud() {
+    this.hud.chips.map.onclick = () => this.openMap();
+    this.hud.chips.koda.onclick = () => this.kodaCommand();
+    this.hud.chips.skis.onclick = () => this.toggleSkis();
+    this.hud.chips.off.onclick = () => this.dismount();
+    this.hud.pause.onclick = () => this.openPause();
   }
 
-  // ------------------------------------------------------------------ world
-  private buildWorld(level: LevelDef, onProgress?: (f: number, label: string) => void) {
-    const scene = this.rig.scene;
-    if (this.w) {
-      scene.remove(this.w.group);
-      disposeTree(this.w.group);
+  /** Make the world match the save: buildings, gear, paint, mission state. */
+  private applyProfile() {
+    const p = this.p;
+    this.station.setUpgrades(p.upgrades);
+    this.station.setBadges(p.badges);
+    for (const u of UPGRADES) this.solid.setEnabled(u.id, p.upgrades.includes(u.id));
+    const e = p.equip;
+    const jacket = item(e.jacket);
+    const hat = item(e.hat);
+    this.player.setLook(jacket.color!, jacket.color2!, e.hat, hat.color!, hat.color2!, item(e.goggles).color!, item(e.skis).color!);
+    const sp = item(e.sledPaint);
+    this.sledMesh.setPaint(sp.color!, sp.color2!);
+    const hp = item(e.heliPaint);
+    this.heliMesh.setPaint(hp.color!, hp.color2!);
+    const har = item(e.harness);
+    const ban = item(e.bandana);
+    this.dogMesh.setGear(item(e.collar).color!, har.color !== undefined ? { main: har.color, second: har.color2!, pack: e.harness === 'harness-pack' } : null, ban.color ?? null);
+    this.world.setStationWorking(done(p, 'rounds') || (p.active?.id === 'rounds' && p.active.step > 3));
+    this.props.tree.visible = p.events.includes('tree') || p.active?.id === 'tree';
+    this.props.van.visible = p.events.includes('drift') || p.active?.id === 'drift';
+    this.props.driver.group.visible = this.props.van.visible;
+    if (done(p, 'release')) this.pack.reset();
+    this.syncMissionVisuals();
+  }
+
+  private syncMissionVisuals() {
+    const r = this.p.active;
+    const id = r?.id;
+    const step = r?.step ?? -1;
+    // the barrier
+    this.props.setGate(id === 'release' && step >= 1 && step <= 6);
+    // Nils
+    const nilsHere = id === 'skier' && !r!.passenger && step <= 3;
+    this.props.nils.group.visible = nilsHere || (id === 'skier' && r!.passenger);
+    if (nilsHere) {
+      const s = mission('skier').subject!;
+      this.props.nils.group.position.set(s.x, this.terrain.height(s.x, s.z), s.z);
+      this.props.nils.group.rotation.y = 0.5;
     }
-    const data = loadLevelData(level);
-    const layout = layoutLevel(level, data);
-    const group = new Group();
-    onProgress?.(0.35, 'Laying down the ground…');
-    group.add(buildTerrain(data, this.quality.far));
-    onProgress?.(0.5, 'Growing the forest…');
-    const avoid = [
-      ...layout.trees.map((t) => ({ x: t.x, z: t.z, r: 3 })),
-      ...layout.structures.map((s) => ({ x: s.x, z: s.z, r: Math.max(s.hx, s.hz) + 3 })),
-      ...layout.rocks.filter((r) => r.role !== 'rock').map((r) => ({ x: r.x, z: r.z, r: r.r + 2 })),
-    ];
-    if (level.forest.count > 0) group.add(buildVegetation(data, this.quality.trees, avoid).group);
-    onProgress?.(0.7, 'Stacking the timber…');
-    const water = buildWater(data, this.rig.sunDir, this.rig.fogColor);
-    group.add(water.group);
-    const destruct = new DestructView(level, layout);
-    group.add(destruct.group);
-    const effects = new Effects(data.heightAt);
-    const trails = new Trails(data.heightAt);
-    const guides = new Trails(data.heightAt);
-    group.add(effects.group, trails.group, guides.group);
-    scene.add(group);
-    effects.setViewportHeight(this.rig.renderer.domElement.clientHeight * Math.min(2, window.devicePixelRatio || 1));
-    const paths = new Map(level.segments.map((s) => [s.id, makePolyline(s.path)]));
-    this.w = { level, data, layout, group, water, destruct, effects, trails, guides, paths };
-    this.result = null;
-  }
-
-  private async loadLevel(level: LevelDef) {
-    if (this.w.level.id === level.id) return;
-    const l = this.loadingEl;
-    if (l) {
-      l.innerHTML = `<div class="loading-inner">${wordmark('sm')}<div class="loading-text">${level.stage} · ${level.name}</div></div>`;
-      l.classList.remove('gone');
+    this.props.glove.visible = id === 'skier' && step <= 1;
+    // Pepper
+    const pepper = mission('pepper').subject!;
+    if (id === 'pepper' && r!.carrying) {
+      this.props.pepper.visible = false;
+      this.player.hold(this.pepperHeld);
+    } else {
+      this.player.hold(null);
+      this.props.pepper.visible = id === 'pepper' || done(this.p, 'pepper');
+      if (done(this.p, 'pepper') && id !== 'pepper') {
+        // home on the Kettle's windowsill
+        this.props.pepper.position.set(333.5, this.terrain.height(334, 462) + 1.1, 461.2);
+      } else this.props.pepper.position.set(pepper.x, this.terrain.height(pepper.x, pepper.z) + 0.05, pepper.z);
     }
-    await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 30)));
-    this.sim = null;
-    this.pieces.clear();
-    this.buildWorld(level);
-    this.rig.setLevel(level);
-    this.cam.setLevel(level, this.w.data.heightAt);
-    this.progress.lastLevel = level.id;
-    saveProgress(this.progress);
-    this.showRestingBoulder();
-    this.cam.snap();
-    if (l) setTimeout(() => l.classList.add('gone'), 120);
+    // the crate
+    this.sledMesh.crate.visible = !!r?.cargo;
+    this.station.crate.visible = !(id === 'supplies' && (r!.cargo || step > 0)) && !done(this.p, 'supplies');
+    // tracking
+    if (r && currentStep(r)?.kind === 'track' && r.tracking && this.dog.mode !== 'track') {
+      const s = currentStep(r)!;
+      if (s.kind === 'track') startTrack(this.dog, s.trail);
+    }
   }
 
   start() {
-    this.showRestingBoulder();
     this.showTitle();
-    this.cam.setMode('intro');
-    this.cam.snap();
-    this.last = performance.now();
-    const loop = (t: number) => {
+    const loop = () => {
       requestAnimationFrame(loop);
-      this.frame(t);
+      this.frame();
     };
     requestAnimationFrame(loop);
   }
 
-  private resize() {
-    this.rig.resize();
-    this.cam.baseFov = this.rig.camera.fov;
-    this.w.effects.setViewportHeight(this.rig.renderer.domElement.clientHeight * Math.min(2, window.devicePixelRatio || 1));
-  }
-
-  private applyLook() {
-    const c = this.comp;
-    const look: RockLook = { tint: c.tint, speck: c.speck, gloss: c.gloss };
-    this.pieces.setLook(look);
-    this.w.destruct.setBoulderLook(c.tint, c.speck, c.gloss);
-  }
-
-  private boulderShape = new Map<string, ReturnType<typeof generateBoulder>>();
-  private shapeFor(level: LevelDef) {
-    let s = this.boulderShape.get(level.id);
-    if (!s) this.boulderShape.set(level.id, (s = generateBoulder(level.boulder.radius, level.boulder.seed)));
-    return s;
-  }
-
-  private showRestingBoulder() {
-    const [bx, bz] = this.level.boulder.position;
-    const y = this.w.data.heightAt(bx, bz) + this.level.boulder.radius * 0.92;
-    this.pieces.clear();
-    this.applyLook();
-    this.pieces.sync([{ id: 1, shape: this.shapeFor(this.level), kind: 'stone', pos: [bx, y, bz], quat: [0, 0, 0, 1], scale: 1 }]);
-  }
-
-  private massFor(id: CompositionId): number {
-    return this.shapeFor(this.level).volume * composition(id).density * 1000;
-  }
-
-  // ------------------------------------------------------------------ flow
-  private hideAll() {
-    this.ui.hideTitle();
-    this.ui.hideMountains();
-    this.ui.hideReady();
-    this.ui.hideRun();
-    this.ui.hideResults();
-    this.ui.tip(null);
-  }
+  // ------------------------------------------------------------------ title
 
   private showTitle() {
-    const medals: Record<Medal, number> = { none: 0, bronze: 0, silver: 0, gold: 0, platinum: 0 };
-    let finished = 0;
-    let best = 0;
-    for (const l of LEVELS) {
-      const lp = this.progress.levels[l.id];
-      if (lp?.finished) {
-        finished++;
-        medals[lp.medal]++;
-      }
-      best = Math.max(best, lp?.bestScore ?? 0);
-    }
-    this.ui.showTitle({ medals, finished, total: LEVELS.length, best });
-  }
-
-  private resetMountain() {
-    this.sim = null;
-    this.w.destruct.reset();
-    this.w.effects.clear();
-    this.w.trails.clear();
-    this.w.guides.clear();
-    this.guideFor = '';
-    this.showRestingBoulder();
-  }
-
-  private toTitle() {
-    this.closeMenu();
-    this.hideAll();
-    this.resetMountain();
     this.state = 'title';
-    this.cam.setMode('intro');
-    this.showTitle();
+    this.hud.show(false);
+    const has = !!this.p.savedAt && !this.p.fresh;
+    const el = document.createElement('div');
+    el.className = 'title-screen';
+    const when = has ? `Day ${this.p.weather.day}, ${clock(this.p.weather.minute)} · ${RANKS[rank(this.p)].name} · ${this.p.funds} funds` : '';
+    el.innerHTML = `<div class="inner"><div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div><div class="subbrand">Mountain Patrol</div><p>The Kessel valley is yours to look after: its slopes, its roads, its people. You have a log station, a snowmobile, a borrowed helicopter, a pair of old skis, and Koda.</p><div class="row">${has ? '<button class="btn red" data-a="cont">Continue</button><button class="btn ghost" data-a="new">New patrol</button>' : '<button class="btn red" data-a="new">Start your patrol</button>'}</div>${has ? `<div class="meta">${when}</div>` : ''}</div>`;
+    this.ui.appendChild(el);
+    const go = (fresh: boolean) => {
+      this.audio.unlock();
+      this.applySettings(this.p.settings);
+      if (fresh) {
+        const btn = el.querySelector('[data-a=new]') as HTMLElement;
+        if (has && !btn.dataset.armed) {
+          btn.dataset.armed = '1';
+          btn.textContent = 'Tap again: this erases your save';
+          return;
+        }
+        this.resetProfile();
+      }
+      el.remove();
+      this.beginPlay();
+    };
+    (el.querySelector('[data-a=new]') as HTMLElement).onclick = () => go(true);
+    const c = el.querySelector('[data-a=cont]') as HTMLElement | null;
+    if (c) c.onclick = () => go(false);
   }
 
-  private showMountains() {
-    this.audio.unlock();
+  private resetProfile() {
+    const settings = this.p.settings;
+    this.p = newProfile();
+    this.p.settings = settings;
+    const pl = this.p.player;
+    this.walker = newWalker(pl.x, pl.z, pl.yaw, this.terrain);
+    this.sled = newGlider(this.p.sled.x, this.p.sled.z, this.p.sled.yaw, this.terrain);
+    this.heli = newHeli(this.p.heli.x, this.p.heli.z, this.p.heli.yaw, this.terrain);
+    this.dog = newHusky(pl.x + 1.5, pl.z + 1, this.terrain);
+    this.pack.reset();
+    this.props.resetTree();
+    this.mode = 'foot';
+    this.applyProfile();
+  }
+
+  private beginPlay() {
+    this.state = 'play';
+    this.hud.show(true);
+    const p = this.p;
+    // restore the vehicle you were in
+    const m = p.player.mode;
+    this.mode = 'foot';
+    if (m === 'sled') this.mountSled(true);
+    else if (m === 'heli') {
+      this.mountHeli(true);
+      this.heli.running = true;
+      this.heli.rotor = 1;
+    } else if (m === 'skis') this.toggleSkis(true);
+    this.cam.snapBehind(this.headingNow());
+    // a mission caught mid-avalanche finishes off-screen
+    if (p.active && currentStep(p.active)?.kind === 'watch') {
+      const sp = simulateRelease(this.terrain, p.active.charges.length ? p.active.charges : ['A', 'C']);
+      this.pack = sp;
+    }
+    if (p.fresh) {
+      p.fresh = false;
+      this.hud.radio('Dispatch', 'Morning, Kessel Patrol. Forty centimetres up high overnight. There is a call on your mission table.', 6);
+      this.hud.radio('Dispatch', 'Koda is already at the door.', 3.5);
+    } else this.hud.radio('Dispatch', `Welcome back. ${p.active ? `Still on ${mission(p.active.id).title}.` : 'Nothing urgent.'}`, 4);
+    this.save();
+  }
+
+  // ------------------------------------------------------------------ vehicles
+
+  private mountSled(silent = false) {
+    this.mode = 'sled';
+    this.cam.setMode('sled');
+    this.player.setSkis(false);
+    this.dog.mode = this.p.active?.passenger ? 'follow' : 'ride';
+    this.sled.vx = this.sled.vz = 0;
+    if (!silent) this.audio.click();
+  }
+
+  private mountHeli(silent = false) {
+    if (this.cond.grounded) {
+      this.hud.toast('Grounded: storm', 'warn');
+      this.hud.radio('Dispatch', 'Nobody flies in this. Wait for it to pass.', 3.5);
+      return;
+    }
+    this.mode = 'heli';
+    this.cam.setMode('heli');
+    this.heli.running = true;
+    this.dog.mode = 'ride';
+    if (!silent) this.hud.toast('Climb to lift off', '');
+  }
+
+  private dismount() {
+    if (this.mode === 'sled') {
+      const s = this.sled;
+      const rx = Math.cos(s.yaw);
+      const rz = -Math.sin(s.yaw);
+      this.placeWalker(s.x + rx * 1.6, s.z + rz * 1.6, s.yaw);
+      this.mode = 'foot';
+      this.dog.mode = 'follow';
+      this.dog.x = s.x - rx * 1.4;
+      this.dog.z = s.z - rz * 1.4;
+    } else if (this.mode === 'heli') {
+      if (!this.heli.landed) {
+        this.hud.toast('Land first', 'warn');
+        return;
+      }
+      const h = this.heli;
+      const rx = Math.cos(h.yaw);
+      const rz = -Math.sin(h.yaw);
+      this.placeWalker(h.x + rx * 3.2, h.z + rz * 3.2, h.yaw);
+      h.running = false;
+      this.mode = 'foot';
+      this.dog.mode = 'follow';
+      this.dog.x = h.x + rx * 4.2;
+      this.dog.z = h.z + rz * 4.2 + 1;
+    } else if (this.mode === 'skis') {
+      this.toggleSkis();
+      return;
+    }
+    this.cam.setMode('foot');
     this.audio.click();
-    this.closeMenu();
-    this.hideAll();
-    this.resetMountain();
-    this.state = 'mountains';
-    this.cam.setMode('intro');
-    const cards: MountainCard[] = LEVELS.map((level, i) => ({
-      level,
-      unlocked: levelUnlocked(this.progress, LEVELS, i),
-      lockText: i > 0 ? `Reach the bottom of ${LEVELS[i - 1].name} to open this mountain` : '',
-      progress: this.progress.levels[level.id],
-    }));
-    this.ui.showMountains(cards, this.level.id);
   }
 
-  private async pickLevel(id: string) {
-    const level = levelById(id);
-    if (!level) return;
+  private placeWalker(x: number, z: number, yaw: number) {
+    const r = this.solid.resolve(x, z, 0.5);
+    this.walker.x = r.x;
+    this.walker.z = r.z;
+    this.walker.y = this.terrain.height(r.x, r.z);
+    this.walker.yaw = yaw;
+    this.walker.vx = this.walker.vz = 0;
+  }
+
+  private toggleSkis(silent = false) {
+    if (this.mode === 'foot') {
+      if (inLodge(this.walker.x, this.walker.z) || inGarage(this.walker.x, this.walker.z)) {
+        this.hud.toast('Not indoors', 'warn');
+        return;
+      }
+      this.skis = newGlider(this.walker.x, this.walker.z, this.walker.yaw, this.terrain);
+      this.mode = 'skis';
+      this.cam.setMode('skis');
+      this.player.setSkis(true);
+      this.tracks.lift('ski-l');
+      this.tracks.lift('ski-r');
+      if (!silent) this.audio.click();
+    } else if (this.mode === 'skis') {
+      this.placeWalker(this.skis.x, this.skis.z, this.skis.yaw);
+      this.mode = 'foot';
+      this.cam.setMode('foot');
+      this.player.setSkis(false);
+      this.audio.click();
+    }
+  }
+
+  private kodaCommand() {
+    const d = this.dog;
+    if (d.mode === 'track') {
+      this.hud.toast('Koda is on the scent');
+      return;
+    }
+    if (d.mode === 'stay') {
+      d.mode = 'follow';
+      this.hud.toast('Koda: heel');
+    } else if (this.mode === 'foot' || this.mode === 'skis') {
+      d.mode = 'stay';
+      this.hud.toast('Koda: stay');
+    }
     this.audio.click();
-    this.ui.hideMountains();
-    await this.loadLevel(level);
-    this.toReady();
   }
 
-  private nextLevel() {
-    const i = LEVELS.findIndex((l) => l.id === this.level.id);
-    const next = LEVELS[i + 1];
-    if (next && levelUnlocked(this.progress, LEVELS, i + 1)) void this.pickLevel(next.id);
-    else this.showMountains();
+  // ------------------------------------------------------------------ the frame
+
+  private frame() {
+    const now = performance.now();
+    this.realDt = Math.min(0.25, (now - this.last) / 1000);
+    const dt = Math.min(0.05, (now - this.last) / 1000);
+    this.last = now;
+    this.fps += (1 / Math.max(dt, 1e-3) - this.fps) * 0.05;
+    this.time += dt;
+    shared.time.value = this.time;
+    if (this.state === 'title') this.titleFrame(dt);
+    else if (!this.panels.open) this.playFrame(dt);
+    else this.idleFrame(dt);
+    this.rig.adapt(dt);
+    this.rig.render();
+    this.input.endFrame();
   }
 
-  /** At the summit: pick a stone, then let go. */
-  private toReady() {
-    this.closeMenu();
-    this.hideAll();
-    this.resetMountain();
-    this.state = 'ready';
-    this.cam.setMode('summit');
-    const lp = levelProgress(this.progress, this.level.id);
-    this.ui.showReady(this.level, lp, !this.progress.tutorial.decided);
-    this.refreshCompositions();
+  private titleFrame(dt: number) {
+    const a = this.time * 0.05;
+    const c = this.rig.camera;
+    c.position.set(HQ.x + Math.sin(a) * 60, this.station.y + 22, HQ.z + Math.cos(a) * 60);
+    c.lookAt(HQ.x - 8, this.station.y + 3, HQ.z);
+    this.cond = conditions(this.p.weather);
+    this.rig.setConditions(this.cond);
+    this.rig.focus(new THREE.Vector3(HQ.x, this.station.y, HQ.z), 70);
+    this.station.update(dt, this.rig.night);
+    this.world.update(dt, this.rig.night, this.cond.wind);
+    this.placeActors(dt, true);
+    this.dogMesh.animate('sit', 0, dt);
+    this.smoke(dt);
+    this.particles.update(dt, this.rig.fog, this.pixelScale());
+    this.snowfall.update(dt, c.position, this.cond.snow, this.cond.wind * 4, this.cond.wind);
   }
 
-  private refreshCompositions() {
-    this.ui.setCompositions(
-      COMPOSITIONS.map((c) => ({ comp: c, unlocked: compositionUnlocked(this.progress, c.id), mass: this.massFor(c.id) })),
-      this.progress.composition,
+  /** While a panel is open: the world holds still, the fire still flickers. */
+  private idleFrame(dt: number) {
+    this.input.frame();
+    this.station.update(dt, this.rig.night);
+    this.hud.update(Math.max(dt, this.realDt));
+    this.audio.update(dt, { engine: 0, speed: 0, rotor: this.mode === 'heli' ? this.heli.rotor * 0.5 : 0, hiss: 0, wind: this.cond.wind, rumble: 0, fire: this.indoors, outdoors: 1 - this.indoors });
+  }
+
+  private pixelScale() {
+    return (window.innerHeight * this.rig.renderer.getPixelRatio()) / (2 * Math.tan((this.rig.camera.fov * Math.PI) / 360));
+  }
+
+  private playFrame(dt: number) {
+    const p = this.p;
+    const { look } = this.input.frame();
+    this.cam.look(look.x, look.y, p.settings.look, p.settings.invertY);
+    if (this.input.pressed('Escape') || this.input.pressed('KeyP')) return this.openPause();
+    if (this.input.pressed('KeyM') || this.input.pressed('Tab')) return this.openMap();
+    if (this.input.pressed('KeyQ')) {
+      if (this.mode === 'foot' || this.mode === 'skis') this.toggleSkis();
+    }
+    if (this.input.pressed('KeyX')) this.dismount();
+    if (this.input.pressed('KeyG')) this.kodaCommand();
+
+    // weather and the clock
+    tickWeather(p.weather, dt);
+    this.cond = conditions(p.weather);
+    const c = this.cond;
+    p.played += dt;
+
+    this.moveActors(dt);
+    this.updateDog(dt);
+    this.updateMission(dt);
+    this.updateAvalanche(dt);
+    this.updateInteractions(dt);
+    this.updateBadges();
+    this.updateEvents(dt);
+
+    // indoors?
+    const fp = this.pos2();
+    const px = fp.x;
+    const pz = fp.z;
+    const inside = this.mode === 'foot' && (inLodge(px, pz) || inGarage(px, pz));
+    this.indoors += ((inside ? 1 : 0) - this.indoors) * Math.min(1, dt * 4);
+    if (this.watching <= 0) this.cam.setMode(inside ? 'indoor' : this.mode === 'foot' ? 'foot' : this.mode);
+    this.station.cutaway(px, pz, this.rig.camera.position);
+
+    // camera
+    const pos = this.focusPos();
+    if (this.watching > 0 && !this.watchSkip) {
+      const t = this.avalancheFocus();
+      this.cam.setMode('watch');
+      // from the side, so you see it run down the slope
+      this.cam.yaw = 1.3;
+      this.cam.pitch = 0.2;
+      this.cam.update(dt, t, 1.3, 0);
+    } else this.cam.update(dt, pos, this.headingNow(), this.speedNow());
+
+    this.rig.setConditions(c, this.indoors);
+    this.rig.focus(pos, this.mode === 'heli' ? 110 : 55);
+    snowUniforms.fresh.value = Math.min(1, p.weather.freshSnow / 40);
+    this.station.update(dt, this.rig.night);
+    this.world.update(dt, this.rig.night, c.wind);
+    this.props.update(dt);
+    this.markers.update(dt);
+    this.placeActors(dt, false);
+    this.smoke(dt);
+    this.particles.update(dt, this.rig.fog, this.pixelScale());
+    this.snowfall.update(dt, this.rig.camera.position, c.snow * (1 - this.indoors * 0.8), c.wind * 6, c.wind * 2);
+    this.tracks.update(dt, c.snow);
+    this.updateHud(dt);
+    this.updateAudio(dt);
+    this.saveT += dt;
+    if (this.saveT > 12) this.save();
+  }
+
+  private headingNow(): number {
+    switch (this.mode) {
+      case 'sled':
+        return this.sled.yaw;
+      case 'skis':
+        return this.skis.yaw;
+      case 'heli':
+        return this.heli.yaw;
+      default:
+        return this.walker.yaw;
+    }
+  }
+
+  private speedNow(): number {
+    switch (this.mode) {
+      case 'sled':
+        return glideSpeed(this.sled);
+      case 'skis':
+        return glideSpeed(this.skis);
+      case 'heli':
+        return Math.hypot(this.heli.vx, this.heli.vz);
+      default:
+        return this.walker.speed;
+    }
+  }
+
+  private focusPos(): THREE.Vector3 {
+    switch (this.mode) {
+      case 'sled':
+        return this.tmp.set(this.sled.x, this.sled.y, this.sled.z);
+      case 'skis':
+        return this.tmp.set(this.skis.x, this.skis.y, this.skis.z);
+      case 'heli':
+        return this.tmp.set(this.heli.x, this.heli.y, this.heli.z);
+      default:
+        return this.tmp.set(this.walker.x, this.walker.y, this.walker.z);
+    }
+  }
+
+  private pos2(): { x: number; z: number } {
+    const f = this.focusPos();
+    return { x: f.x, z: f.z };
+  }
+
+  private moveActors(dt: number) {
+    const mv = this.input.move;
+    const f = this.cam.forward();
+    // stick to world: up is camera-forward
+    const wx = -f.z * mv.x + f.x * mv.y;
+    const wz = f.x * mv.x + f.z * mv.y;
+    const free = this.watching <= 0 || this.watchSkip;
+    const e = this.p.equip;
+    if (this.mode === 'foot') {
+      const indoors = inLodge(this.walker.x, this.walker.z) || inGarage(this.walker.x, this.walker.z);
+      const working = this.holdT > 0;
+      stepWalker(this.walker, free && !working ? wx : 0, free && !working ? wz : 0, dt, this.terrain, this.solid, this.grid, indoors);
+      if (this.walker.speed > 0.5) {
+        const stepLen = this.walker.speed > 4 ? 1.6 : 1.1;
+        if (Math.floor(this.walker.stride / stepLen) !== this.stepClock) {
+          this.stepClock = Math.floor(this.walker.stride / stepLen);
+          this.audio.step(this.walker.speed / 6);
+          if (!indoors && this.terrain.surface(this.walker.x, this.walker.z) === 'powder') this.particles.powder(this.walker.x, this.walker.y + 0.1, this.walker.z, 2, 0.8, 0.6, 0, 0, 0.5);
+        }
+        if (!indoors) this.tracks.add('foot', this.walker.x, this.walker.z, -Math.sin(this.walker.yaw), -Math.cos(this.walker.yaw), 0.22, 0, 0.18);
+      }
+    } else if (this.mode === 'sled') {
+      const s = this.sled;
+      const boost = item(e.sledEngine).stat ?? 1;
+      const prof = { ...SLED, powderDrag: SLED.powderDrag * (item(e.sledTrack).stat ?? 1) };
+      stepGlider(s, prof, free ? mv.x : 0, free ? mv.y : 0, dt, this.terrain, this.solid, this.grid, boost);
+      const sp = glideSpeed(s);
+      const fx = -Math.sin(s.yaw);
+      const fz = -Math.cos(s.yaw);
+      if (!s.airborne && sp > 1) {
+        this.tracks.add('sled-l', s.x - fx * 0.8, s.z - fz * 0.8, fx, fz, 0.2, -0.32, 0.45);
+        this.tracks.add('sled-r', s.x - fx * 0.8, s.z - fz * 0.8, fx, fz, 0.2, 0.32, 0.45);
+      } else {
+        this.tracks.lift('sled-l');
+        this.tracks.lift('sled-r');
+      }
+      // powder spray off the track and out of the turns
+      const powder = s.surface === 'powder' ? 1 : s.surface === 'crust' ? 0.4 : s.surface === 'ice' ? 0.1 : 0.3;
+      if (!s.airborne && sp > 3) {
+        const n = Math.round((sp / 8 + s.slip * 0.6) * powder * (this.rig.quality.tier === 'low' ? 1 : 2));
+        if (n > 0) this.particles.powder(s.x - fx * 1.9, s.y + 0.4, s.z - fz * 1.9, n, 2.5 + s.slip, 2 + sp * 0.12, -fx * sp * 0.25 + s.vx * 0.3, -fz * sp * 0.25 + s.vz * 0.3, 0.9);
+      }
+      if (s.landed > 3) {
+        this.particles.powder(s.x, s.y + 0.3, s.z, 14, 6, 3, s.vx * 0.3, s.vz * 0.3, 1.4);
+        this.audio.landing(s.landed);
+        this.cam.kick(Math.min(1, s.landed / 10));
+      }
+      if (s.bump > 3) {
+        this.audio.bump(s.bump);
+        this.cam.kick(Math.min(1, s.bump / 10));
+        this.particles.powder(s.x, s.y + 1, s.z, 10, 4, 2, 0, 0, 1);
+      }
+    } else if (this.mode === 'skis') {
+      const s = this.skis;
+      const st = item(e.skis).stat ?? 1;
+      const prof = { ...SKIS, turn: SKIS.turn * st, climb: item(e.skins).stat ?? 0, engine: 0 };
+      if (prof.climb > 0) {
+        // skins: walk the skis uphill
+        prof.push = 2.6;
+        prof.pushTop = 2.4;
+      }
+      stepGlider(s, prof, free ? mv.x : 0, free ? mv.y : 0, dt, this.terrain, this.solid, this.grid, 1);
+      const sp = glideSpeed(s);
+      const fx = -Math.sin(s.yaw);
+      const fz = -Math.cos(s.yaw);
+      if (!s.airborne && sp > 0.6) {
+        this.tracks.add('ski-l', s.x, s.z, fx, fz, 0.06, -0.16, 0.5);
+        this.tracks.add('ski-r', s.x, s.z, fx, fz, 0.06, 0.16, 0.5);
+      }
+      if (!s.airborne && (s.slip > 1.5 || sp > 9) && s.surface !== 'ice') {
+        const n = Math.round(s.slip * 0.8 + (sp > 9 ? 1 : 0));
+        const side = Math.sign(s.lean) || 1;
+        this.particles.powder(s.x, s.y + 0.2, s.z, n, 1.5, 1.5 + sp * 0.08, (-fz * side * s.slip) * 0.6, (fx * side * s.slip) * 0.6, 0.6);
+      }
+      if (s.landed > 3) {
+        this.particles.powder(s.x, s.y + 0.2, s.z, 10, 4, 2.5, 0, 0, 1);
+        this.audio.landing(s.landed);
+      }
+      if (s.bump > 3) {
+        this.audio.bump(s.bump);
+        this.cam.kick(0.5);
+      }
+    } else if (this.mode === 'heli') {
+      const h = this.heli;
+      const lift = (this.input.held('up') ? 1 : 0) - (this.input.held('down') ? 1 : 0);
+      const scan = item(e.heliScanner);
+      void scan;
+      const gust = Math.sin(this.time * 0.7) * 0.5 + Math.sin(this.time * 1.9) * 0.3;
+      const w = this.cond.wind * (1 + gust * 0.5) * 1.1;
+      stepHeli(h, HELI, free ? wx : 0, free ? wz : 0, lift, dt, this.terrain, { x: w, z: w * 0.3 });
+      // rotor wash: snow blown off the ground when low
+      const agl = heliAgl(h, this.terrain);
+      if (h.rotor > 0.6 && agl < 14) {
+        const n = Math.round((1 - agl / 14) * (this.rig.quality.tier === 'low' ? 3 : 6));
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const gx = h.x + Math.cos(a) * 3;
+          const gz = h.z + Math.sin(a) * 3;
+          this.particles.emit(gx, this.terrain.height(gx, gz) + 0.3, gz, Math.cos(a) * 9, 1 + Math.random() * 2, Math.sin(a) * 9, { life: 1.2, size: 1.6, grow: 2.5, alpha: 0.55, drag: 1.4, rise: -1 });
+        }
+      }
+      if (h.bump > 4) {
+        this.audio.bump(h.bump);
+        this.cam.kick(0.6);
+      }
+    }
+    // the sled and skis you are not on stay where they are, settled on the ground
+    if (this.mode !== 'sled') {
+      this.sled.vx = this.sled.vz = 0;
+      this.sled.y = this.terrain.height(this.sled.x, this.sled.z);
+    }
+    if (this.mode !== 'heli' && this.heli.landed) {
+      this.heli.running = false;
+      stepHeli(this.heli, HELI, 0, 0, 0, dt, this.terrain);
+    }
+  }
+
+  private updateDog(dt: number) {
+    const d = this.dog;
+    const pos = this.pos2();
+    const owner = { x: pos.x, z: pos.z, yaw: this.headingNow(), speed: this.speedNow() };
+    // in a vehicle, Koda rides along
+    if (this.mode === 'heli' || (this.mode === 'sled' && !this.p.active?.passenger)) {
+      if (d.mode !== 'track') d.mode = 'ride';
+    } else if (d.mode === 'ride') d.mode = 'follow';
+    // at night at the station, Koda heads for the bed by the fire
+    const nearBed = Math.hypot(pos.x - SPOTS.bed.x, pos.z - SPOTS.bed.z) < 6;
+    if (this.rig.night > 0.6 && nearBed && d.mode === 'follow' && this.walker.speed < 0.3) {
+      d.mode = 'bed';
+      d.x = SPOTS.dogBed.x;
+      d.z = SPOTS.dogBed.z;
+    } else if (d.mode === 'bed' && (!nearBed || this.walker.speed > 1.5)) d.mode = 'follow';
+    const scents: Scent[] = [];
+    for (const b of BADGES) if (!this.p.badges.includes(b.id)) scents.push({ id: b.id, x: b.x, z: b.z });
+    const range = hasUpgrade(this.p, 'kennel') ? 44 : 32;
+    const ev = stepHusky(d, owner, dt, this.terrain, this.solid, d.mode === 'ride' ? [] : scents, range, this.rig.night > 0.6);
+    for (const e of ev) {
+      if (e.type === 'bark') this.audio.bark();
+      if (e.type === 'noticed') {
+        this.hud.toast('Koda found something', 'good');
+        this.audio.whine();
+      }
+      if (e.type === 'found') {
+        this.hud.radio('You', 'Good dog. Good, good dog.', 2.5);
+        this.audio.whine();
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ missions
+
+  private snapshot() {
+    const pos = this.pos2();
+    const vehicle: Vehicle = this.mode;
+    return {
+      x: pos.x,
+      z: pos.z,
+      vehicle,
+      heliLanded: this.heli.landed,
+      heliAgl: heliAgl(this.heli, this.terrain),
+      heliYaw: this.heli.yaw,
+      avalancheDone: this.pack.done,
+    };
+  }
+
+  private accept(id: string) {
+    const def = mission(id);
+    this.p.active = newRun(id);
+    this.panels.close();
+    this.hud.clearAlert();
+    this.alertShown = null;
+    this.audio.radio();
+    this.hud.radio(def.from, def.alert, 5);
+    this.hud.toast(def.title);
+    if (id === 'tree') {
+      this.props.resetTree();
+      this.props.tree.visible = true;
+    }
+    if (id === 'drift') {
+      this.props.van.visible = true;
+      this.props.driver.group.visible = true;
+    }
+    if (id === 'release') this.pack.reset();
+    this.syncMissionVisuals();
+    this.save();
+  }
+
+  private handle(ev: RunEvent[]) {
+    const r = this.p.active;
+    if (!r) return;
+    const def = mission(r.id);
+    for (const e of ev) {
+      switch (e.type) {
+        case 'step': {
+          this.audio.chime();
+          const s = def.steps[e.index];
+          this.hud.toast('Objective done', 'good', 1.6);
+          if (s.kind === 'scan') this.hud.radio('Scanner', 'Scanner on. Point the nose at each slope, close and low, and hold it there.', 5);
+          if (s.kind === 'fire') this.hud.radio('Avalanche service', 'Charges set. Get clear of the slope: up on the ridge is safe. Then fire.', 5);
+          if (s.kind === 'carry') this.hud.radio('Nils', "Thank you. I really didn't fancy another night out here.", 4);
+          if (r.id === 'skier' && s.kind === 'goto' && e.index === 4) this.hud.radio('Tannberg ski patrol', 'The clinic in Hollin is expecting him.', 3.5);
+          this.syncMissionVisuals();
+          this.save();
+          break;
+        }
+        case 'complete':
+          this.finishMission(def);
+          return;
+        case 'scan': {
+          const s = currentStep(r);
+          if (s?.kind !== 'scan') break;
+          const ct = s.contacts[e.ev.index];
+          this.audio.chime();
+          this.hud.toast(`${ct.label}: ${e.ev.type === 'found' ? 'Loaded' : 'Stable'}`, e.ev.type === 'found' ? 'warn' : 'good');
+          this.hud.radio('Scanner', ct.clear, 4);
+          break;
+        }
+        case 'charge':
+          this.audio.click();
+          this.hud.toast(`Charge set: ${CHARGE_SPOTS.find((c) => c.id === e.spot)!.label}`, 'good');
+          break;
+        case 'fire': {
+          this.pack.fire(e.charges);
+          this.watching = 1;
+          this.watchSkip = false;
+          for (const ev2 of this.pack.events) if (ev2.type === 'boom') this.particles.blast(ev2.x, this.terrain.height(ev2.x, ev2.z), ev2.z);
+          const d = Math.hypot(this.pos2().x - CHARGE_SPOTS[0].x, this.pos2().z - CHARGE_SPOTS[0].z);
+          this.audio.boom(d);
+          this.cam.kick(0.8);
+          this.pack.events.length = 0;
+          this.hud.radio('Avalanche service', 'Fire in the hole.', 2.5);
+          break;
+        }
+        case 'track':
+          this.audio.whine();
+          this.hud.radio('You', 'Koda, find him. Find!', 2.5);
+          {
+            const s = currentStep(r);
+            if (s?.kind === 'track') startTrack(this.dog, s.trail);
+          }
+          break;
+        case 'boarded':
+          this.audio.chime();
+          break;
+        case 'cargo':
+          this.syncMissionVisuals();
+          break;
+      }
+    }
+  }
+
+  private finishMission(def: MissionDef) {
+    const before = available(this.p);
+    const r = complete(this.p, def.id);
+    this.audio.reward();
+    this.hud.radio(def.from, def.done, 5);
+    this.dog.mode = this.dog.mode === 'track' ? 'follow' : this.dog.mode;
+    this.dog.trail = [];
+    this.markers.setPaws([], 0);
+    if (def.id === 'drift') {
+      this.props.van.visible = false;
+      this.props.driver.group.visible = false;
+    }
+    if (def.id === 'skier') this.props.nils.group.visible = false;
+    this.syncMissionVisuals();
+    const after = available(this.p).filter((id) => !before.includes(id) && !mission(id).dynamic).map((id) => mission(id).title);
+    let extra = '';
+    if (def.id === 'release') {
+      const res = this.pack.result;
+      const pct = Math.round((res.weakReleased / Math.max(1, res.weakTotal)) * 100);
+      extra = `${pct}% of the loaded snow came down under control. ${res.roadHit ? 'Some reached the road: the barrier kept it clear of traffic.' : 'The berm held: nothing reached the road.'}${res.secondary ? ' The flow also knocked loose a little snow off a neighbouring slope.' : ''}`;
+    }
+    if (def.id === 'survey') extra = 'Slopes A and C are marked on the map and flagged on the mountain.';
+    this.save();
+    this.input.release();
+    this.panels.debrief(def.title, def.done, r.funds, r.rep, r.rankAfter > r.rankBefore ? RANKS[r.rankAfter].name : null, after, extra, () => {});
+  }
+
+  private updateMission(dt: number) {
+    const r = this.p.active;
+    if (!r) {
+      this.markers.setPins([]);
+      this.updateFlags();
+      return;
+    }
+    const ev = tickRun(r, this.snapshot(), dt);
+    this.handle(ev);
+    const rr = this.p.active;
+    // recon pins over the slopes
+    const s = rr ? currentStep(rr) : null;
+    if (rr && s?.kind === 'scan' && rr.scan) {
+      this.markers.setPins(
+        s.contacts.map((c, i) => ({
+          id: c.label,
+          x: c.x,
+          z: c.z,
+          state: rr.scan!.identified[i] ? (c.target ? 'loaded' : 'stable') : 'unknown',
+          progress: rr.scan!.progress[i],
+        })),
+      );
+    } else this.markers.setPins([]);
+    if (rr && s?.kind === 'track' && rr.tracking) this.markers.setPaws(s.trail, this.dog.trailI);
+    this.updateFlags();
+  }
+
+  private updateFlags() {
+    const r = this.p.active;
+    const show = done(this.p, 'survey') && (!done(this.p, 'release') || r?.id === 'release') && !(r?.id === 'release' && r.fired);
+    this.markers.setFlags(show ? this.p.marked.map((id) => ({ id, x: CHARGE_SPOTS.find((c) => c.id === id)!.x, z: CHARGE_SPOTS.find((c) => c.id === id)!.z, charged: !!r?.charges.includes(id) })) : []);
+  }
+
+  private updateAvalanche(dt: number) {
+    const pack = this.pack;
+    if (pack.fired && !pack.done) {
+      pack.step(dt);
+      let k = 0;
+      const step = this.rig.quality.tier === 'low' ? 7 : 4;
+      for (const b of pack.blocks) {
+        if (b.state !== 2) continue;
+        if (k++ % step !== Math.floor(this.time * 30) % step) continue;
+        const sp = Math.hypot(b.vx, b.vz);
+        if (sp > 2) this.particles.cloud(b.x, b.y, b.z, b.vx, b.vz, Math.min(1, sp / 20));
+      }
+      for (const e of pack.events) {
+        if (e.type === 'crack') this.audio.crack();
+        if (e.type === 'secondary') this.hud.radio('Avalanche service', 'Secondary release on the next slope over. That is fine, let it run.', 4);
+      }
+      pack.events.length = 0;
+      const d = Math.hypot(this.pos2().x - -120, this.pos2().z - -330);
+      if (pack.moving > 0) this.cam.kick(Math.min(0.5, (pack.moving / 200) * (200 / Math.max(80, d))));
+    }
+    if (this.watching > 0 && pack.done) {
+      this.watching = 0;
+      this.hud.radio('Avalanche service', pack.result.roadHit ? 'It is down. A little over the road, but the barrier did its job.' : 'It is down. The berm caught the lot. Beautiful.', 4.5);
+    }
+    this.avView.sync(pack);
+  }
+
+  private avalancheFocus(): THREE.Vector3 {
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    let n = 0;
+    for (const b of this.pack.blocks) {
+      if (b.state !== 2) continue;
+      x += b.x;
+      y += b.y;
+      z += b.z;
+      n++;
+    }
+    if (!n) return new THREE.Vector3(-120, this.terrain.height(-120, -330), -330);
+    return new THREE.Vector3(x / n, y / n, z / n);
+  }
+
+  // ------------------------------------------------------------------ interaction
+
+  /** Everything you could do right where you stand, best first. */
+  private candidates(): Act[] {
+    const out: Act[] = [];
+    const p = this.p;
+    const pos = this.pos2();
+    const near = (x: number, z: number, r: number) => Math.hypot(pos.x - x, pos.z - z) < r;
+    const r = p.active;
+    // watching the avalanche
+    if (this.watching > 0 && !this.watchSkip) {
+      out.push({ id: 'look-away', label: 'Back to you', hold: 0, run: () => (this.watchSkip = true) });
+      return out;
+    }
+    // firing the charges
+    if (r) {
+      const fs = fireState(r, pos.x, pos.z);
+      if (fs !== 'none') out.push({ id: 'fire', label: fs === 'ready' ? 'Fire charges' : 'Too close to fire', hold: fs === 'ready' ? 0.6 : 0, red: true, enabled: fs === 'ready', run: () => fs === 'ready' && this.handle(fire(r)) });
+    }
+    // mission work
+    if (r) {
+      for (const it of interactables(r)) {
+        const x = it.dog ? this.dog.x : it.x;
+        const z = it.dog ? this.dog.z : it.z;
+        if (!near(x, z, it.radius)) continue;
+        if (it.onFoot && this.mode !== 'foot') continue;
+        if (it.onSled && this.mode !== 'sled') continue;
+        const work: Act['work'] = it.id === 'saw' ? 'saw' : it.id === 'dig' ? 'dig' : it.hold >= 2 ? 'fix' : undefined;
+        out.push({
+          id: it.id,
+          label: it.action,
+          hold: it.hold,
+          work,
+          red: it.id.startsWith('charge'),
+          run: () => this.missionInteract(it.id),
+        });
+      }
+    }
+    // vehicles
+    if (this.mode === 'foot') {
+      if (near(this.sled.x, this.sled.z, 2.8)) out.push({ id: 'ride', label: 'Ride the sled', hold: 0, run: () => this.mountSled() });
+      if (near(this.heli.x, this.heli.z, 4.5)) out.push({ id: 'fly', label: this.cond.grounded ? 'Grounded' : 'Fly', hold: 0, enabled: !this.cond.grounded, run: () => this.mountHeli() });
+    }
+    if (this.mode === 'heli' && this.heli.landed && this.heli.rotor < 0.3) out.push({ id: 'off', label: 'Climb out', hold: 0, run: () => this.dismount() });
+    // the station
+    if (this.mode === 'foot') {
+      if (near(SPOTS.table.x, SPOTS.table.z, 2.6)) out.push({ id: 'table', label: 'Mission table', hold: 0, run: () => this.openBoard() });
+      if (near(SPOTS.wardrobe.x, SPOTS.wardrobe.z, 2.2)) out.push({ id: 'wardrobe', label: 'Wardrobe', hold: 0, run: () => this.openOutfit('Wardrobe', ['patroller']) });
+      if (near(SPOTS.bed.x, SPOTS.bed.z, 2.6)) out.push({ id: 'bed', label: 'Sleep till morning', hold: 1, run: () => this.sleep() });
+      if (near(SPOTS.workbench.x, SPOTS.workbench.z, 2.6)) out.push({ id: 'bench', label: 'Workbench', hold: 0, run: () => this.openOutfit('Garage workbench', ['sled', 'skis']) });
+      if (near(SPOTS.kennel.x, SPOTS.kennel.z, 3) || near(SPOTS.dogBed.x, SPOTS.dogBed.z, 2)) out.push({ id: 'kennel', label: "Koda's gear", hold: 0, run: () => this.openOutfit("Koda's corner", ['koda']) });
+      if (near(SPOTS.heli.x, SPOTS.heli.z, 10) && !near(this.heli.x, this.heli.z, 4.5)) out.push({ id: 'heligear', label: 'Helicopter kit', hold: 0, run: () => this.openOutfit('Helicopter kit', ['heli']) });
+      if (hasUpgrade(p, 'hangar') && near(SPOTS.hangarDoor.x, SPOTS.hangarDoor.z, 4)) out.push({ id: 'hangar', label: 'Hangar', hold: 0, run: () => this.openOutfit('Hangar', ['heli']) });
+      if (hasUpgrade(p, 'equipment') && near(SPOTS.equipDoor.x, SPOTS.equipDoor.z, 3)) out.push({ id: 'equip', label: 'Equipment room', hold: 0, run: () => this.openOutfit('Equipment room', ['skis', 'patroller']) });
+      if (near(this.dog.x, this.dog.z, 2.4) && this.dog.mode !== 'track') out.push({ id: 'pet', label: 'Pet Koda', hold: 0, run: () => this.petDog() });
+    }
+    return out;
+  }
+
+  private petDog() {
+    pet(this.dog);
+    this.p.affection++;
+    this.audio.whine();
+    this.player.animate('pet', 0, 0, 0, 0.016);
+    this.holdId = 'pet-pose';
+    this.holdT = 0.9;
+  }
+
+  private missionInteract(id: string) {
+    const r = this.p.active;
+    if (!r) return;
+    if (id === 'pet') this.petDog();
+    if (id === 'anemometer') {
+      this.world.setStationWorking(true);
+      this.hud.radio('Dispatch', 'Data coming through. Nice work.', 3);
+    }
+    if (id === 'saw') this.props.sawTree();
+    if (id === 'locker') this.hud.radio('You', 'Two charges, detonators, the firing box. Signed out.', 3.5);
+    if (id === 'gate-close') this.hud.radio('Dispatch', 'Pass road closed below Kessel Bowl.', 3);
+    if (id === 'gate-open') this.hud.radio('Dispatch', 'Pass road open again.', 3);
+    if (id === 'aid-nils') this.hud.radio('Nils', 'I heard the dog first. I thought I was dreaming.', 4);
+    if (id === 'pepper') this.audio.whine();
+    const ev = interact(r, id);
+    this.handle(ev);
+    this.syncMissionVisuals();
+  }
+
+  private updateInteractions(dt: number) {
+    const list = this.candidates();
+    const pos = this.pos2();
+    // rings on the ground where you can act
+    const r = this.p.active;
+    const rings: { x: number; z: number; r: number }[] = [];
+    if (r) for (const it of interactables(r)) if (!it.dog && Math.hypot(pos.x - it.x, pos.z - it.z) < 60) rings.push({ x: it.x, z: it.z, r: it.radius });
+    this.markers.setRings(rings);
+    const a = list[0];
+    if (this.holdId === 'pet-pose') {
+      this.holdT -= dt;
+      if (this.holdT <= 0) this.holdId = '';
+    }
+    if (!a) {
+      this.hud.setAction(null);
+      if (this.holdId !== 'pet-pose') {
+        this.holdId = '';
+        this.holdT = 0;
+      }
+      return;
+    }
+    const held = this.input.held('action');
+    const pressed = this.input.pressed('btn:action') || this.input.pressed('KeyE') || this.input.pressed('Space') || this.input.pressed('Enter');
+    const enabled = a.enabled !== false;
+    if (a.hold <= 0) {
+      if (pressed && enabled) a.run();
+      this.hud.setAction(a.label, !!a.red, 0, enabled);
+      return;
+    }
+    if (held && enabled) {
+      if (this.holdId !== a.id) {
+        this.holdId = a.id;
+        this.holdT = 0;
+      }
+      this.holdT += Math.max(dt, this.realDt);
+      if (a.work && Math.random() < dt * 8) this.audio.work(a.work);
+      if (this.holdT >= a.hold) {
+        this.holdT = 0;
+        this.holdId = '';
+        a.run();
+      }
+    } else if (this.holdId !== 'pet-pose') {
+      this.holdT = Math.max(0, this.holdT - dt * 2);
+      if (this.holdT === 0) this.holdId = '';
+    }
+    this.hud.setAction(a.label, !!a.red, this.holdId === a.id ? this.holdT / a.hold : 0, enabled);
+  }
+
+  private updateBadges() {
+    if (this.mode === 'heli' && !this.heli.landed) return;
+    const pos = this.pos2();
+    for (const b of BADGES) {
+      if (this.p.badges.includes(b.id)) continue;
+      if (Math.hypot(pos.x - b.x, pos.z - b.z) < 3) {
+        findBadge(this.p, b.id);
+        this.station.setBadges(this.p.badges);
+        this.audio.sparkle();
+        this.hud.toast(`Old patrol badge: ${b.name}`, 'good', 3);
+        this.hud.radio('You', `${this.p.badges.length} of ${BADGES.length}. That one goes on the board in the lodge.`, 3.5);
+        this.save();
+      }
+    }
+  }
+
+  private updateEvents(dt: number) {
+    const id = tickEvents(this.p, dt, this.cond.sky === 'storm', this.rng);
+    if (id) {
+      const m = mission(id);
+      this.audio.radio();
+      this.hud.radio(m.from, m.alert, 5);
+      if (id === 'tree') {
+        this.props.resetTree();
+        this.props.tree.visible = true;
+      }
+      if (id === 'drift') {
+        this.props.van.visible = true;
+        this.props.driver.group.visible = true;
+      }
+      this.save();
+    }
+    // offer the waiting callout when you are free
+    const waiting = this.p.events[0];
+    if (waiting && !this.p.active && this.alertShown !== waiting && !this.panels.open) {
+      this.alertShown = waiting;
+      const m = mission(waiting);
+      this.hud.alert(m.title, m.alert, () => this.accept(waiting), () => this.hud.toast('On the mission table'));
+    }
+  }
+
+  // ------------------------------------------------------------------ actors on screen
+
+  private placeActors(dt: number, title: boolean) {
+    const pl = this.player;
+    const sledY = this.sled.y;
+    const n = this.terrain.normal(this.sled.x, this.sled.z);
+    this.sledMesh.sync(this.sled.x, sledY, this.sled.z, this.sled.yaw, n.x, n.y, n.z, this.sled.lean, glideSpeed(this.sled), this.mode === 'sled' ? this.input.move.x : 0, dt);
+    this.sledMesh.setHeadlight(this.rig.night > 0.4 && this.mode === 'sled');
+    const hl = this.heli;
+    this.heliMesh.sync(hl.x, hl.y, hl.z, hl.yaw, hl.pitch, hl.roll, hl.rotor, this.time, dt, this.mode === 'heli' && this.p.active ? currentStep(this.p.active)?.kind === 'scan' : false);
+    this.heliMesh.setSearchlight(this.p.equip.heliLight === 'light-search' && this.rig.night > 0.4 && this.mode === 'heli' && !hl.landed);
+    pl.group.visible = this.mode !== 'heli';
+    let pose: Pose = 'idle';
+    if (title) {
+      pl.group.position.set(SPOTS.lodgeDoor.x + 3, this.station.y + 0.3, SPOTS.lodgeDoor.z + 1);
+      pl.group.rotation.y = -1.2;
+      pl.animate('idle', 0, 0, 0, dt);
+      this.dogMesh.group.position.set(SPOTS.lodgeDoor.x + 4.2, this.station.y + 0.3, SPOTS.lodgeDoor.z + 2);
+      this.dogMesh.group.rotation.y = -1.6;
+      return;
+    }
+    if (this.mode === 'foot') {
+      pl.backSkis(true);
+      const w = this.walker;
+      const indoors = inLodge(w.x, w.z) || inGarage(w.x, w.z);
+      pl.group.position.set(w.x, w.y + (indoors ? 0.32 : 0), w.z);
+      pl.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), w.yaw);
+      const carrying = !!this.p.active?.carrying;
+      pose = this.holdT > 0 && this.holdId && this.holdId !== 'pet-pose' ? 'work' : this.holdId === 'pet-pose' ? 'pet' : carrying ? 'carry' : w.speed > 4 ? 'run' : w.speed > 0.3 ? 'walk' : 'idle';
+      pl.animate(pose, w.stride, w.speed, 0, dt);
+    } else if (this.mode === 'sled') {
+      this.sledMesh.group.updateMatrixWorld(true);
+      this.seat.copy(this.sledMesh.seat);
+      this.sledMesh.body.localToWorld(this.seat);
+      pl.group.position.copy(this.seat).y -= 0.62;
+      pl.group.quaternion.copy(this.sledMesh.group.quaternion);
+      pl.animate('ride', 0, glideSpeed(this.sled), this.sled.lean, dt);
+      pl.backSkis(false);
+    } else if (this.mode === 'skis') {
+      const s = this.skis;
+      pl.group.position.set(s.x, s.y + 0.08, s.z);
+      pl.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.yaw);
+      pl.animate('ski', s.x + s.z, glideSpeed(s), s.lean, dt);
+    }
+    // Nils on the back of the sled
+    const r = this.p.active;
+    const nilsRiding = r?.id === 'skier' && r.passenger;
+    if (nilsRiding) {
+      const seat = this.sledMesh.rack.clone();
+      seat.z -= 0.35;
+      this.sledMesh.body.localToWorld(seat);
+      this.props.nils.group.position.copy(seat).y -= 0.62;
+      this.props.nils.group.quaternion.copy(this.sledMesh.group.quaternion);
+      this.props.nils.animate('ride', 0, 0, 0, dt);
+      this.props.nils.group.visible = true;
+      this.passengerVisible = true;
+    } else if (this.passengerVisible) {
+      this.passengerVisible = false;
+      this.syncMissionVisuals();
+    } else if (this.props.nils.group.visible) {
+      const step = r?.step ?? 0;
+      this.props.nils.animate(step >= 3 ? 'idle' : 'work', 0, 0, 0, dt);
+    }
+    this.props.greta.animate('idle', 0, 0, 0, dt);
+    if (this.props.driver.group.visible) this.props.driver.animate('idle', 0, 0, 0, dt);
+    // Koda
+    const d = this.dog;
+    const dm = this.dogMesh;
+    if (d.mode === 'ride' && this.mode === 'sled') {
+      const rack = this.sledMesh.rack.clone();
+      this.sledMesh.body.localToWorld(rack);
+      dm.group.visible = true;
+      dm.group.position.copy(rack).y -= 0.45;
+      dm.group.quaternion.copy(this.sledMesh.group.quaternion);
+      dm.animate('ride', 0, dt);
+    } else if (d.mode === 'ride' && this.mode === 'heli') {
+      dm.group.visible = false;
+    } else {
+      dm.group.visible = true;
+      dm.group.position.set(d.x, d.y + (inLodge(d.x, d.z) ? 0.32 : 0), d.z);
+      dm.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), d.yaw);
+      dm.animate(d.anim, d.stride, dt);
+      if ((d.anim === 'run' || d.anim === 'trot') && Math.random() < dt * 6 && this.terrain.surface(d.x, d.z) === 'powder') this.particles.powder(d.x, d.y + 0.1, d.z, 1, 0.6, 0.6, 0, 0, 0.4);
+    }
+  }
+
+  private smoke(dt: number) {
+    this.smokeT -= dt;
+    if (this.smokeT > 0) return;
+    this.smokeT = this.rig.quality.tier === 'low' ? 0.35 : 0.2;
+    const camPos = this.rig.camera.position;
+    for (const s of [...this.station.smokeSources, ...this.world.smokeSources]) {
+      if (s.distanceToSquared(camPos) > 400 * 400) continue;
+      this.particles.smoke(s.x, s.y, s.z, this.cond.wind);
+    }
+  }
+
+  // ------------------------------------------------------------------ HUD
+
+  private freeHint(): string {
+    const pos = this.pos2();
+    const atHq = Math.hypot(pos.x - HQ.x, pos.z - HQ.z) < 90;
+    const ids = available(this.p);
+    if (!ids.length) return 'All quiet. Explore, look for old patrol badges, or sleep at the station.';
+    return atHq ? `${ids.length === 1 ? 'A call is' : `${ids.length} calls are`} waiting on the mission table in the lodge.` : 'Calls come in on the radio. The mission table is at the station.';
+  }
+
+  private updateHud(dt: number) {
+    const p = this.p;
+    const r = p.active;
+    const pos = this.pos2();
+    if (r) {
+      const def = mission(r.id);
+      const s = currentStep(r);
+      let obj = s ? (s.kind === 'interact' || s.kind === 'goto' || s.kind === 'land' ? s.text : s.text) : '';
+      if (s?.kind === 'charges') obj += ` (${r.charges.length} of ${s.spots.length})`;
+      if (s?.kind === 'scan' && r.scan) obj += ` (${r.scan.identified.filter(Boolean).length} of ${s.contacts.length})`;
+      this.hud.setTask({ family: FAMILY_LABEL[def.family], title: def.title, objective: obj, steps: def.steps.length, current: r.step }, '');
+    } else this.hud.setTask(null, this.freeHint());
+    // where to go
+    let target: { x: number; z: number; label: string } | null = null;
+    if (r) {
+      const t = navTarget(r, pos);
+      if (t === 'dog') target = { x: this.dog.x, z: this.dog.z, label: 'Koda' };
+      else if (t === 'sled') target = this.mode === 'sled' ? null : { x: this.sled.x, z: this.sled.z, label: 'Sled' };
+      else if (t === 'heli') target = this.mode === 'heli' ? null : { x: this.heli.x, z: this.heli.z, label: 'Helicopter' };
+      else if (t) target = t;
+      if (t && typeof t === 'object' && r.id === 'rounds' && r.step === 0) target = null;
+    } else if (available(p).length && Math.hypot(pos.x - HQ.x, pos.z - HQ.z) < 400) target = { x: SPOTS.table.x, z: SPOTS.table.z, label: 'Mission table' };
+    const heading = ((-this.cam.yaw * 180) / Math.PI + 3600) % 360;
+    if (target) {
+      const dx = target.x - pos.x;
+      const dz = target.z - pos.z;
+      const bearing = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
+      const dist = Math.hypot(dx, dz);
+      this.hud.setCompass(heading, bearing, dist, target.label);
+      this.markers.setBeacon(dist > 12 ? target.x : null, target.z, this.p.active ? 0x5ad1ff : 0xf2c230);
+    } else {
+      this.hud.setCompass(heading, null, 0, '');
+      this.markers.setBeacon(null);
+    }
+    const c = this.cond;
+    const danger = avalancheDanger(p.weather, c);
+    this.hud.setConditions(clock(p.weather.minute), `${SKY_LABEL[c.sky]} ${c.temp}° ${c.windKmh} km/h`, danger, DANGER_LABEL[danger], p.funds);
+    // chips
+    const busyDog = this.dog.mode === 'track';
+    this.hud.setChips({
+      off: this.mode === 'sled' ? 'Get off' : this.mode === 'heli' ? (this.heli.landed ? 'Shut down' : null) : this.mode === 'skis' ? 'Skis off' : null,
+      skis: this.mode === 'foot' && !this.indoorsNow() ? 'Skis on' : null,
+      koda: this.mode === 'foot' || this.mode === 'skis' ? (busyDog ? 'Koda: tracking' : this.dog.mode === 'stay' ? 'Koda: heel' : 'Koda: stay') : null,
+      kodaOn: busyDog || this.dog.mode === 'stay',
+    });
+    this.hud.setLever(this.mode === 'heli');
+    if (this.mode === 'sled') this.hud.setSpeedo(Math.abs(forwardSpeed(this.sled)) * 3.6, SURFACE_LABEL[this.sled.surface]);
+    else if (this.mode === 'skis') this.hud.setSpeedo(glideSpeed(this.skis) * 3.6, SURFACE_LABEL[this.skis.surface]);
+    else this.hud.setSpeedo(null, '');
+    if (this.mode === 'heli') this.hud.setAlt(heliAgl(this.heli, this.terrain), elevation(this.heli.y), Math.hypot(this.heli.vx, this.heli.vz));
+    else this.hud.setAlt(null);
+    // the SKYTRACE scanner readout
+    const s = r ? currentStep(r) : null;
+    if (r && s?.kind === 'scan' && r.scan && this.mode === 'heli' && r.scan.looking >= 0) {
+      this.hud.setScan(`Reading ${s.contacts[r.scan.looking].label}`, r.scan.progress[r.scan.looking]);
+    } else if (r && s?.kind === 'scan' && this.mode === 'heli' && !this.heli.landed && heliAgl(this.heli, this.terrain) > 200) {
+      this.hud.setScan('Too high to read the snow', 0);
+    } else this.hud.setScan(null, 0);
+    this.hud.hint(!this.input.touch ? false : p.played < 25 && this.mode === 'foot');
+    this.hud.update(Math.max(dt, this.realDt));
+  }
+
+  private indoorsNow() {
+    return inLodge(this.walker.x, this.walker.z) || inGarage(this.walker.x, this.walker.z);
+  }
+
+  private updateAudio(dt: number) {
+    const m = this.mode;
+    const sp = this.speedNow();
+    const s = m === 'sled' ? this.sled : m === 'skis' ? this.skis : null;
+    this.audio.update(dt, {
+      engine: m === 'sled' ? 0.15 + this.sled.power * 0.85 : 0,
+      speed: sp,
+      rotor: this.heli.rotor * (this.mode === 'heli' ? 1 : Math.max(0, 1 - Math.hypot(this.heli.x - this.walker.x, this.heli.z - this.walker.z) / 120)),
+      hiss: s && !s.airborne ? Math.min(1, sp / 15) : 0,
+      wind: this.cond.wind,
+      rumble: this.pack.fired && !this.pack.done ? Math.min(1, this.pack.moving / 120) : 0,
+      fire: this.indoors * (inLodge(this.walker.x, this.walker.z) ? 1 : 0),
+      outdoors: 1 - this.indoors * 0.7,
+    });
+  }
+
+  // ------------------------------------------------------------------ screens
+
+  private openBoard(tab: 'calls' | 'station' | 'log' = 'calls') {
+    this.input.release();
+    const danger = avalancheDanger(this.p.weather, this.cond);
+    this.panels.board(
+      this.p,
+      this.cond,
+      danger,
+      (id) => this.accept(id),
+      (u) => {
+        if (build(this.p, u as UpgradeId)) {
+          this.audio.reward();
+          this.station.setUpgrades(this.p.upgrades);
+          this.solid.setEnabled(u, true);
+          this.hud.toast(`Built: ${UPGRADES.find((k) => k.id === u)!.name}`, 'good', 3);
+          this.save();
+        } else this.audio.click();
+        this.openBoard('station');
+      },
+      tab,
     );
   }
 
-  private setComposition(id: CompositionId) {
-    if (!compositionUnlocked(this.progress, id)) return;
-    this.progress.composition = id;
-    saveProgress(this.progress);
-    this.audio.impact(0.4, 'granite');
-    this.applyLook();
-    this.refreshCompositions();
-    this.ui.tip(`<b>${composition(id).name}</b> — ${composition(id).blurb}`, 3200);
+  private openOutfit(title: string, groups: Group[]) {
+    this.input.release();
+    this.panels.outfit(
+      title,
+      groups,
+      this.p,
+      (id) => {
+        if (buy(this.p, id)) {
+          this.audio.chime();
+          this.applyProfile();
+          this.save();
+        } else this.audio.click();
+      },
+      (id) => {
+        equip(this.p, id);
+        this.audio.click();
+        this.applyProfile();
+        this.save();
+      },
+    );
   }
 
-  private key(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      if (this.menuOpen) this.closeMenu();
-      else this.openMenu();
-      return;
+  private openMap() {
+    this.input.release();
+    const pos = this.pos2();
+    const r = this.p.active;
+    let target: { x: number; z: number; label: string } | null = null;
+    if (r) {
+      const t = navTarget(r, pos);
+      if (t && typeof t === 'object') target = t;
+      else if (t === 'dog') target = { x: this.dog.x, z: this.dog.z, label: 'Koda' };
     }
-    if (this.state === 'run' && this.sim?.decision) {
-      if (e.key === 'ArrowLeft' || e.key === 'a') this.choose('left');
-      if (e.key === 'ArrowRight' || e.key === 'd') this.choose('right');
-      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'ArrowUp' || e.key === 'w') this.choose('centre');
-    }
-    if (e.key === ' ' && this.state === 'run') this.togglePause();
-    if (e.key === 'Enter' && !this.menuOpen) {
-      if (this.state === 'title') this.showMountains();
-      else if (this.state === 'ready') this.startRun();
-      else if (this.state === 'results') {
-        if (!this.resultsShown) this.revealResults();
-        else this.startRun();
-      }
-    }
-  }
-
-  // ------------------------------------------------------------------ the run
-  private startRun() {
-    this.audio.unlock();
-    this.closeMenu();
-    this.hideAll();
-    this.resetMountain();
-    // every run plays out a little differently: the same choices, a different landslide
-    this.sim = new RunSim(this.level, this.w.data, { composition: this.progress.composition, seed: (Math.random() * 2 ** 31) | 0 });
-    const lp = levelProgress(this.progress, this.level.id);
-    lp.attempts++;
-    saveProgress(this.progress);
-    this.state = 'run';
-    this.acc = 0;
-    this.timeScale = 1;
-    this.fast = false;
-    this.paused = false;
-    this.slowUntil = 0;
-    this.resultsShown = true;
-    this.applyLook();
-    this.cam.setMode('chase');
-    // the forks, as fractions of the way down (for the progress line)
-    const z0 = this.level.boulder.position[1];
-    const fin = this.level.segments.find((s) => s.kind === 'finale')!.path;
-    const z1 = fin[fin.length - 1][1];
-    const forks = [...new Set(this.level.segments.filter((s) => s.next.length > 1).map((s) => s.path[s.path.length - 1][1]))].map((z) => (z - z0) / (z1 - z0));
-    this.ui.showRun(forks);
-    this.sim.release();
-    this.audio.release();
-    this.audio.riser(1.4);
-  }
-
-  private choose(side: 'left' | 'right' | 'centre') {
-    const sim = this.sim;
-    if (!sim?.decision || sim.decision.chosen !== null) return;
-    if (sim.chooseSide(side)) {
-      if (!this.progress.tutorial.decided) {
-        this.progress.tutorial.decided = true;
-        saveProgress(this.progress);
-      }
-    }
-  }
-
-  private togglePause() {
-    if (this.state !== 'run') return;
-    this.paused = !this.paused;
-    this.ui.setPaused(this.paused);
-    if (this.paused) this.openMenu();
-    else this.closeMenu();
-  }
-
-  private slow(scale: number, seconds: number) {
-    if (this.now + seconds > this.slowUntil || scale < this.slowTo) {
-      this.slowTo = scale;
-      this.slowUntil = this.now + seconds;
-    }
-  }
-
-  private stepRun(dt: number) {
-    const sim = this.sim!;
-    if (this.paused || this.menuOpen) return;
-    let scale = this.fast ? 4 : 1;
-    if (!this.fast && this.now < this.slowUntil) scale = this.slowTo;
-    else if (sim.decision && sim.decision.chosen === null) scale = 0.7;
-    this.timeScale += (scale - this.timeScale) * Math.min(1, dt * 10);
-    this.acc += dt * this.timeScale;
-    let steps = 0;
-    const max = this.fast ? 16 : 5;
-    while (this.acc >= DT && steps < max && !sim.done) {
-      sim.stepOnce();
-      this.acc -= DT;
-      steps++;
-    }
-    if (steps >= max) this.acc = Math.min(this.acc, DT);
-    for (const e of sim.drainEvents()) this.handleEvent(e);
-    if (!this.sim) return;
-
-    // the boulder
-    if (!sim.shattered) {
-      this.pieces.sync([{ id: 1, shape: sim.shape, kind: 'stone', pos: [sim.pos.x, sim.pos.y, sim.pos.z], quat: [sim.quat.x, sim.quat.y, sim.quat.z, sim.quat.w], scale: 1 }]);
-      this.groundFx(sim, dt);
-    } else this.pieces.sync([]);
-    this.w.destruct.update(sim);
-
-    // the fork ahead: show the ways
-    const d = sim.decision;
-    if (d) this.ui.showDecision(d, !this.progress.tutorial.decided);
-    if (sim.forkAhead && this.guideFor !== sim.seg.seg.id) this.drawGuides();
-
-    // the camera
-    if (this.cam.mode === 'chase' && sim.kind === 'finale') {
-      const hall = this.w.layout.structures.find((s) => s.finale);
-      if (hall && Math.hypot(hall.x - sim.pos.x, hall.z - sim.pos.z) < 30 + sim.speed * 0.6) {
-        this.cam.finaleAt.set(hall.x, hall.y, hall.z);
-        this.cam.finaleYaw = Math.atan2(sim.heading.x, sim.heading.z);
-        this.cam.setMode('finale');
-      }
-    }
-    this.hudTimer -= dt;
-    if (this.hudTimer <= 0) {
-      this.hudTimer = 0.05;
-      this.ui.setRun({ score: sim.score, speed: sim.speed, integrity: sim.integrity / sim.maxIntegrity, progress: sim.progress, segment: sim.segmentName });
-    }
-    if (sim.done && this.state === 'run') this.finishRun();
-  }
-
-  /** where the boulder is headed: a point on the route ahead, on the way it is committed to */
-  private aheadPoint(sim: RunSim, dist: number): Vector3 {
-    let s = sim.s + dist;
-    let seg = sim.seg.seg;
-    if (s > sim.seg.len && seg.next.length) {
-      s -= sim.seg.len;
-      const d = sim.decision;
-      seg = this.level.segments.find((q) => q.id === seg.next[d ? (d.chosen ?? d.fallback) : 0])!;
-    }
-    const pl = this.w.paths.get(seg.id)!;
-    const p = pathPointAt(pl, Math.min(s, pl.length));
-    return new Vector3(p.x, this.w.data.heightAt(p.x, p.z), p.z);
-  }
-
-  private chaseInfo(): ChaseInfo | undefined {
-    const sim = this.sim;
-    if (!sim) return undefined;
-    return {
-      pos: sim.pos,
-      ahead: this.aheadPoint(sim, 14 + sim.speed * 0.7),
-      speed: sim.speed,
-      fork: sim.forkAhead ? { t: sim.forkAhead.t, at: sim.forkAhead.at } : null,
-      air: !sim.grounded,
-      canopy: sim.kind === 'forest' || sim.kind === 'camp',
-    };
-  }
-
-  /** Ribbons along the first stretch of each way at the coming fork, in its own colour. */
-  private drawGuides(chosen?: number) {
-    const sim = this.sim;
-    if (!sim) return;
-    const next = sim.seg.seg.next;
-    this.guideFor = sim.seg.seg.id;
-    this.w.guides.clear();
-    next.forEach((id, i) => {
-      if (chosen !== undefined && chosen !== i) return;
-      const pl = this.w.paths.get(id)!;
-      const pts: [number, number, number][] = [];
-      for (let s = 2; s <= Math.min(pl.length, 70); s += 2) {
-        const p = pathPointAt(pl, s);
-        pts.push([p.x, this.w.data.heightAt(p.x, p.z) + 0.3, p.z]);
-      }
-      this.w.guides.add(pts, GUIDE[i % GUIDE.length], chosen !== undefined ? 2.4 : 1.6, { dashed: chosen === undefined, opacity: chosen !== undefined ? 0.75 : 0.85 });
+    this.panels.map(this.p, {
+      me: { ...pos, yaw: this.headingNow() },
+      koda: { x: this.dog.x, z: this.dog.z },
+      sled: { x: this.sled.x, z: this.sled.z },
+      heli: { x: this.heli.x, z: this.heli.z },
+      target,
+      badges: hasUpgrade(this.p, 'mast') ? BADGES.map((b) => ({ x: b.x, z: b.z, found: this.p.badges.includes(b.id) })) : this.p.badges.map((id) => ({ ...BADGES.find((b) => b.id === id)!, found: true })),
     });
   }
 
-  private groundFx(sim: RunSim, dt: number) {
-    if (!sim.grounded || sim.speed < 6) return;
-    this.sprayAcc += dt * Math.min(1.5, sim.speed / 12);
-    const k = sim.kind;
-    const col = k === 'forest' || k === 'camp' ? new Color(0.4, 0.32, 0.2) : new Color(...this.level.theme.dust).multiplyScalar(0.8);
-    while (this.sprayAcc > 0.025) {
-      this.sprayAcc -= 0.025;
-      this.w.effects.spray(new Vector3(sim.pos.x, sim.pos.y - this.level.boulder.radius * 0.8, sim.pos.z), sim.vel, 1.4, col);
-    }
-  }
-
-  private screen(p: Vector3): { x: number; y: number; on: boolean } {
-    const v = p.clone().project(this.rig.camera);
-    const c = this.rig.renderer.domElement;
-    return { x: clamp((v.x * 0.5 + 0.5) * c.clientWidth, 70, c.clientWidth - 70), y: clamp((-v.y * 0.5 + 0.5) * c.clientHeight - 30, 120, c.clientHeight - 160), on: v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 };
-  }
-
-  /** limit how often one kind of sound plays */
-  private sound(kind: string, gap: number): boolean {
-    const t = this.lastSound.get(kind) ?? -1;
-    if (this.now - t < gap) return false;
-    this.lastSound.set(kind, this.now);
-    return true;
-  }
-
-  private handleEvent(e: RunEvent) {
-    const sim = this.sim!;
-    const pos = new Vector3(...e.pos);
-    const v = pos.clone().project(this.rig.camera);
-    const pan = clamp(v.x, -1, 1) * 0.7;
-    const dist = pos.distanceTo(this.rig.camera.position);
-    const att = clamp(30 / Math.max(10, dist), 0.25, 1);
-    const fx = this.w.effects;
-    const dust = new Color(...this.level.theme.dust);
-    const wood = new Color(...this.level.theme.wood);
-    switch (e.type) {
-      case 'release':
-        this.audio.fracture(0.7);
-        fx.dust(pos.clone().add(new Vector3(0, -1.5, 2)), 0.6, dust);
-        fx.grit(pos, 0.6);
-        this.cam.shake(0.5);
-        break;
-      case 'approach':
-        this.drawGuides();
-        break;
-      case 'decision':
-        this.audio.whoosh();
-        break;
-      case 'commit': {
-        const d = sim.decision;
-        this.ui.committed(!!e.auto, e.label ?? '');
-        this.drawGuides(e.id ?? d?.chosen ?? 0);
-        window.setTimeout(() => this.w.guides.clear(), 1400);
-        this.audio.whoosh();
-        this.audio.impact(0.5, 'granite', 0);
-        this.cam.punch(0.35);
-        this.ui.tip(null);
-        if (e.auto) this.ui.bigBanner(e.label ?? '', 'The mountain chose', 1300, 'small');
-        break;
-      }
-      case 'enter': {
-        const seg = sim.seg.seg;
-        if (seg.kind !== 'finale' && seg.kind !== 'summit') this.ui.bigBanner(seg.name.toUpperCase(), KIND_LABEL[seg.kind], 1400, 'small');
-        if (seg.kind === 'finale') this.ui.bigBanner(this.level.finale.name.replace(/^the /, '').toUpperCase(), 'Dead ahead', 1600, 'small');
-        break;
-      }
-      case 'tree':
-        if (this.sound('tree', 0.06)) {
-          this.audio.snap();
-          this.audio.impact(0.6 * att, 'wood', pan);
+  private openPause() {
+    this.input.release();
+    this.save();
+    this.panels.pause(
+      this.p.settings,
+      (s) => this.applySettings(s),
+      () => {
+        this.save();
+        this.panels.close();
+        this.showTitle();
+      },
+      () => {
+        this.panels.close();
+        this.resetProfile();
+        try {
+          this.store?.removeItem('rockslide.patrol.v1');
+        } catch {
+          /* ignore */
         }
-        fx.shards(pos.clone().add(new Vector3(0, 2.5, 0)), new Color(0.22, 0.4, 0.16), e.depth ? 10 : 22);
-        fx.shards(pos.clone().add(new Vector3(0, -0.6, 0)), new Color(0.7, 0.52, 0.32), e.depth ? 6 : 14);
-        if (!e.depth) this.cam.shake(0.3);
-        break;
-      case 'treeLand':
-        fx.dust(pos, 0.25 + e.intensity * 0.35, dust.clone().lerp(new Color(0.5, 0.42, 0.3), 0.3));
-        if (this.sound('treeLand', 0.09)) this.audio.impact(0.75 * att * e.intensity, 'soil', pan);
-        if (dist < 30) this.cam.shake(0.3 * att);
-        break;
-      case 'crack':
-        if (this.sound('crack', 0.15)) this.audio.creak();
-        fx.shards(pos, new Color(0.7, 0.52, 0.32), 8);
-        break;
-      case 'rock':
-        if (this.sound('rock', 0.05)) this.audio.fracture(0.35 + e.intensity * 0.5, pan);
-        fx.grit(pos, 0.5 + e.intensity);
-        fx.dust(pos, 0.3 + e.intensity * 0.5, dust);
-        if (e.intensity > 0.8) fx.ring(pos, 6 + e.intensity * 5, dust);
-        this.cam.shake(0.3 + e.intensity * 0.45);
-        this.pieces.squash(1, 0.12);
-        this.ui.hurt();
-        break;
-      case 'pillar':
-        this.audio.fracture(1, pan);
-        this.audio.impact(1, 'granite', pan);
-        fx.dust(pos, 1.2, dust);
-        fx.grit(pos.clone().add(new Vector3(0, 3, 0)), 1.6);
-        this.cam.shake(0.8);
-        this.cam.punch(0.5);
-        this.slow(0.45, 0.35);
-        this.ui.hurt();
-        break;
-      case 'hit':
-        if (this.sound('hit', 0.07)) {
-          this.audio.snap();
-          this.audio.impact(Math.max(0.4, e.intensity) * att, 'wood', pan);
-        }
-        fx.shards(pos, wood, 30 + Math.round(e.intensity * 30));
-        fx.dust(pos, 0.4 + e.intensity * 0.4, dust.clone().lerp(wood, 0.3));
-        if (!e.depth) {
-          this.cam.shake(0.45 + e.intensity * 0.4);
-          this.pieces.squash(1, 0.1);
-        }
-        break;
-      case 'collapse':
-        if (this.sound('collapse', 0.25)) {
-          this.audio.treeFall();
-          this.audio.impact(0.9 * att, 'soil', pan);
-        }
-        fx.dust(pos, 0.9 + e.intensity * 0.8, dust.clone().lerp(wood, 0.25));
-        fx.dust(pos.clone().add(new Vector3(2, -1, 2)), 0.6 + e.intensity * 0.5, dust);
-        if (dist < 45) this.cam.shake(0.4 + e.intensity * 0.4);
-        if (e.intensity > 0.6 && dist < 45) this.slow(0.5, 0.3);
-        break;
-      case 'wall':
-        this.audio.impact(0.6 + e.intensity * 0.4, 'granite', pan);
-        if (e.intensity > 0.4) this.audio.fracture(e.intensity * 0.7, pan);
-        fx.grit(pos, 0.8 + e.intensity);
-        fx.dust(pos, 0.4 + e.intensity * 0.6, dust);
-        this.cam.shake(0.4 + e.intensity * 0.6);
-        this.pieces.squash(1, 0.15);
-        if (e.intensity > 0.6) this.ui.doFlash(0.25);
-        this.ui.hurt();
-        break;
-      case 'land':
-        this.audio.impact(0.6 + e.intensity * 0.4, 'granite', pan);
-        fx.ring(pos, 8 + e.intensity * 8, dust);
-        fx.dust(pos, 0.5 + e.intensity * 0.8, dust);
-        fx.grit(pos, 0.6 + e.intensity);
-        this.cam.shake(0.5 + e.intensity * 0.5);
-        this.cam.punch(0.3 + e.intensity * 0.4);
-        this.pieces.squash(1, 0.2);
-        if (e.intensity > 0.3) this.ui.hurt();
-        break;
-      case 'slide':
-        this.ui.bigBanner('ROCKSLIDE', 'The slope lets go', 1700);
-        this.audio.fracture(1, pan);
-        this.audio.grind();
-        fx.dust(pos, 1.3, dust);
-        fx.dust(pos.clone().add(new Vector3(0, 2, 8)), 1, dust);
-        this.cam.shake(0.7);
-        break;
-      case 'milestone':
-        this.ui.bigBanner(`${e.label?.toUpperCase()}`, `+${pts(e.points ?? 0)}`, 1100, 'small speed');
-        this.audio.combo(4 + (e.points ?? 0) / 500);
-        this.cam.punch(0.4);
-        break;
-      case 'chain':
-        this.ui.chain(e.depth ?? 0);
-        this.audio.combo(e.depth ?? 3);
-        break;
-      case 'score': {
-        const s = this.screen(pos);
-        if (s.on) this.ui.scorePop(s.x, s.y, e.points ?? 0, e.label ?? '', (e.points ?? 0) >= 1000);
-        break;
-      }
-      case 'finale':
-        this.slow(0.28, 1.5);
-        this.audio.fracture(1, 0);
-        this.audio.impact(1, 'wood', 0);
-        this.audio.impact(1, 'granite', 0);
-        this.ui.doFlash(0.6);
-        this.cam.shake(1);
-        this.cam.punch(1);
-        fx.dust(pos, 1.6, dust);
-        fx.shards(pos, wood, 90);
-        break;
-      case 'shatter':
-        this.slow(0.3, 1.2);
-        this.audio.fracture(1, 0);
-        this.audio.shatter();
-        this.ui.doFlash(0.7);
-        this.ui.bigBanner('SHATTERED', 'The boulder couldn’t take any more', 2200);
-        this.cam.shake(1);
-        fx.dust(pos, 1.4, dust);
-        fx.grit(pos, 2);
-        break;
-      case 'end':
-        break;
+        this.showTitle();
+      },
+    );
+  }
+
+  private applySettings(s: Settings) {
+    const q = s.quality !== this.p.settings.quality;
+    this.p.settings = s;
+    this.audio.setSound(s.sound);
+    this.audio.setMusic(s.music);
+    if (q) {
+      this.rig.quality = detectQuality(s.quality);
+      this.rig.resize();
     }
+    this.save();
   }
 
-  private finishRun() {
-    const sim = this.sim!;
-    const r = sim.result!;
-    this.result = r;
-    const rec = recordResult(this.progress, LEVELS, this.level, r);
-    this.records = rec;
-    const lp = levelProgress(this.progress, this.level.id);
-    lp.lastTrail = r.trajectory.filter((_, i) => i % 2 === 0);
-    this.progress.tutorial.released = true;
-    saveProgress(this.progress);
-    this.state = 'results';
-    this.ui.hideRun();
-    this.ui.tip(null);
-    if (!r.finished) this.audio.finish(0);
-    else window.setTimeout(() => this.audio.finish(MEDALS.indexOf(rec.medal) >= 3 ? 2 : 1), 300);
-    if (r.finished && r.stats.finaleFlattened) this.ui.bigBanner(`${this.level.finale.name.replace(/^the /, '').toUpperCase()}`, 'FLATTENED', 2000);
-    else if (r.reason === 'stalled') this.ui.bigBanner('STOPPED', r.cause, 2000);
-    // the recap: fly back up the line over everything that came down
-    this.w.trails.clear();
-    this.w.trails.add(r.trajectory, new Color(1, 0.76, 0.42), 0.9, { opacity: 0.45 });
-    const path = r.trajectory.map((p) => new Vector3(...p));
-    window.setTimeout(() => {
-      if (this.state === 'results') this.cam.recap(path);
-    }, 1400);
-    this.resultsShown = false;
-    window.clearTimeout(this.resultsTimer);
-    this.resultsTimer = window.setTimeout(() => this.revealResults(), 3200);
-    this.ui.tip('Tap to see how you did', 0);
+  private sleep() {
+    const p = this.p;
+    nextDay(p.weather);
+    if (done(p, 'release')) this.pack.reset();
+    const bonus = hasUpgrade(p, 'wing') ? 60 : 0;
+    p.funds += bonus;
+    this.cond = conditions(p.weather);
+    this.audio.chime();
+    this.save();
+    this.input.release();
+    this.panels.morning(p.weather.day, this.cond, avalancheDanger(p.weather, this.cond), bonus);
   }
 
-  private revealResults() {
-    if (this.resultsShown || this.state !== 'results' || !this.result || !this.records) return;
-    this.resultsShown = true;
-    window.clearTimeout(this.resultsTimer);
-    this.ui.tip(null);
-    const r = this.result;
-    const i = LEVELS.findIndex((l) => l.id === this.level.id);
-    const next = LEVELS[i + 1];
-    const lp = levelProgress(this.progress, this.level.id);
-    this.ui.showResults(r, this.level, this.records, lp, {
-      hasNext: !!next && levelUnlocked(this.progress, LEVELS, i + 1),
-      nextName: next?.name,
-      compName: composition(r.composition).name,
-      tip: explainRun(r, this.level, lp.found),
-    });
+  // ------------------------------------------------------------------ saving
+
+  private save() {
+    this.saveT = 0;
+    if (this.state !== 'play') return;
+    const p = this.p;
+    const pos = this.pos2();
+    p.player = { x: pos.x, z: pos.z, yaw: this.headingNow(), mode: this.mode };
+    if (this.mode === 'skis') p.player = { x: this.skis.x, z: this.skis.z, yaw: this.skis.yaw, mode: 'skis' };
+    p.sled = { x: this.sled.x, z: this.sled.z, yaw: this.sled.yaw };
+    p.heli = { x: this.heli.x, z: this.heli.z, yaw: this.heli.yaw };
+    saveProfile(this.store, p);
   }
 
-  // ------------------------------------------------------------------ menu & settings
-  private openMenu() {
-    this.menuOpen = true;
-    if (this.state === 'run') {
-      this.paused = true;
-      this.ui.setPaused(true);
-    }
-    this.ui.showMenu(this.progress.settings.sound, this.progress.settings.music, this.state === 'run');
-  }
-  private closeMenu() {
-    this.menuOpen = false;
-    if (this.state === 'run') {
-      this.paused = false;
-      this.ui.setPaused(false);
-    }
-    this.ui.hideMenu();
-  }
-  private setSound(on: boolean) {
-    this.progress.settings.sound = on;
-    this.audio.setSound(on);
-    saveProgress(this.progress);
-    this.openMenu();
-  }
-  private setMusic(on: boolean) {
-    this.progress.settings.music = on;
-    this.audio.setMusic(on);
-    saveProgress(this.progress);
-    this.openMenu();
-  }
-
-  // ------------------------------------------------------------------ frame
-  private frame(t: number) {
-    const dt = Math.min(0.05, Math.max(0, (t - this.last) / 1000));
-    this.last = t;
-    this.now += dt;
-    shared.time.value += dt;
-
-    if (this.state === 'run' && this.sim) this.stepRun(dt);
-    else if (this.state === 'results' && this.sim) {
-      // the wreckage keeps settling behind the recap
-      if (!this.sim.debris.active.length && !this.sim.movingTrees.size) {
-        /* at rest */
-      } else {
-        this.sim.settle();
-      }
-      this.w.destruct.update(this.sim);
-    }
-
-    this.cam.update(dt, this.state === 'run' || this.state === 'results' ? this.chaseInfo() : undefined);
-    // keep the line of sight to the boulder clear of timber
-    const occ = shared.occluder.value;
-    if ((this.cam.mode === 'chase' || this.cam.mode === 'finale') && this.sim && !this.sim.shattered) {
-      occ[0] = this.sim.pos.x;
-      occ[1] = this.sim.pos.y;
-      occ[2] = this.sim.pos.z;
-      occ[3] = this.level.boulder.radius * 2.6;
-    } else if (this.state === 'ready' || this.state === 'title') {
-      const [bx, bz] = this.level.boulder.position;
-      occ[0] = bx;
-      occ[1] = this.w.data.heightAt(bx, bz) + this.level.boulder.radius;
-      occ[2] = bz;
-      occ[3] = this.state === 'ready' ? this.level.boulder.radius * 2.6 : 0;
-    } else occ[3] = 0;
-    const look = this.cam.lookTarget;
-    this.rig.focusShadows(look, this.cam.distance * 0.75 + 16);
-    this.rig.setAtmosphere(look.z, dt);
-    this.pieces.update(dt);
-    this.w.water.update(dt);
-    this.w.effects.update(dt);
-
-    const sim = this.sim;
-    const speed = sim && this.state === 'run' ? sim.speed : 0;
-    const rolling = sim && this.state === 'run' && sim.grounded && !sim.shattered ? Math.min(1, speed / 10) : 0;
-    this.audio.weight = 1;
-    this.audio.update(dt, { waterNear: 0, rolling, gravel: rolling * (sim?.kind === 'scree' || sim?.kind === 'loose' ? 0.9 : 0.4), wind: 1, speed, size: this.level.boulder.radius });
-
-    this.rig.renderer.render(this.rig.scene, this.rig.camera);
-    if (!document.hidden && !this.automation) this.rig.adapt(dt);
-  }
-
-  /** test hooks */
+  /** For the browser test scripts. */
   debug() {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const game = this;
     return {
-      get state() {
-        return game.state;
+      game: this,
+      profile: () => this.p,
+      info: () => ({ calls: this.rig.renderer.info.render.calls, tris: this.rig.renderer.info.render.triangles, heli: { ...this.heli }, dog: { mode: this.dog.mode, anim: this.dog.anim, x: this.dog.x, z: this.dog.z } }),
+      state: () => ({ mode: this.mode, pos: this.pos2(), active: this.p.active, fps: Math.round(this.fps), step: this.p.active ? currentStep(this.p.active)?.kind : null, watching: this.watching, pack: { fired: this.pack.fired, done: this.pack.done, moving: this.pack.moving, result: this.pack.result } }),
+      teleport: (x: number, z: number, yaw = 0) => {
+        if (this.mode === 'sled') {
+          this.sled.x = x;
+          this.sled.z = z;
+          this.sled.yaw = yaw;
+          this.sled.y = this.terrain.height(x, z);
+        } else if (this.mode === 'heli') {
+          this.heli.x = x;
+          this.heli.z = z;
+          this.heli.yaw = yaw;
+          this.heli.y = Math.max(this.heli.y, this.terrain.height(x, z) + 40);
+        } else if (this.mode === 'skis') {
+          this.skis.x = x;
+          this.skis.z = z;
+          this.skis.yaw = yaw;
+          this.skis.y = this.terrain.height(x, z);
+        } else this.placeWalker(x, z, yaw);
+        this.cam.snapBehind(yaw);
       },
-      get result() {
-        return game.result;
+      sledTo: (x: number, z: number) => {
+        this.sled.x = x;
+        this.sled.z = z;
+        this.sled.y = this.terrain.height(x, z);
       },
-      get level() {
-        return game.level.id;
+      heliTo: (x: number, z: number, y: number) => {
+        this.heli.x = x;
+        this.heli.z = z;
+        this.heli.y = y;
+        this.heli.landed = false;
+        this.heli.running = true;
+        this.heli.rotor = 1;
       },
-      get decision() {
-        return game.sim?.decision ?? null;
+      dogTo: (x: number, z: number) => {
+        this.dog.x = x;
+        this.dog.z = z;
       },
-      get sim() {
-        return game.sim;
-      },
-      begin: () => {
-        this.ui.hideTitle();
-        this.toReady();
-      },
-      load: (id: string) => this.pickLevel(id),
-      release: () => this.startRun(),
-      choose: (side: 'left' | 'right' | 'centre') => this.choose(side),
-      fast: (on = true) => {
-        this.fast = on;
-      },
-      results: () => this.revealResults(),
-      composition: (id: CompositionId) => this.setComposition(id),
-      unlockAll: () => {
-        for (const l of LEVELS) {
-          const lp = levelProgress(this.progress, l.id);
-          lp.finished = true;
-          if (MEDALS.indexOf(lp.medal) < 3) lp.medal = 'gold';
-        }
-        saveProgress(this.progress);
-      },
-      snapCamera: () => this.cam.snap(),
-      camInfo: () => {
-        const c = this.rig.camera.position;
-        const s = this.sim;
-        return { mode: this.cam.mode, hero: s && [s.pos.x, s.pos.y, s.pos.z].map((v) => +v.toFixed(1)), cam: [c.x, c.y, c.z].map((v) => +v.toFixed(1)), seg: s?.seg.seg.id, speed: s && +(s.speed * 3.6).toFixed(0) };
-      },
-      renderInfo: () => {
-        const i = this.rig.renderer.info;
-        return { calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures };
-      },
+      setTime: (minute: number) => (this.p.weather.minute = minute),
+      setDay: (d: number) => (this.p.weather.day = d),
+      accept: (id: string) => this.accept(id),
+      complete: (id: string) => complete(this.p, id),
+      funds: (n: number) => (this.p.funds = n),
+      rep: (n: number) => (this.p.rep = n),
+      apply: () => this.applyProfile(),
+      camYaw: (y: number) => (this.cam.yaw = y),
+      camPitch: (y: number) => (this.cam.pitch = y),
+      closePanel: () => this.panels.close(),
+      save: () => this.save(),
+      missions: () => MISSIONS.map((m) => m.id),
     };
   }
-}
-
-/** Free GPU memory held by a subtree. */
-function disposeTree(root: Object3D) {
-  const mats = new Set<Material>();
-  root.traverse((o) => {
-    const m = o as Mesh;
-    if (m.geometry) m.geometry.dispose();
-    const mat = m.material as Material | Material[] | undefined;
-    if (Array.isArray(mat)) mat.forEach((x) => mats.add(x));
-    else if (mat) mats.add(mat);
-  });
-  for (const m of mats) m.dispose();
-}
-
-/** One line on what happened, and what to try next. */
-export function explainRun(r: RunResult, level: LevelDef, found: string[]): string {
-  const s = r.stats;
-  const unexplored = level.segments.filter((q) => q.kind !== 'summit' && q.kind !== 'finale' && !found.includes(q.id));
-  if (r.reason === 'shattered') return 'Rock, walls and hard landings wore the boulder down until it broke. Gorges and rubble are rich but punishing — a tougher stone, or a softer way down, gets you to the bottom.';
-  if (r.reason === 'stalled') return 'Too much timber, not enough slope: the boulder ran out of momentum. Dense ground drinks speed — balance it with a fast way down.';
-  if (!s.finaleFlattened) return `You reached the bottom too slowly to flatten ${level.finale.name}. Arrive faster: open slopes and loose ground build speed.`;
-  if (s.finaleSpeed * 3.6 < 60) return `${level.finale.name} came down at ${Math.round(s.finaleSpeed * 3.6)} km/h. Hit it faster for a bigger finish — the last ways down decide your speed.`;
-  if (r.categories.length < 4) return `Variety pays: this run destroyed ${r.categories.length} kinds of thing. Mixing forest, rock, buildings, gorges and slides earns a bigger bonus.`;
-  if (unexplored.length) return `${unexplored.length} way${unexplored.length > 1 ? 's' : ''} down still unexplored — ${unexplored[0].name} among them.`;
-  return 'You have seen every way down this mountain. Now find the route that does the most damage.';
 }

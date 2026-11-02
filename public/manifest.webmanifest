@@ -1,13 +1,13 @@
 {
-  "name": "ROCKSLIDE",
+  "name": "ROCKSLIDE: Mountain Patrol",
   "short_name": "ROCKSLIDE",
-  "description": "Unleash a geological catastrophe. Choose where the boulder goes at every fork, then watch the mountain come apart.",
+  "description": "Look after an alpine valley with a snowmobile, a helicopter, skis and Koda the husky: rescues, avalanche control, recon flights and a patrol station that grows.",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",
   "orientation": "any",
-  "background_color": "#16181b",
-  "theme_color": "#16181b",
+  "background_color": "#141c24",
+  "theme_color": "#141c24",
   "categories": ["games"],
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
