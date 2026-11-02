@@ -124,7 +124,7 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
   const level = data.level;
   const rng = mulberry32(level.forest.seed);
   const keep = level.forest.keepOut.map((k) => ({ pl: makePolyline(k.path), w: k.width }));
-  const treeLine = 175;
+  const treeLine = level.terrain.snowLine - 5;
   const sea = level.sea;
   const b = level.terrain.bounds;
 
@@ -158,7 +158,7 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
   const bark = createBarkMaterial(new Color(0.3, 0.22, 0.17));
   const foliage = createFoliageMaterial();
   // conifers on the mountain, broadleaf in the warm lower valley
-  const lowland = (p: { z: number; y: number }) => p.z > 640 || p.y < 18;
+  const lowland = (p: { z: number; y: number }) => !!sea && (p.z > 640 || p.y < 18);
   const near = placements.slice(0, farStart).filter((p) => !lowland(p));
   const farP = placements.slice(farStart).filter((p) => !lowland(p));
   const nearLow = placements.slice(0, farStart).filter(lowland);

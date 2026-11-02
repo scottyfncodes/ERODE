@@ -41,6 +41,8 @@ import {
   createOutlineMaterial,
   createRockMaterial,
   createSoilMaterial,
+  ROCK_LOOKS,
+  rockUniforms,
 } from './materials';
 import { coniferGeometry } from './vegetation';
 
@@ -92,7 +94,21 @@ export class ObjectsView {
     needles: new MeshStandardMaterial({ color: new Color(0.3, 0.3, 0.16), roughness: 1, flatShading: true }),
     wood: new MeshStandardMaterial({ color: new Color(0.45, 0.33, 0.22), roughness: 0.9 }),
     pool: new MeshStandardMaterial({ color: new Color(0.16, 0.3, 0.32), roughness: 0.15, metalness: 0.1 }),
+    snow: new MeshStandardMaterial({ color: new Color(0.94, 0.96, 1.0), roughness: 0.85 }),
+    ash: new MeshStandardMaterial({ color: new Color(0.26, 0.25, 0.25), roughness: 1 }),
+    plank: createBarkMaterial(new Color(0.5, 0.38, 0.26)),
+    greyPlank: createBarkMaterial(new Color(0.46, 0.42, 0.38)),
   };
+  private rockMats = new Map<string, MeshStandardMaterial>();
+  private rockMat(kind: string | undefined): MeshStandardMaterial {
+    const k = kind && ROCK_LOOKS[kind] ? kind : 'granite';
+    let m = this.rockMats.get(k);
+    if (!m) {
+      m = k === 'granite' ? this.mats.rock : createRockMaterial({ uniforms: rockUniforms(ROCK_LOOKS[k]) });
+      this.rockMats.set(k, m);
+    }
+    return m;
+  }
   /** callbacks for effects (dust, sound) when objects change */
   onChange: ((id: string, kind: string, pos: Vector3) => void) | null = null;
 
@@ -102,7 +118,7 @@ export class ObjectsView {
     for (const o of this.level.objects) this.ctls.set(o.id, this.build(o));
     for (const f of this.level.formations) {
       const shape = formationShape(f);
-      const mesh = new Mesh(pieceGeometry(shape), this.mats.rock);
+      const mesh = new Mesh(pieceGeometry(shape), this.rockMat(f.rock));
       const h = data.heightAt(f.position[0], f.position[1]);
       mesh.position.set(f.position[0], h + f.size[1] * 0.5 - (f.sink ?? 0.5), f.position[1]);
       mesh.quaternion.setFromAxisAngle(UP, -f.yaw);
@@ -297,6 +313,67 @@ export class ObjectsView {
           }
           for (let k = 0; k < 10; k++)
             addStick(1.5 + rng() * 2.5, 0.06 + rng() * 0.08, place((rng() - 0.5) * o.span * 0.8, (rng() - 0.5) * 2.5, rng() * bh * 0.8), rng() * 6.28, (rng() - 0.5) * 1.2, this.mats.deadBark, false);
+        } else if (style === 'fence') {
+          // a snow fence: posts and horizontal boards across the line
+          const posts = Math.max(3, Math.round(o.span / 2.2));
+          for (let k = 0; k <= posts; k++) {
+            const a = (k / posts - 0.5) * o.span;
+            const p = place(a, 0, bh * 0.5 - 0.2);
+            const post = new Mesh(new BoxGeometry(0.22, bh + 0.5, 0.22), this.mats.greyPlank);
+            post.position.copy(p);
+            post.rotation.set((rng() - 0.5) * 0.08, -o.yaw, (rng() - 0.5) * 0.08);
+            post.castShadow = true;
+            g.add(post);
+            outlined.push(post);
+          }
+          const boards = Math.max(3, Math.round(bh / 0.45));
+          for (let r = 0; r < boards; r++) {
+            for (let k = 0; k < posts; k++) {
+              const a = ((k + 0.5) / posts - 0.5) * o.span;
+              const p = place(a, 0.1, 0.3 + (r / boards) * (bh - 0.2));
+              const board = new Mesh(new BoxGeometry(o.span / posts + 0.15, 0.22, 0.05), r % 2 ? this.mats.greyPlank : this.mats.plank);
+              board.position.copy(p);
+              board.rotation.set(0, -o.yaw, (rng() - 0.5) * 0.06);
+              board.castShadow = true;
+              g.add(board);
+            }
+          }
+        } else if (style === 'trestle') {
+          // an old mine trestle: timber bents with cross-bracing and a deck on top
+          const bents = Math.max(3, Math.round(o.span / 3));
+          for (let k = 0; k <= bents; k++) {
+            const a = (k / bents - 0.5) * o.span;
+            for (const side of [-0.9, 0.9]) {
+              const p = place(a, side, bh * 0.5 - 0.3);
+              const leg = new Mesh(new BoxGeometry(0.32, bh + 0.6, 0.32), this.mats.plank);
+              leg.position.copy(p);
+              leg.rotation.set(side * 0.12, -o.yaw, 0);
+              leg.castShadow = true;
+              g.add(leg);
+              outlined.push(leg);
+            }
+            const brace = new Mesh(new BoxGeometry(0.16, bh * 1.15, 0.16), this.mats.greyPlank);
+            brace.position.copy(place(a, 0, bh * 0.5 - 0.3));
+            brace.rotation.set(0.9, -o.yaw, 0);
+            brace.castShadow = true;
+            g.add(brace);
+          }
+          for (let k = 0; k < bents; k++) {
+            const a = ((k + 0.5) / bents - 0.5) * o.span;
+            const deck = new Mesh(new BoxGeometry(o.span / bents + 0.1, 0.24, 2.4), this.mats.plank);
+            deck.position.copy(place(a, 0, bh));
+            deck.rotation.y = -o.yaw;
+            deck.castShadow = deck.receiveShadow = true;
+            g.add(deck);
+            const rail = new Mesh(new BoxGeometry(o.span / bents, 0.12, 0.12), this.mats.greyPlank);
+            rail.position.copy(place(a, 1.1, bh + 0.7));
+            rail.rotation.y = -o.yaw;
+            g.add(rail);
+            const xb = new Mesh(new BoxGeometry(o.span / bents * 1.15, 0.14, 0.14), this.mats.greyPlank);
+            xb.position.copy(place(a, 0.9, bh * 0.45));
+            xb.rotation.set(0, -o.yaw, (k % 2 ? 1 : -1) * 0.5);
+            g.add(xb);
+          }
         } else if (style === 'beaver') {
           const mud = new Mesh(new SphereGeometry(1, 18, 10), this.mats.soil);
           mud.scale.set(o.span * 0.5, bh * 0.75, 1.8);
@@ -398,14 +475,14 @@ export class ObjectsView {
       case 'soil': {
         const shape = soilShape(o.id, o.radius[0], o.radius[1], o.height, o.seed);
         const geo = pieceGeometry(shape);
-        const mesh = new Mesh(geo, this.mats.soil);
+        const mesh = new Mesh(geo, o.material === 'snow' ? this.mats.snow : o.material === 'ash' ? this.mats.ash : this.mats.soil);
         mesh.castShadow = mesh.receiveShadow = true;
         const y = this.h(o.position[0], o.position[1]) - 0.15;
         mesh.position.set(o.position[0], y, o.position[1]);
         mesh.quaternion.setFromAxisAngle(UP, -o.yaw);
         // a few roots and stones poking out
         const rng = mulberry32(o.seed);
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < (o.material === 'snow' ? 0 : 6); i++) {
           const st = new Mesh(pieceGeometry(rockShape(`soil-stone-${o.id}-${i}`, 0.25 + rng() * 0.25, o.seed + i)), this.mats.rock);
           const a = rng() * Math.PI * 2;
           st.position.set(Math.cos(a) * o.radius[0] * 0.6, o.height * 0.35 * rng(), Math.sin(a) * o.radius[1] * 0.6);
@@ -452,7 +529,7 @@ export class ObjectsView {
         const fallenQ = o.hardness
           ? new Quaternion().setFromAxisAngle(UP, -(o.yaw + 0.5))
           : new Quaternion().setFromEuler(new Euler(0, -(o.yaw + 0.9), Math.PI / 2, 'YXZ'));
-        if (o.hardness) for (const m of g.children) (m as Mesh).material = this.mats.breaker;
+        for (const m of g.children) (m as Mesh).material = this.rockMat(o.rock);
         apply = (s: any, t: number) => {
           const y0 = this.h(o.position[0], o.position[1]) + o.size[1] * 0.5 - 0.7;
           const [sx, sz] = o.splitTo;
@@ -608,6 +685,21 @@ export class ObjectsView {
         return to.broken ? 'shatter' : 'freeze';
       case 'gate':
         return 'gate';
+    }
+  }
+
+  /** A structure burst apart during the descent (or restored for planning / replay rewind). */
+  smash(id: string, on: boolean, animate = true) {
+    const c = this.ctls.get(id);
+    if (!c || c.def.type !== 'branches') return;
+    const want = { ...(c.to as object), removed: on } as unknown;
+    if (JSON.stringify(want) === JSON.stringify(c.to)) return;
+    c.from = c.current;
+    c.to = want;
+    c.anim = animate ? 0 : 1;
+    if (!animate) {
+      c.current = c.to;
+      (c.apply as any)(c.to, 1);
     }
   }
 

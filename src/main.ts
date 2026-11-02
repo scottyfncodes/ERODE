@@ -1,5 +1,4 @@
 import { loadRapier } from './sim/rapier';
-import { SUMMIT_TO_SEA } from './levels/summitToSea';
 import { Game } from './game/game';
 
 const loading = document.getElementById('loading')!;
@@ -36,7 +35,7 @@ async function boot() {
   const R = await loadRapier();
   await nextFrame();
   const canvas = document.getElementById('view') as HTMLCanvasElement;
-  const game = new Game(canvas, document.getElementById('ui')!, document.getElementById('markers')!, R, SUMMIT_TO_SEA, progress);
+  const game = new Game(canvas, document.getElementById('ui')!, document.getElementById('markers')!, R, progress);
   await nextFrame();
   progress(1, 'Ready');
   game.start();

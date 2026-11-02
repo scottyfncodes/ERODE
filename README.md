@@ -1,38 +1,65 @@
 # ERODE
 
-An over-the-top physics arcade run. A granite boulder snaps off a summit spire and goes over the edge.
-How far can it travel — and how small can you grind it — before it lands on the beach?
+**You are a boulder. Reach the bottom of the mountain with as much of yourself as you can.**
 
-**Boulder → Fragment → Rock → Pebble → Gravel → Sand**
+ERODE is a physics-driven environmental puzzle game. Every level runs the same loop:
 
-## The Long Fall
+1. **Survey.** Fly down the descent, show the routes, and inspect each obstacle.
+2. **Plan.** Spend a few moves changing the mountain. You can lever loose boulders aside, fell a pine across a line, clear a log jam, angle a trunk into a guide, dig out a snowbank, or break a sheet of ice.
+3. **Descend.** Release the boulder and let physics take over. You can only *lean* it left or right.
+4. **Survive.** Collisions, terrain, water and wear all cost you mass, and you watch every kilogram go.
+5. **Result.** Your medal depends on how much of the starting mass you kept.
 
-**Plan, release, steer.** A granite boulder sits on the summit. Before you let it go you have three moves:
-set a smasher in the line (two granite teeth, a crusher rock in the rapids) or clear a blocker
-(the log jam, the debris dam, the beaver dam). Then break it loose and drag left/right (or hold the
-arrow buttons, or ←/→) to steer it 1.1 km down to the sea.
+## Mass is the game
 
-- **The mountain breaks it down.** Rock hits knock real chips off; brutal hits split it and the camera
-  stays with the largest piece. Big stones flatten trees and bowl loose boulders aside.
-- **Water and sand wear it smooth** — jagged granite becomes a polished pebble, then gravel, then sand.
-- **Boulder → Fragment → Rock → Pebble → Gravel → Sand.** A boulder carves wide and steers heavy;
-  a pebble darts. The camera closes in as it shrinks.
-- **Each stretch has its own air and light:** alpine summit, forest haze, misty gorge and falls,
-  warm valley, golden coast.
+- **Starting mass.** Every boulder starts with a real mass: its volume × the density of its stone. In Pine Hollow that is about 10 t of granite.
+- **Impact loss.** Each impact costs `mass × K × (Δv − threshold)² × hardness^1.5 × vulnerability / toughness`. Δv is the velocity change of the hit, so head-on hits cost the most and glancing ones little. The material struck matters too: bedrock and obsidian are harsh, while snow, soil and branches are soft. Each hit is graded minor, moderate or major.
+- **Splitting.** A hit that takes more than the stone's split threshold breaks it, and you carry on with the largest piece.
+- **Wear.** Rolling over rough ground and tumbling in water wear the stone down steadily.
+- **Mass changes the physics.** As the stone loses mass:
+  - its radius and collider shrink with it (the radius follows the cube root of the mass);
+  - its momentum falls, so a light stone can no longer burst through timber;
+  - the water current pushes it harder;
+  - it leans more nimbly;
+  - it can fit through gaps it couldn't before.
 
-Score: distance, rock-hit combos, trees, air, a bonus for each new size class, the beach, then a
-size multiplier. The results show the run's highlight and its real numbers — mass lost, trees down,
-top speed, time in the water.
+**Medals:** Bronze = reach the bottom. Silver, Gold and Platinum = keep the share of starting mass each level sets.
+
+## Stones
+
+| Stone | Character |
+| --- | --- |
+| Granite | Balanced. Available from the start. |
+| Sandstone | Light and nimble, but wears fast and is too light to break much timber. |
+| Basalt | Dense and durable. Smashes through timber, but carves wide. |
+| Limestone | Soft knocks barely mark it, but hard rock hurts and water dissolves it. |
+| Obsidian | Small knocks glance off, and a hard hit shatters it. |
+
+The other stones unlock through play: finishing mountains and earning medals.
+
+## The mountains
+
+| | Mountain | Environment | Signature decisions |
+| --- | --- | --- | --- |
+| I | Pine Hollow | Alpine Forest | Forest track vs scree gully, a breakable log jam, a loose boulder in the line, a trunk to guide you off the Ledge |
+| II | Granite Ridge | Rocky Mountain Ridge | The Needle: a slot too narrow for a full-size boulder |
+| III | Whiteout Couloir | Snow-covered Mountain | Icy couloir vs deep snowfield, avalanche fences, verglas, snowbank cushions |
+| IV | Redwall Canyon | Canyon Descent | River channel, mud flats, an old mining trestle |
+| V | Cinder Cone | Volcanic Mountainside | Obsidian shard fields, basalt columns, ash drifts |
+| VI | The Long Fall | Ancient Overgrown Mountains | 1.1 km from summit to sea |
+
+Every level has at least two named routes, optional objectives, medal targets and personal bests: best retention, most mass and fastest descent. Your progress is saved in the browser.
 
 ## How it works
 
 | Area | Where |
 | --- | --- |
-| Course data | `src/levels/summitToSea.ts` — terrain profile, valley, rivers, blockers, smashers, zones |
-| Physics | `src/sim/simulation.ts` — deterministic Rapier, leader tracking, size stages, scoring, nudges |
-| Fracture | `src/sim/fracture.ts` — Voronoi fracture; fragments are real bodies; below 24 cm stone cracks and grinds virtually |
-| Rendering | `src/render/` — chunked terrain, river with waterfall foam, sea with surf, forest, particles |
-| UI / audio | `src/ui/`, `src/audio/` — arcade HUD, synthesised drums, combo blips, fanfares |
+| Levels | `src/levels/*.ts`: terrain, routes, objects, objectives, medals, atmosphere |
+| Physics & mass | `src/sim/simulation.ts`: deterministic Rapier, damage model, wear, breakable structures, routes, results |
+| Stones | `src/sim/composition.ts` |
+| Fracture | `src/sim/fracture.ts`: Voronoi fracture into real rigid bodies |
+| Rendering | `src/render/`: chunked terrain with per-environment palettes, water, forest, structures, particles |
+| Game & UI | `src/game/`, `src/ui/`: survey, planning, mass HUD, results, replay, progression |
 
 ## Develop
 
@@ -41,5 +68,5 @@ npm install
 npm run dev
 npm test
 npm run build
-npx tsx scripts/run.ts     # headless runs of the course with different setups
+npx tsx scripts/balance.ts pine-hollow granite -v   # headless balancing of a level's candidate plans
 ```

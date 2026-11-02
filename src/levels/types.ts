@@ -159,6 +159,8 @@ export interface OutcropObject extends BaseObject {
   hardness?: number;
   /** label used for the action button */
   actionLabel?: string;
+  /** what it's made of (look) */
+  rock?: RockKind;
   type: 'outcrop';
   position: Vec2;
   size: [number, number, number];
@@ -277,6 +279,12 @@ export interface LevelDef {
   finish: { z: number; x?: [number, number]; name: string };
   atmos: AtmosKey[];
   palette?: TerrainPalette;
+  /**
+   * Narrow passages. A stone fits when its diameter (2 × radius) is no wider than `width`;
+   * otherwise it wedges there and the run ends. Build the walls a little wider apart than the
+   * widest a tumbling stone could be, and let this rule decide.
+   */
+  passages?: { name: string; x: number; z: number; width: number }[];
   /** named sections of the descent (survey chips, HUD) */
   zones?: Zone[];
   /** smashable pines and loose stones along the run */

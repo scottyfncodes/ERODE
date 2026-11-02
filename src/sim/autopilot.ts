@@ -22,9 +22,16 @@ export function makeAutopilot(sim: Simulation, routeId?: string, gain = 1, avoid
     const rx = -hit.tz,
       rz = hit.tx;
     let lateral = (ahead.x - t.x) * rx + (ahead.z - t.z) * rz;
+    // a narrow passage ahead: aim for its middle and ignore its walls
+    const gap = (level.passages ?? []).find((g) => {
+      const dz = (g.x - t.x) * hit.tx + (g.z - t.z) * hit.tz;
+      return dz > -1 && dz < 8 + sp * 2 && Math.abs((g.x - t.x) * rx + (g.z - t.z) * rz) < 12;
+    });
+    if (gap) lateral = (gap.x - t.x) * rx + (gap.z - t.z) * rz;
     if (avoid) {
       const size = p.size;
       for (const k of rocks) {
+        if (gap && Math.hypot(k.x - gap.x, k.z - gap.z) < 12) continue;
         const dz = (k.x - t.x) * hit.tx + (k.z - t.z) * hit.tz;
         if (dz < 0 || dz > 6 + sp * 1.4) continue;
         const dx = (k.x - t.x) * rx + (k.z - t.z) * rz;

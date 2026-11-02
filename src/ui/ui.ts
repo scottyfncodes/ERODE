@@ -1,8 +1,9 @@
 import type { LevelDef, Zone } from '../levels/types';
-import { STAGES, type SimResult } from '../sim/simulation';
-import type { Progress } from '../game/progress';
+import type { Medal, SimResult, Severity } from '../sim/simulation';
+import type { Composition, CompositionId } from '../sim/composition';
+import type { LevelProgress, Records } from '../game/progress';
 import './style.css';
-import { sizeLabel } from './format';
+import { kg, pct, seconds, sizeLabel } from './format';
 
 export const ICONS = {
   reset: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg>',
@@ -19,7 +20,12 @@ export const ICONS = {
   replay: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/><path d="M10 9v6l5-3z"/></svg>',
   left: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
   right: '<svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
-  bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>',
+  routes: '<svg viewBox="0 0 24 24"><path d="M6 3v6c0 3 6 3 6 6v6"/><path d="M18 3v6c0 3-6 3-6 6"/></svg>',
+  survey: '<svg viewBox="0 0 24 24"><path d="M3 20l6-12 4 7 3-4 5 9z"/><circle cx="17" cy="5" r="1.6"/></svg>',
+  back: '<svg viewBox="0 0 24 24"><path d="M14 6l-6 6 6 6"/></svg>',
+  next: '<svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg>',
+  lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
 };
 
 export interface ContextAction {
@@ -33,7 +39,9 @@ export interface ContextAction {
 }
 
 export interface UIHandlers {
-  begin(): void;
+  play(): void;
+  pickLevel(id: string): void;
+  mountains(): void;
   release(): void;
   reset(): void;
   menu(): void;
@@ -42,6 +50,7 @@ export interface UIHandlers {
   replay(): void;
   adjust(): void;
   retry(): void;
+  next(): void;
   pause(): void;
   skip(): void;
   scrub(frac: number): void;
@@ -53,9 +62,25 @@ export interface UIHandlers {
   toTitle(): void;
   resumeFromMenu(): void;
   toggleGhost(): void;
+  toggleRoutes(): void;
+  survey(): void;
   zone(id: string): void;
-  nudge(dir: number): void;
+  composition(id: CompositionId): void;
   steer(dir: number): void;
+}
+
+export interface MountainCard {
+  level: LevelDef;
+  unlocked: boolean;
+  lockText: string;
+  progress: LevelProgress | undefined;
+}
+
+export interface CompositionChoice {
+  comp: Composition;
+  unlocked: boolean;
+  /** starting mass of this level's boulder in this stone */
+  mass: number;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
@@ -65,7 +90,19 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
   return e;
 }
 
-const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
+const MEDAL_NAME: Record<Medal, string> = { none: 'No medal', bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum' };
+
+/** Bars start below the silver line so the medal thresholds aren't crammed at the end. */
+function barFloor(silver: number): number {
+  return Math.max(0, Math.floor((silver - 0.25) * 20) / 20);
+}
+function barPos(f: number, floor: number): number {
+  return Math.max(0, Math.min(1, (f - floor) / (1 - floor)));
+}
+
+function medalBadge(m: Medal, size = ''): string {
+  return `<span class="medal m-${m} ${size}" aria-label="${MEDAL_NAME[m]}"><i></i></span>`;
+}
 
 export { sizeLabel };
 
@@ -73,12 +110,14 @@ export class UI {
   private root: HTMLElement;
   private h: UIHandlers;
   private title!: HTMLElement;
+  private mountainsEl!: HTMLElement;
   private plan!: HTMLElement;
   private run!: HTMLElement;
   private results!: HTMLElement;
   private replayBar!: HTMLElement;
   private menuEl!: HTMLElement;
   private context!: HTMLElement;
+  private compSheet!: HTMLElement;
   private tipEl!: HTMLElement;
   private calloutEl!: HTMLElement;
   private pipsEl!: HTMLElement;
@@ -89,15 +128,15 @@ export class UI {
   private playBtn!: HTMLButtonElement;
   private pauseBtn!: HTMLButtonElement;
   private ghostBtn!: HTMLButtonElement;
-  private scoreEl!: HTMLElement;
-  private comboEl!: HTMLElement;
-  private chainEl!: HTMLElement;
-  private sizeEl!: HTMLElement;
+  private routesBtn!: HTMLButtonElement;
+  private massNum!: HTMLElement;
+  private massPct!: HTMLElement;
+  private massFill!: HTMLElement;
+  private massLoss!: HTMLElement;
+  private massTicks!: HTMLElement;
   private distFill!: HTMLElement;
-  private distMarker!: HTMLElement;
   private distLabel!: HTMLElement;
-  private nudgeDots!: HTMLElement;
-  private nudgeBtns: HTMLButtonElement[] = [];
+  private steerKnob!: HTMLElement;
   private popLayer!: HTMLElement;
   private banner!: HTMLElement;
   private flash!: HTMLElement;
@@ -105,9 +144,13 @@ export class UI {
   private tipTimer = 0;
   private bannerTimer = 0;
   private scrubbing = false;
-  private shownScore = 0;
-  private targetScore = 0;
-  private lastStage = -1;
+  private shownMass = 0;
+  private targetMass = 0;
+  private lossMass = 0;
+  private startMass = 1;
+  private runMedals = { silver: 0.6, gold: 0.8, platinum: 0.95 };
+  /** the bar shows retention from this floor to 100%, so the medal lines have room */
+  private floor = 0;
 
   constructor(root: HTMLElement, handlers: UIHandlers) {
     this.root = root;
@@ -115,9 +158,14 @@ export class UI {
     this.build();
     const tick = () => {
       requestAnimationFrame(tick);
-      if (Math.abs(this.targetScore - this.shownScore) > 0.5) {
-        this.shownScore += (this.targetScore - this.shownScore) * 0.18;
-        this.scoreEl.textContent = fmt(this.shownScore);
+      if (Math.abs(this.targetMass - this.shownMass) > 0.5) {
+        this.shownMass += (this.targetMass - this.shownMass) * 0.22;
+        this.paintMass();
+      }
+      // the red "just lost" sliver drains a moment after a hit
+      if (this.lossMass > this.targetMass + 0.5) {
+        this.lossMass += (this.targetMass - this.lossMass) * 0.045;
+        this.massLoss.style.width = `${(barPos(this.lossMass / this.startMass, this.floor) * 100).toFixed(2)}%`;
       }
     };
     requestAnimationFrame(tick);
@@ -133,77 +181,89 @@ export class UI {
     return b;
   }
 
-  private chain(): HTMLElement {
-    const c = el('div', 'chain');
-    STAGES.forEach((s, i) => {
-      if (i) c.append(el('span', 'chain-sep', '›'));
-      c.append(el('span', 'chain-item', s.name));
-    });
-    return c;
+  private actBtn(label: string, cls: string, fn: () => void, icon?: keyof typeof ICONS) {
+    return this.btn(`act ${cls}`, `${icon ? ICONS[icon] : ''}<span>${label}</span>`, fn);
   }
 
   private build() {
     // ---------------- title
     this.title = el('div', 'title hidden');
-    const top = el('div', 'title-top');
-    top.append(
-      el('div', 'arcade-mark', 'ERODE'),
-      el('div', 'title-tag', 'Steer it down the mountain. Smash it on the rocks.<br><b>How small can you grind it?</b>'),
-    );
-    const bottom = el('div', 'title-bottom');
-    const best = el('div', 'title-best');
-    best.id = 'title-best';
-    const begin = this.btn('btn-go interactive', 'Start', () => this.h.begin());
-    begin.id = 'begin';
-    const ch = this.chain();
-    ch.id = 'title-chain';
-    bottom.append(ch, best, begin);
-    this.title.append(top, bottom);
+    this.title.innerHTML = `
+      <div class="title-top">
+        <div class="wordmark">ERODE</div>
+        <div class="title-tag">You are the boulder. Reach the bottom of the mountain with as much of yourself as you can.</div>
+      </div>
+      <div class="title-bottom"><div class="title-stats" id="title-stats"></div></div>`;
+    const go = this.btn('btn-go interactive', 'Play', () => this.h.play());
+    go.id = 'begin';
+    this.title.querySelector('.title-bottom')!.append(go);
+
+    // ---------------- mountains (level select)
+    this.mountainsEl = el('div', 'mountains interactive');
+    this.mountainsEl.style.display = 'none';
 
     // ---------------- planning
     this.plan = el('div', 'hud hidden');
-    const card = el('div', 'level-card');
-    card.innerHTML = '<div class="stage-label"></div><h1></h1><div class="plan-goal"></div>';
-    const changes = el('div', 'changes');
-    this.changesLabel = el('span', '', 'Moves');
-    this.pipsEl = el('div', 'pips');
-    changes.append(this.changesLabel, this.pipsEl);
-    card.append(changes);
+    const card = el('div', 'level-card interactive');
+    card.innerHTML = `
+      <div class="lc-row"><span class="stage-label"></span><span class="env"></span></div>
+      <h1></h1>
+      <button class="comp-pick"></button>
+      <div class="targets"></div>
+      <div class="lc-foot"><span class="moves-label">Moves</span><div class="pips"></div><button class="obj-toggle"></button></div>
+      <ul class="obj-list"></ul>`;
+    this.pipsEl = card.querySelector('.pips') as HTMLElement;
+    this.changesLabel = card.querySelector('.moves-label') as HTMLElement;
+    card.querySelector('.comp-pick')!.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.compSheet.classList.toggle('show');
+    });
+    card.querySelector('.obj-toggle')!.addEventListener('click', (e) => {
+      e.stopPropagation();
+      card.classList.toggle('open');
+    });
     const tr = el('div', 'top-right');
     this.ghostBtn = this.btn('icon-btn interactive', ICONS.eye, () => this.h.toggleGhost(), 'Show last path');
-    tr.append(this.ghostBtn, this.btn('icon-btn interactive', ICONS.reset, () => this.h.reset(), 'Reset the mountain'), this.btn('icon-btn interactive', ICONS.menu, () => this.h.menu(), 'Menu'));
+    this.routesBtn = this.btn('icon-btn interactive', ICONS.routes, () => this.h.toggleRoutes(), 'Show routes');
+    tr.append(
+      this.btn('icon-btn interactive', ICONS.back, () => this.h.mountains(), 'Mountains'),
+      this.btn('icon-btn interactive', ICONS.survey, () => this.h.survey(), 'Survey the descent'),
+      this.routesBtn,
+      this.ghostBtn,
+      this.btn('icon-btn interactive', ICONS.reset, () => this.h.reset(), 'Reset the mountain'),
+      this.btn('icon-btn interactive', ICONS.menu, () => this.h.menu(), 'Menu'),
+    );
     this.zonesEl = el('div', 'zones interactive');
     const rw = el('div', 'release-wrap');
-    const rel = this.btn('release interactive', 'Break it loose', () => this.h.release());
+    const rel = this.btn('release interactive', 'Release', () => this.h.release());
     rel.id = 'release';
     rw.append(rel);
     this.context = el('div', 'context interactive');
-    this.plan.append(card, tr, this.context, this.zonesEl, rw);
+    this.compSheet = el('div', 'comp-sheet interactive');
+    this.plan.append(card, tr, this.context, this.compSheet, this.zonesEl, rw);
 
     // ---------------- run
     this.run = el('div', 'hud hidden run');
-    const scoreBox = el('div', 'score-box');
-    this.scoreEl = el('div', 'score', '0');
-    this.comboEl = el('div', 'combo');
-    scoreBox.append(this.scoreEl, this.comboEl);
-    const sizeBox = el('div', 'size-box');
-    this.chainEl = this.chain();
-    this.sizeEl = el('div', 'size-readout');
-    sizeBox.append(this.chainEl, this.sizeEl);
+    const massBox = el('div', 'mass-box');
+    massBox.innerHTML = `
+      <div class="mass-top"><b class="mass-num">0 kg</b><span class="mass-pct">100%</span></div>
+      <div class="mass-bar"><div class="mass-loss"></div><div class="mass-fill"></div><div class="mass-ticks"></div></div>`;
+    this.massNum = massBox.querySelector('.mass-num') as HTMLElement;
+    this.massPct = massBox.querySelector('.mass-pct') as HTMLElement;
+    this.massFill = massBox.querySelector('.mass-fill') as HTMLElement;
+    this.massLoss = massBox.querySelector('.mass-loss') as HTMLElement;
+    this.massTicks = massBox.querySelector('.mass-ticks') as HTMLElement;
     const rtr = el('div', 'top-right');
     this.pauseBtn = this.btn('icon-btn interactive', ICONS.pause, () => this.h.pause(), 'Pause');
     rtr.append(this.pauseBtn, this.btn('icon-btn interactive', ICONS.ff, () => this.h.skip(), 'Fast forward'));
     const dist = el('div', 'dist');
-    const track = el('div', 'dist-track');
-    this.distFill = el('div', 'dist-fill');
-    this.distMarker = el('div', 'dist-marker');
-    track.append(this.distFill, this.distMarker);
-    this.distLabel = el('div', 'dist-label');
-    dist.append(track, this.distLabel);
-    // hold-to-steer buttons (drag anywhere works too)
-    const nudge = el('div', 'nudge');
+    dist.innerHTML = '<div class="dist-track"><div class="dist-fill"></div></div><div class="dist-label"></div>';
+    this.distFill = dist.querySelector('.dist-fill') as HTMLElement;
+    this.distLabel = dist.querySelector('.dist-label') as HTMLElement;
+    // hold-to-lean buttons (dragging anywhere works too)
+    const lean = el('div', 'lean');
     const hold = (dir: number, label: string, icon: string) => {
-      const b = el('button', 'nudge-btn interactive', icon);
+      const b = el('button', 'lean-btn interactive', icon);
       b.setAttribute('aria-label', label);
       const on = (e: Event) => {
         e.preventDefault();
@@ -221,75 +281,115 @@ export class UI {
       b.addEventListener('pointercancel', off);
       return b;
     };
-    const nl = hold(-1, 'Steer left', ICONS.left);
-    const nr = hold(1, 'Steer right', ICONS.right);
-    this.nudgeBtns = [nl, nr];
-    this.nudgeDots = el('div', 'steer-mid');
-    this.steerBar = el('div', 'steer-bar');
-    this.steerKnob = el('div', 'steer-knob');
-    this.steerBar.append(this.steerKnob);
-    this.nudgeDots.append(this.steerBar, el('div', 'steer-hint', 'Drag left / right to steer'));
-    nudge.append(nl, this.nudgeDots, nr);
+    const mid = el('div', 'lean-mid');
+    const bar = el('div', 'lean-bar');
+    this.steerKnob = el('div', 'lean-knob');
+    bar.append(this.steerKnob);
+    mid.append(bar, el('div', 'lean-hint', 'Drag to lean'));
+    lean.append(hold(-1, 'Lean left', ICONS.left), mid, hold(1, 'Lean right', ICONS.right));
     this.calloutEl = el('div', 'callout');
-    this.popLayer = el('div', 'pops');
     this.banner = el('div', 'banner');
     this.flash = el('div', 'flash');
-    this.run.append(this.flash, scoreBox, sizeBox, rtr, dist, nudge, this.calloutEl, this.banner);
+    this.run.append(this.flash, massBox, rtr, dist, lean, this.calloutEl, this.banner);
+    this.popLayer = el('div', 'pops');
 
     // ---------------- results / replay / menu / tip
     this.results = el('div', 'results interactive');
     this.results.style.display = 'none';
     this.replayBar = el('div', 'hud hidden');
-    const bar = el('div', 'replay-bar interactive');
+    const rbar = el('div', 'replay-bar interactive');
     this.playBtn = this.btn('icon-btn', ICONS.pause, () => this.h.replayToggle(), 'Play or pause');
     this.range = el('input') as HTMLInputElement;
     this.range.type = 'range';
     this.range.min = '0';
     this.range.max = '1000';
     this.range.value = '0';
+    this.range.setAttribute('aria-label', 'Replay position');
     this.range.addEventListener('input', () => {
       this.scrubbing = true;
       this.h.scrub(Number(this.range.value) / 1000);
     });
     this.range.addEventListener('change', () => (this.scrubbing = false));
     this.speedEl = this.btn('speed', '1×', () => this.h.replaySpeed(), 'Replay speed');
-    bar.append(this.playBtn, this.range, this.speedEl, this.btn('icon-btn', ICONS.close, () => this.h.exitReplay(), 'Close replay'));
-    this.replayBar.append(bar);
+    rbar.append(this.playBtn, this.range, this.speedEl, this.btn('icon-btn', ICONS.close, () => this.h.exitReplay(), 'Close replay'));
+    this.replayBar.append(rbar);
     this.menuEl = el('div', 'menu interactive');
     this.menuEl.style.display = 'none';
     this.tipEl = el('div', 'tip');
-    this.root.append(this.title, this.plan, this.run, this.popLayer, this.results, this.replayBar, this.tipEl, this.menuEl);
+    this.root.append(this.title, this.mountainsEl, this.plan, this.run, this.popLayer, this.results, this.replayBar, this.tipEl, this.menuEl);
   }
 
-  private lightChain(c: HTMLElement, upTo: number, current = -1) {
-    c.querySelectorAll('.chain-item').forEach((n, i) => {
-      n.classList.toggle('lit', i <= upTo);
-      n.classList.toggle('now', i === current);
-    });
+  private enable(node: HTMLElement, on: boolean) {
+    node.querySelectorAll('button,input').forEach((b) => ((b as HTMLElement).style.pointerEvents = on ? '' : 'none'));
   }
 
   // ---------------------------------------------------------- title
-  showTitle(progress: Progress, level: LevelDef) {
-    const lp = progress.levels[level.id];
-    const best = this.title.querySelector('#title-best')!;
-    best.innerHTML = lp?.bestScore
-      ? `<span>Best</span> <b>${fmt(lp.bestScore)}</b> <i class="grade g-${lp.bestGrade}">${lp.bestGrade}</i>`
-      : '<span>Summit → Sea · 1.1 km of mountain</span>';
-    this.lightChain(this.title.querySelector('#title-chain')!, lp?.bestStage ?? -1);
-    (this.title.querySelector('#begin') as HTMLElement).textContent = lp?.attempts ? 'Play again' : 'Start';
+  showTitle(stats: { medals: Record<Medal, number>; finished: number; total: number }) {
+    const s = this.title.querySelector('#title-stats')!;
+    s.innerHTML = stats.finished
+      ? `<span>${stats.finished}/${stats.total} mountains</span>${(['platinum', 'gold', 'silver', 'bronze'] as Medal[])
+          .filter((m) => stats.medals[m])
+          .map((m) => `<span class="ts-medal">${medalBadge(m, 'sm')}${stats.medals[m]}</span>`)
+          .join('')}`
+      : `<span>${stats.total} mountains · one boulder</span>`;
+    (this.title.querySelector('#begin') as HTMLElement).textContent = stats.finished ? 'Continue' : 'Play';
     this.title.classList.remove('hidden');
-    this.title.querySelectorAll('button').forEach((b) => ((b as HTMLElement).style.pointerEvents = ''));
+    this.enable(this.title, true);
   }
   hideTitle() {
     this.title.classList.add('hidden');
-    this.title.querySelectorAll('button').forEach((b) => ((b as HTMLElement).style.pointerEvents = 'none'));
+    this.enable(this.title, false);
+  }
+
+  // ---------------------------------------------------------- mountains
+  showMountains(cards: MountainCard[], current: string | null) {
+    const m = this.mountainsEl;
+    m.innerHTML = '';
+    const head = el('div', 'mt-head');
+    head.append(this.btn('icon-btn', ICONS.back, () => this.h.toTitle(), 'Back'), el('h2', '', 'The Mountains'), el('span'));
+    const list = el('div', 'mt-list');
+    for (const c of cards) {
+      const lp = c.progress;
+      const b = el('button', `mt-card${c.unlocked ? '' : ' locked'}${current === c.level.id ? ' current' : ''}`);
+      b.innerHTML = `
+        <div class="mt-stage">${c.level.stage}</div>
+        <div class="mt-body">
+          <div class="mt-env">${c.level.environment}</div>
+          <div class="mt-name">${c.level.name}</div>
+          <div class="mt-sub">${c.unlocked ? (lp?.finished ? `Best ${pct(lp.bestRetained)} · ${kg(lp.bestMass)}${lp.bestTime ? ` · ${seconds(lp.bestTime)}` : ''}` : c.level.tagline) : c.lockText}</div>
+          ${c.unlocked ? `<div class="mt-goals">${(['silver', 'gold', 'platinum'] as const).map((k) => `<span class="${lp && lp.bestRetained >= c.level.medals[k] && lp.finished ? 'hit' : ''}">${medalBadge(k, 'xs')}${Math.round(c.level.medals[k] * 1000) / 10}%</span>`).join('')}<span class="mt-obj">${lp?.objectives.length ?? 0}/${c.level.objectives.length} objectives</span></div>` : ''}
+        </div>
+        <div class="mt-medal">${c.unlocked ? medalBadge(lp?.medal ?? 'none', 'lg') : ICONS.lock}</div>`;
+      if (c.unlocked)
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.h.pickLevel(c.level.id);
+        });
+      list.append(b);
+    }
+    m.append(head, list);
+    m.style.display = '';
+    requestAnimationFrame(() => m.classList.add('show'));
+  }
+  hideMountains() {
+    this.mountainsEl.classList.remove('show');
+    this.mountainsEl.style.display = 'none';
   }
 
   // ---------------------------------------------------------- planning
-  showPlanning(level: LevelDef) {
-    this.plan.querySelector('.stage-label')!.textContent = level.stage;
-    this.plan.querySelector('h1')!.textContent = level.name;
-    this.plan.querySelector('.plan-goal')!.innerHTML = 'Clear the <b class="t-block">blockers</b>. Line up the <b class="t-smash">smashers</b>.';
+  showPlanning(level: LevelDef, lp: LevelProgress | undefined) {
+    const card = this.plan.querySelector('.level-card')!;
+    card.querySelector('.stage-label')!.textContent = level.stage;
+    card.querySelector('.env')!.textContent = level.environment;
+    card.querySelector('h1')!.textContent = level.name;
+    card.querySelector('.targets')!.innerHTML = (['silver', 'gold', 'platinum'] as const)
+      .map((k) => `<span class="tg">${medalBadge(k, 'xs')}<b>${Math.round(level.medals[k] * 1000) / 10}%</b></span>`)
+      .join('') + (lp?.finished ? `<span class="tg best">Best <b>${pct(lp.bestRetained)}</b></span>` : '');
+    const done = new Set(lp?.objectives ?? []);
+    card.querySelector('.obj-toggle')!.textContent = `Objectives ${done.size}/${level.objectives.length}`;
+    card.querySelector('.obj-list')!.innerHTML =
+      level.objectives.map((o) => `<li class="${done.has(o.id) ? 'done' : ''}">${done.has(o.id) ? ICONS.check : '<i></i>'}<span>${o.label}</span></li>`).join('') +
+      level.routes.map((r) => `<li class="route ${lp?.routes.includes(r.id) ? 'done' : ''}">${ICONS.routes}<span><b>${r.name}</b> — ${r.hint}</span></li>`).join('');
     this.zonesEl.innerHTML = '';
     for (const z of level.zones ?? []) {
       const b = this.btn('zone-chip', z.name.replace(/^The /, ''), () => this.h.zone(z.id));
@@ -297,14 +397,37 @@ export class UI {
       this.zonesEl.append(b);
     }
     this.plan.classList.remove('hidden');
-    this.plan.querySelectorAll('button').forEach((b) => ((b as HTMLElement).style.pointerEvents = ''));
+    this.enable(this.plan, true);
   }
   hidePlanning() {
     this.plan.classList.add('hidden');
+    this.compSheet.classList.remove('show');
     this.hideContext();
   }
-  setZone(id: string | null) {
-    this.zonesEl.querySelectorAll('.zone-chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.zone === id));
+  /** the stone picker: what the boulder is made of, and what that means here */
+  setCompositions(choices: CompositionChoice[], current: CompositionId) {
+    const cur = choices.find((c) => c.comp.id === current) ?? choices[0];
+    const pick = this.plan.querySelector('.comp-pick') as HTMLElement;
+    pick.innerHTML = `<span class="swatch s-${cur.comp.id}"></span><b>${cur.comp.name}</b><span class="cp-mass">${kg(cur.mass)}</span><span class="cp-more">Change</span>`;
+    this.compSheet.innerHTML = '';
+    const head = el('div', 'cs-head');
+    head.append(el('h3', '', 'Your stone'), this.btn('close-x', '×', () => this.compSheet.classList.remove('show'), 'Close'));
+    this.compSheet.append(head);
+    for (const c of choices) {
+      const b = el('button', `cs-item${c.comp.id === current ? ' on' : ''}${c.unlocked ? '' : ' locked'}`);
+      b.innerHTML = `<span class="swatch s-${c.comp.id}"></span>
+        <span class="cs-body"><b>${c.comp.name}</b><span class="cs-mass">${c.unlocked ? kg(c.mass) : ''}</span>
+        <span class="cs-blurb">${c.unlocked ? c.comp.blurb : c.comp.unlock.text}</span>
+        ${c.unlocked ? `<span class="cs-traits">${c.comp.traits.map((t) => `<i>${t}</i>`).join('')}</span>` : ''}</span>
+        ${c.unlocked ? '' : ICONS.lock}`;
+      if (c.unlocked)
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.h.composition(c.comp.id);
+          this.compSheet.classList.remove('show');
+        });
+      this.compSheet.append(b);
+    }
   }
   setChanges(n: number, budget: number) {
     this.pipsEl.innerHTML = '';
@@ -315,8 +438,14 @@ export class UI {
     this.ghostBtn.classList.toggle('on', on && available);
     this.ghostBtn.style.display = available ? '' : 'none';
   }
+  setRoutes(on: boolean) {
+    this.routesBtn.classList.toggle('on', on);
+  }
+  setSurveying(on: boolean) {
+    this.plan.classList.toggle('surveying', on);
+  }
 
-  showContext(title: string, tag: string, text: string, actions: ContextAction[], note?: string, kind: 'smash' | 'block' | 'tweak' = 'tweak') {
+  showContext(title: string, tag: string, text: string, actions: ContextAction[], note?: string, kind: 'hazard' | 'block' | 'tweak' = 'tweak') {
     const c = this.context;
     c.innerHTML = '';
     c.dataset.kind = kind;
@@ -354,11 +483,11 @@ export class UI {
     c.append(head, el('p', '', text), row);
     if (note) c.append(el('div', 'note', note));
     c.classList.add('show');
+    this.compSheet.classList.remove('show');
     this.tip(null);
   }
   hideContext() {
     this.context.classList.remove('show');
-    this.tipEl.classList.remove('lift');
   }
 
   tip(text: string | null, ms = 0) {
@@ -373,29 +502,28 @@ export class UI {
   }
 
   // ---------------------------------------------------------- run
-  showRun(zones: Zone[], nudges: number) {
+  showRun(zones: Zone[], startMass: number, medals: { silver: number; gold: number; platinum: number }) {
     this.run.classList.remove('hidden');
-    this.run.querySelectorAll('button').forEach((b) => ((b as HTMLElement).style.pointerEvents = ''));
-    this.targetScore = 0;
-    this.shownScore = 0;
-    this.scoreEl.textContent = '0';
-    this.lastStage = -1;
-    this.comboEl.className = 'combo';
+    this.enable(this.run, true);
+    this.startMass = startMass;
+    this.targetMass = this.shownMass = this.lossMass = startMass;
+    this.runMedals = medals;
+    this.floor = barFloor(medals.silver);
+    this.massTicks.innerHTML = (['silver', 'gold', 'platinum'] as const).map((k) => `<i class="t-${k}" style="left:${(barPos(medals[k], this.floor) * 100).toFixed(1)}%"></i>`).join('');
+    this.massLoss.style.width = '100%';
+    this.paintMass();
     this.setPaused(false);
-    this.setNudges(nudges);
-    const hint = this.nudgeDots.querySelector('.steer-hint') as HTMLElement;
+    const hint = this.run.querySelector('.lean-hint') as HTMLElement;
     hint.style.animation = 'none';
     void hint.offsetWidth;
     hint.style.animation = '';
-    // zone ticks along the distance bar
     const track = this.run.querySelector('.dist-track')!;
     track.querySelectorAll('.dist-tick').forEach((t) => t.remove());
     const z0 = zones[0]?.z[0] ?? 0;
-    const z1 = zones[zones.length - 1]?.z[0] ?? 1;
+    const z1 = zones[zones.length - 1]?.z[1] ?? 1;
     for (const z of zones.slice(1)) {
       const t = el('div', 'dist-tick');
       t.style.left = `${((z.z[0] - z0) / (z1 - z0)) * 100}%`;
-      t.title = z.name;
       track.append(t);
     }
   }
@@ -407,31 +535,29 @@ export class UI {
   setPaused(p: boolean) {
     this.pauseBtn.innerHTML = p ? ICONS.play : ICONS.pause;
   }
-  private steerBar!: HTMLElement;
-  private steerKnob!: HTMLElement;
-  /** live steering indicator, -1 … 1 */
+  /** live lean indicator, -1 … 1 */
   setSteer(v: number) {
     this.steerKnob.style.left = `${(50 + v * 50).toFixed(1)}%`;
     this.steerKnob.style.opacity = String(0.45 + Math.abs(v) * 0.55);
   }
-  setNudges(_n: number) {
-    for (const b of this.nudgeBtns) b.classList.remove('held');
+  private paintMass() {
+    const f = this.shownMass / this.startMass;
+    this.massNum.textContent = kg(this.shownMass);
+    this.massPct.textContent = pct(f);
+    this.massFill.style.width = `${(barPos(f, this.floor) * 100).toFixed(2)}%`;
+    const m = this.runMedals;
+    const tier = f >= m.platinum ? 'platinum' : f >= m.gold ? 'gold' : f >= m.silver ? 'silver' : 'bronze';
+    this.massFill.dataset.tier = tier;
+    this.massPct.dataset.tier = tier;
   }
-  setRun(s: { score: number; combo: number; stage: number; best: number; size: number; progress: number; distance: number; zone: string }) {
-    this.targetScore = s.score;
-    if (s.combo >= 2) {
-      this.comboEl.textContent = `×${s.combo} combo`;
-      this.comboEl.className = `combo show c${Math.min(5, s.combo)}`;
-    } else this.comboEl.className = 'combo';
-    if (s.stage !== this.lastStage) {
-      this.lastStage = s.stage;
-      this.lightChain(this.chainEl, s.best, s.stage);
-    }
-    this.sizeEl.innerHTML = `<b>${sizeLabel(s.size)}</b> ${STAGES[s.stage].name}`;
-    const pct = Math.max(0, Math.min(1, s.progress)) * 100;
-    this.distFill.style.width = `${pct}%`;
-    this.distMarker.style.left = `${pct}%`;
-    this.distLabel.innerHTML = `<b>${Math.round(s.distance)} m</b> ${s.zone}`;
+  setMass(mass: number) {
+    this.targetMass = mass;
+    if (mass > this.lossMass) this.lossMass = mass;
+  }
+  setRun(s: { progress: number; zone: string; speed: number }) {
+    const p = Math.max(0, Math.min(1, s.progress)) * 100;
+    this.distFill.style.width = `${p}%`;
+    this.distLabel.innerHTML = `<b>${Math.round(s.speed * 3.6)} km/h</b> ${s.zone}`;
   }
   callout(text: string, ms = 2200) {
     window.clearTimeout(this.calloutTimer);
@@ -439,14 +565,14 @@ export class UI {
     this.calloutEl.classList.add('show');
     this.calloutTimer = window.setTimeout(() => this.calloutEl.classList.remove('show'), ms);
   }
-  /** Floating arcade score text at a screen position. */
-  pop(x: number, y: number, text: string, points: number, kind = '') {
-    const p = el('div', `pop ${kind}`, `<span>${text}</span>${points ? `<b>+${fmt(points)}</b>` : ''}`);
+  /** a hit's cost, floating where it happened */
+  damagePop(x: number, y: number, kgLost: number, severity: Severity, label: string) {
+    const p = el('div', `pop sev-${severity}`, `<b>−${Math.round(kgLost).toLocaleString('en-US')} kg</b>${severity !== 'minor' ? `<span>${label}</span>` : ''}`);
     p.style.left = `${x}px`;
     p.style.top = `${y}px`;
     this.popLayer.append(p);
-    window.setTimeout(() => p.remove(), 1500);
-    while (this.popLayer.childElementCount > 7) this.popLayer.firstElementChild?.remove();
+    window.setTimeout(() => p.remove(), 1600);
+    while (this.popLayer.childElementCount > 6) this.popLayer.firstElementChild?.remove();
   }
   bigBanner(text: string, sub = '', ms = 1600) {
     window.clearTimeout(this.bannerTimer);
@@ -464,62 +590,80 @@ export class UI {
   }
 
   // ---------------------------------------------------------- results
-  showResults(r: SimResult, why: string, best: { score: number; isBest: boolean }) {
-    const rows = r.breakdown
-      .filter((b) => b.points !== 0)
-      .map((b) => `<li><span>${b.label}</span><b>${b.points > 0 ? '+' : ''}${fmt(b.points)}</b></li>`)
-      .join('');
-    const headline = r.unstable
-      ? 'Something slipped'
-      : r.sand
-        ? 'Perfect erosion'
-        : r.landed
-          ? 'Reached the sea'
-          : r.reason === 'lost'
-            ? 'Lost to the mountain'
-            : `Stopped at ${r.destination}`;
-    const hl = highlight(r);
-    const kmh = Math.round(r.topSpeed * 3.6);
+  showResults(r: SimResult, level: LevelDef, rec: Records, lp: LevelProgress, opts: { hasNext: boolean; nextName?: string; compName: string; routeName: string | null; tip: string }) {
+    const m = level.medals;
+    const floor = barFloor(m.silver);
+    const prevBest = rec.previous.retained;
+    const headline = r.finished ? `${r.cause}` : r.cause;
+    const worst = [...r.collisions].sort((a, b) => b.kg - a.kg).slice(0, 3);
+    const recs: string[] = [];
+    if (rec.firstFinish) recs.push('First descent');
+    if (rec.bestRetained) recs.push(`New best · ${pct(r.retained)}`);
+    if (rec.bestMass && !rec.bestRetained) recs.push(`Most mass · ${kg(r.mass)}`);
+    if (rec.bestTime) recs.push(`Fastest · ${seconds(r.duration)}`);
+    if (rec.newRoute && opts.routeName) recs.push(`New route · ${opts.routeName}`);
+    for (const c of rec.unlockedCompositions) recs.push(`Unlocked · ${c}`);
+    if (rec.unlockedLevel) recs.push(`Unlocked · ${rec.unlockedLevel}`);
+    const objDone = new Set(lp.objectives);
+    const lossParts = [
+      { k: 'Impacts', v: r.impactLoss },
+      { k: 'Fractures', v: r.splitLoss },
+      { k: 'Wear', v: r.abrasionLoss },
+    ].filter((x) => x.v >= 1);
     this.results.innerHTML = `
       <div class="scroll">
-        <div class="res-top">
-          <div class="grade big g-${r.grade}">${r.grade}</div>
-          <div>
+        <div class="res-head">
+          <div class="res-medal">${medalBadge(r.medal, 'xl')}<span>${r.finished ? MEDAL_NAME[r.medal] : 'Did not finish'}</span></div>
+          <div class="res-title">
+            <div class="res-level">${level.stage} · ${level.name} · ${opts.compName}</div>
             <div class="verdict">${headline}</div>
-            <div class="res-score">${fmt(r.score)}</div>
-            ${best.isBest ? '<div class="newbest">New best</div>' : `<div class="bestline">Best ${fmt(best.score)}</div>`}
           </div>
         </div>
-        <div class="highlight"><span>Run highlight</span><b>${hl}</b></div>
-        <div class="journey"><span>${sizeLabel(r.startSize)}</span><i></i><span>${sizeLabel(r.size)}</span></div>
-        <div class="res-chain"></div>
-        <div class="stats">
-          <div class="stat"><div class="k">Distance</div><div class="v">${Math.round(r.distance)}<small>m</small></div></div>
-          <div class="stat"><div class="k">Mass lost</div><div class="v">${(r.massLost * 100).toFixed(r.massLost > 0.995 ? 2 : 0)}<small>%</small></div></div>
-          <div class="stat"><div class="k">Top speed</div><div class="v">${kmh}<small>km/h</small></div></div>
-          <div class="stat"><div class="k">Rock hits</div><div class="v">${r.smashes + r.chips}</div></div>
-          <div class="stat"><div class="k">Trees down</div><div class="v">${r.trees}</div></div>
-          <div class="stat"><div class="k">Bowled</div><div class="v">${r.bowled}</div></div>
-          <div class="stat"><div class="k">Best combo</div><div class="v">×${Math.max(1, r.maxCombo)}</div></div>
-          <div class="stat"><div class="k">In water</div><div class="v">${Math.round(r.waterTime)}<small>s</small></div></div>
-          <div class="stat"><div class="k">Airtime</div><div class="v">${r.airTime.toFixed(1)}<small>s</small></div></div>
+        <div class="retain">
+          <div class="retain-top"><span class="retain-pct">0%</span><span class="retain-of">of the boulder made it${r.finished ? '' : ' this far'}</span></div>
+          <div class="retain-bar"><div class="retain-fill" data-tier="${r.medal}"></div>
+            ${(['silver', 'gold', 'platinum'] as const).map((k) => `<i class="t-${k}" style="left:${(barPos(m[k], floor) * 100).toFixed(1)}%"><em>${medalBadge(k, 'xs')}</em></i>`).join('')}
+            ${prevBest > 0 ? `<i class="t-best" style="left:${(barPos(prevBest, floor) * 100).toFixed(1)}%"><em>Best</em></i>` : ''}
+          </div>
+          <div class="retain-masses"><span>${kg(r.startMass)} <small>start</small></span><span>${kg(r.mass)} <small>${r.finished ? 'at the bottom' : 'left'}</small></span></div>
         </div>
-        <p class="why">${why}</p>
-        <details class="score-details"><summary>Score breakdown</summary><ul class="breakdown">${rows}</ul></details>
+        ${recs.length ? `<div class="records">${recs.map((x) => `<span>${x}</span>`).join('')}</div>` : ''}
+        <div class="stats">
+          <div class="stat"><div class="k">Mass lost</div><div class="v">${kg(r.massLost)}</div><div class="s">${lossParts.map((x) => `${x.k} ${kg(x.v)}`).join(' · ') || '—'}</div></div>
+          <div class="stat"><div class="k">Descent</div><div class="v">${seconds(r.duration)}</div><div class="s">top ${Math.round(r.topSpeed * 3.6)} km/h${r.finished ? ` · finish ${Math.round(r.finishSpeed * 3.6)} km/h` : ''}</div></div>
+          <div class="stat"><div class="k">Collisions</div><div class="v">${r.counts.major + r.counts.moderate + r.counts.minor}</div><div class="s">${r.counts.major} major · ${r.counts.moderate} moderate · ${r.counts.minor} minor</div></div>
+          <div class="stat"><div class="k">Route</div><div class="v sm">${opts.routeName ?? '—'}</div><div class="s">${r.treesFelled ? `${r.treesFelled} trees snapped` : ''}${r.smashed.length ? `${r.treesFelled ? ' · ' : ''}${r.smashed.length} smashed` : ''}</div></div>
+        </div>
+        ${worst.length ? `<div class="hits"><div class="sect">Hardest hits</div>${worst.map((c) => `<div class="hit sev-${c.severity}"><span>${c.split ? 'Split on' : c.headOn ? 'Head-on into' : 'Struck'} ${c.against}</span><b>−${kg(c.kg)}</b><small>${Math.round(c.speed * 3.6)} km/h · ${seconds(c.time)}</small></div>`).join('')}</div>` : ''}
+        <div class="objs"><div class="sect">Objectives</div>${r.objectives.map((o) => `<div class="obj ${o.done ? 'done' : objDone.has(o.id) ? 'had' : ''}">${o.done || objDone.has(o.id) ? ICONS.check : '<i></i>'}<span>${o.label}</span>${o.done && rec.newObjectives.includes(o.id) ? '<em>New</em>' : ''}</div>`).join('')}</div>
+        <p class="why">${opts.tip}</p>
       </div>
       <div class="buttons"></div>`;
-    const ch = this.chain();
-    this.lightChain(ch, r.bestStage, r.stage);
-    this.results.querySelector('.res-chain')!.append(ch);
     const b = this.results.querySelector('.buttons')!;
+    if (opts.hasNext && r.finished) b.append(this.actBtn(`Next: ${opts.nextName ?? ''}`, 'primary', () => this.h.next(), 'next'));
     b.append(
-      this.actBtn('Try again', 'primary', () => this.h.retry(), 'bolt'),
-      this.actBtn('Plan', '', () => this.h.adjust(), 'hand'),
-      this.actBtn('Replay', '', () => this.h.replay(), 'replay'),
-      this.actBtn('Title', '', () => this.h.toTitle(), 'menu'),
+      this.actBtn('Try again', opts.hasNext && r.finished ? '' : 'primary', () => this.h.retry(), 'replay'),
+      this.actBtn('Re-plan', '', () => this.h.adjust(), 'hand'),
+      this.actBtn('Watch replay', '', () => this.h.replay(), 'eye'),
+      this.actBtn('Mountains', '', () => this.h.mountains(), 'survey'),
     );
     this.results.style.display = '';
     requestAnimationFrame(() => this.results.classList.add('show'));
+    // the retention bar drains from 100% to what's left
+    const fill = this.results.querySelector('.retain-fill') as HTMLElement;
+    const num = this.results.querySelector('.retain-pct') as HTMLElement;
+    const t0 = performance.now() + 350;
+    const dur = 1500;
+    const animate = (t: number) => {
+      const u = Math.max(0, Math.min(1, (t - t0) / dur));
+      const e = 1 - Math.pow(1 - u, 3);
+      const f = 1 - (1 - r.retained) * e;
+      fill.style.width = `${(barPos(f, floor) * 100).toFixed(2)}%`;
+      num.textContent = pct(f);
+      if (u < 1 && this.results.classList.contains('show')) requestAnimationFrame(animate);
+      else this.results.querySelector('.res-medal')?.classList.add('land');
+    };
+    requestAnimationFrame(animate);
   }
   hideResults() {
     this.results.classList.remove('show');
@@ -527,19 +671,11 @@ export class UI {
       if (!this.results.classList.contains('show')) this.results.style.display = 'none';
     }, 500);
   }
-  private actBtn(label: string, cls: string, fn: () => void, icon?: keyof typeof ICONS) {
-    const b = el('button', `act ${cls}`, `${icon ? ICONS[icon] : ''}<span>${label}</span>`);
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      fn();
-    });
-    return b;
-  }
 
   // ---------------------------------------------------------- replay
   showReplay() {
     this.replayBar.classList.remove('hidden');
-    this.replayBar.querySelectorAll('button,input').forEach((b) => ((b as HTMLElement).style.pointerEvents = ''));
+    this.enable(this.replayBar, true);
   }
   hideReplay() {
     this.replayBar.classList.add('hidden');
@@ -557,8 +693,9 @@ export class UI {
     card.append(
       el('h2', '', inRun ? 'Paused' : 'ERODE'),
       this.actBtn(`Sound <b>${sound ? 'On' : 'Off'}</b>`, '', () => this.h.toggleSound()),
-      this.actBtn(`Music <b>${music ? 'On' : 'Off'}</b>`, '', () => this.h.toggleMusic()),
-      this.actBtn('Back to title', '', () => this.h.toTitle()),
+      this.actBtn(`Ambience <b>${music ? 'On' : 'Off'}</b>`, '', () => this.h.toggleMusic()),
+      this.actBtn('The Mountains', '', () => this.h.mountains()),
+      this.actBtn('Title', '', () => this.h.toTitle()),
       this.actBtn('Resume', 'primary', () => this.h.resumeFromMenu()),
     );
     this.menuEl.append(card);
@@ -573,19 +710,3 @@ export class UI {
     this.menuEl.style.display = 'none';
   }
 }
-
-/** The single most memorable thing about a run, from its real numbers. */
-function highlight(r: SimResult): string {
-  const kmh = Math.round(r.topSpeed * 3.6);
-  if (r.sand) return 'A mountain boulder, ground to sand on the beach';
-  if (r.massLost > 0.999) return `${(r.massLost * 100).toFixed(2)}% of the boulder worn away`;
-  if (r.trees >= 6) return `${r.trees} trees flattened`;
-  if (r.maxCombo >= 5) return `×${r.maxCombo} combo`;
-  if (kmh >= 100) return `Hit ${kmh} km/h`;
-  if (r.airTime >= 2.5) return `${r.airTime.toFixed(1)} seconds of air`;
-  if (r.landed) return `Made the sea as ${STAGES[r.stage].name.toLowerCase()}`;
-  if (r.trees >= 3) return `${r.trees} trees flattened`;
-  return `${Math.round(r.distance)} m down the mountain`;
-}
-
-

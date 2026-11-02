@@ -1,8 +1,8 @@
 import { PerspectiveCamera, Vector3 } from 'three';
 import type { LevelDef } from '../levels/types';
-import { clamp } from '../sim/geom';
+import { clamp, makePolyline, pathPointAt, type Polyline } from '../sim/geom';
 
-export type CamMode = 'intro' | 'plan' | 'follow' | 'aftermath' | 'release' | 'orbit';
+export type CamMode = 'intro' | 'plan' | 'follow' | 'aftermath' | 'release' | 'orbit' | 'survey';
 
 interface Rig {
   target: Vector3;
@@ -68,6 +68,28 @@ export class CameraDirector {
       this.pullBackUntil = 0;
     }
   }
+
+  /** move to another mountain */
+  setLevel(level: LevelDef, ground: (x: number, z: number) => number) {
+    this.level = level;
+    this.ground = ground;
+    this.resetPlan();
+    this.desired = this.cloneRig(this.plan);
+  }
+
+  private surveyPath: Polyline | null = null;
+  private surveyT = 0;
+  /** true while a survey flyover is running */
+  get surveying() {
+    return this.mode === 'survey';
+  }
+  /** fly down a path (a route or the course), then hand back to planning */
+  survey(path: [number, number][]) {
+    this.surveyPath = makePolyline(path);
+    this.surveyT = 0;
+    this.mode = 'survey';
+  }
+  onSurveyEnd: (() => void) | null = null;
 
   resetPlan() {
     const c = this.level.camera;
@@ -154,8 +176,9 @@ export class CameraDirector {
     if (this.mode === 'intro') {
       // the summit spire and its boulder, the whole run falling away below
       const t = this.time;
+      const [bx, bz] = this.level.boulder.position;
       this.desired = {
-        target: new Vector3(Math.sin(t * 0.07) * 3, 296, 4 + Math.sin(t * 0.05) * 3),
+        target: new Vector3(bx + Math.sin(t * 0.07) * 3, this.ground(bx, bz + 14) + 2, bz + 18 + Math.sin(t * 0.05) * 3),
         yaw: -0.5 + Math.sin(t * 0.06) * 0.3,
         pitch: 0.16 + Math.sin(t * 0.045) * 0.05,
         dist: 46,
@@ -216,6 +239,21 @@ export class CameraDirector {
       // the arrival: a slow turn around the stone where it came to rest
       this.desired = { target: this.subject.clone(), yaw: this.subjectYaw + this.time * 0.18, pitch: 0.32, dist: this.orbitDist };
       k = 1.2;
+    } else if (this.mode === 'survey' && this.surveyPath) {
+      // a steady glide down the line, looking ahead
+      const pl = this.surveyPath;
+      this.surveyT += dt;
+      const s = Math.min(pl.length, this.surveyT * 26);
+      const p = pathPointAt(pl, s);
+      const ahead = pathPointAt(pl, Math.min(pl.length, s + 30));
+      const yaw = Math.atan2(ahead.x - p.x, ahead.z - p.z);
+      this.desired = { target: new Vector3(ahead.x, this.ground(ahead.x, ahead.z), ahead.z), yaw, pitch: 0.5, dist: 46 };
+      k = this.surveyT < 0.2 ? 1.5 : 2.2;
+      if (s >= pl.length) {
+        this.plan.target.set(p.x, 0, p.z);
+        this.mode = 'plan';
+        this.onSurveyEnd?.();
+      }
     } else if (this.mode === 'aftermath') {
       k = 1.4;
     }

@@ -214,6 +214,7 @@ export class Simulation {
   private crossedStep = -1;
   private routeProgress: number[];
   private routeDone: string | null = null;
+  private wedged: string | null = null;
   debugImpacts: string[] | null = null;
 
   constructor(R: R, level: LevelDef, plan: Plan, opts: SimOptions = {}) {
@@ -420,7 +421,7 @@ export class Simulation {
   /** Physically shrink a stone's collider to match its worn size — so mass loss changes how it rolls and what it fits through. */
   private rescale(p: Piece, force = false) {
     const want = Math.max(MIN_PHYSICAL_RADIUS / p.shape.radius, p.size / p.shape.radius);
-    if (!force && want > p.physScale * 0.97) return;
+    if (!force && want > p.physScale * 0.985) return;
     if (Math.abs(want - p.physScale) < 1e-4) return;
     this.colliderPiece.delete(p.collider.handle);
     this.world.removeCollider(p.collider, false);
@@ -525,6 +526,8 @@ export class Simulation {
           } else {
             hardness = other.material.hardness;
             label = other.material.label;
+            // a sheet of ice laid over the ground counts as ice underfoot: no grip, no drag
+            if (other.material.kind === 'ice' && other.objectId && !other.objectId.startsWith('tree:')) surface = 'ice';
           }
         } else if (otherPiece !== undefined) {
           hardness = 0.8;
@@ -594,7 +597,7 @@ export class Simulation {
     // head-on when the change in velocity opposes the motion
     const headOn = speed > 0.5 && dv.dot(vBefore) / (impact * speed) < -0.55;
     p.impactAcc.set(0, 0, 0);
-    p.immuneUntil = this.step + 8;
+    p.immuneUntil = this.step + 3;
     const t = p.body.translation();
     const pos: [number, number, number] = [t.x, t.y, t.z];
     const frac = kg / mass;
@@ -931,6 +934,18 @@ export class Simulation {
     if (t.z > this.maxZ) this.maxZ = Math.min(t.z, this.finishZ + 40);
     if (this.step % 6 === 0) this.trajectory.push([t.x, t.y, t.z]);
     this.heroStill = sp < 0.45 ? this.heroStill + 1 : 0;
+    // narrow passages: the stone fits or it doesn't
+    for (const g of this.level.passages ?? []) {
+      if (this.wedged || this.crossed) break;
+      if (Math.abs(t.z - g.z) > 1.2 || Math.abs(t.x - g.x) > g.width * 0.5 + hero.size) continue;
+      if (2 * hero.size > g.width) {
+        this.wedged = g.name;
+        hero.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        hero.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        hero.body.setBodyType(this.R.RigidBodyType.Fixed, true);
+        this.emit({ step: this.step, type: 'impact', pos: [t.x, t.y, t.z], intensity: 1, material: 'granite', label: g.name });
+      }
+    }
     // routes: pass each gate in order
     this.level.routes.forEach((r, i) => {
       const k = this.routeProgress[i];
@@ -1016,6 +1031,7 @@ export class Simulation {
       return;
     }
     if (!hero) return this.finish('lost');
+    if (this.wedged && this.heroStill > 40) return this.finish('stuck');
     if (this.heroStill > 150 && time > 3) return this.finish('stuck');
     if (time > MAX_TIME) this.finish('time');
   }
@@ -1116,9 +1132,11 @@ export class Simulation {
           ? 'The physics slipped'
           : reason === 'time'
             ? 'Out of time'
-            : ht
-              ? this.stopCause(ht.x, ht.z, size)
-              : 'Stopped';
+            : this.wedged
+              ? `Wedged in ${this.wedged} — ${(2 * size).toFixed(2)} m across, too wide by ${Math.max(1, Math.round((2 * size - (this.level.passages?.find((g) => g.name === this.wedged)?.width ?? 0)) * 100))} cm`
+              : ht
+                ? this.stopCause(ht.x, ht.z, size)
+                : 'Stopped';
     if (ht) this.trajectory.push([ht.x, ht.y, ht.z]);
     this.result = {
       finished,

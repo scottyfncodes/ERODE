@@ -49,7 +49,7 @@ export const PINE_HOLLOW: LevelDef = {
   name: 'Pine Hollow',
   tagline: 'A gentle forest descent. Learn what the mountain takes — and what it gives back.',
   objectiveText: 'Reach the hollow with as much of yourself as you can.',
-  medals: { silver: 0.8, gold: 0.9, platinum: 0.965 },
+  medals: { silver: 0.85, gold: 0.92, platinum: 0.96 },
   budget: 3,
   finish: { z: 300, name: 'the hollow' },
   objectives: [
@@ -89,7 +89,7 @@ export const PINE_HOLLOW: LevelDef = {
   ],
   props: {
     trees: [
-      { z: [60, 165], density: 0.85 },
+      { z: [60, 165], density: 0.6 },
       { z: [250, 310], density: 0.25 },
     ],
     rocks: 0,
@@ -143,9 +143,9 @@ export const PINE_HOLLOW: LevelDef = {
       // the rocky rib that splits the fork
       { type: 'ridge', path: [[0, 52], [0, 90], [0, 140], [-1, 168]], width: 8, depth: 4.5, taper: [14, 10], surface: 'bedrock' },
       // the gully: a scree trough on the right
-      { type: 'carve', path: [[4, 40], [11, 70], [12, 110], [10, 150], [4, 180]], width: 7, depth: 1.4, taper: [10, 10], surface: 'scree' },
+      { type: 'carve', path: [[4, 40], [11, 70], [12, 110], [10, 150], [4, 182], [1, 200]], width: 7, depth: 1.4, taper: [10, 24], surface: 'scree' },
       // the forest track: a soft hollow on the left
-      { type: 'carve', path: [[-3, 40], [-11, 70], [-12, 110], [-10, 150], [-4, 180]], width: 8, depth: 1.0, taper: [10, 10], surface: 'soil' },
+      { type: 'carve', path: [[-3, 40], [-11, 70], [-12, 110], [-10, 150], [-5, 182], [-6, 200]], width: 8, depth: 1.0, taper: [10, 24], surface: 'soil' },
       // the ledge: a bedrock step across the run; softer earth on its left shoulder
       { type: 'mound', center: [5, 208], radius: 10, height: 0.5, scale: [1.6, 0.6], surface: 'bedrock' },
       { type: 'mound', center: [-10, 214], radius: 9, height: -0.3, scale: [1, 1.3], surface: 'soil' },

@@ -21,7 +21,7 @@ import {
 } from 'three';
 import type { PieceShape } from '../sim/fracture';
 import { pieceGeometry } from './pieceGeometry';
-import { createRockMaterial, type RockUniforms } from './materials';
+import { createRockMaterial, ROCK_LOOKS, setRockLook, type RockLook, type RockUniforms } from './materials';
 import { mulberry32 } from '../sim/noise';
 
 export interface PieceState {
@@ -53,6 +53,7 @@ interface PieceEntry {
   root: Group;
   mesh: Mesh;
   u: RockUniforms & { uWidth: { value: number } };
+  kind: PieceState['kind'];
   squash: number;
   squashT: number;
 }
@@ -62,6 +63,13 @@ export class PiecesView {
   readonly group = new Group();
   private meshes = new Map<number, PieceEntry>();
   private geoCache = new WeakMap<PieceShape, BG>();
+  /** what the boulder (and its chips) is made of */
+  private look: RockLook = ROCK_LOOKS.granite;
+
+  setLook(look: RockLook) {
+    this.look = look;
+    for (const e of this.meshes.values()) if (e.kind !== 'loose') setRockLook(e.u, look);
+  }
 
   private geo(shape: PieceShape): BG {
     let g = this.geoCache.get(shape);
@@ -99,7 +107,15 @@ export class PiecesView {
       seen.add(s.id);
       let e = this.meshes.get(s.id);
       if (!e) {
-        const u = { uSmooth: { value: 0 }, uRadius: { value: s.shape.radius }, uWidth: { value: 0.05 } };
+        const lk = s.kind === 'loose' ? ROCK_LOOKS.granite : this.look;
+        const u = {
+          uSmooth: { value: 0 },
+          uRadius: { value: s.shape.radius },
+          uWidth: { value: 0.05 },
+          uBase: { value: new Color(...lk.tint) },
+          uSpeck: { value: new Color(...lk.speck) },
+          uGloss: { value: lk.gloss },
+        };
         const geo = this.geo(s.shape);
         const mesh = new Mesh(geo, createRockMaterial({ uniforms: u }));
         mesh.castShadow = s.kind !== 'chip';
@@ -111,7 +127,7 @@ export class PiecesView {
         mesh.add(outline);
         const root = new Group();
         root.add(mesh);
-        e = { root, mesh, u, squash: 0, squashT: 0 };
+        e = { root, mesh, u, kind: s.kind, squash: 0, squashT: 0 };
         this.meshes.set(s.id, e);
         this.group.add(root);
       }
