@@ -131,6 +131,10 @@ button {
 .title.hidden {
   opacity: 0;
 }
+.title > div:first-child {
+  text-align: center;
+  width: 100%;
+}
 .title .wordmark {
   text-shadow: 0 2px 30px rgba(0, 0, 0, 0.35);
 }
