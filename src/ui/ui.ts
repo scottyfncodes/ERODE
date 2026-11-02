@@ -2,6 +2,7 @@ import type { LevelDef, Zone } from '../levels/types';
 import { STAGES, type SimResult } from '../sim/simulation';
 import type { Progress } from '../game/progress';
 import './style.css';
+import { sizeLabel } from './format';
 
 export const ICONS = {
   reset: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg>',
@@ -53,6 +54,7 @@ export interface UIHandlers {
   toggleGhost(): void;
   zone(id: string): void;
   nudge(dir: number): void;
+  steer(dir: number): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
@@ -64,12 +66,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 
-export function sizeLabel(r: number): string {
-  const d = r * 2;
-  if (d >= 1) return `${d.toFixed(1)} m`;
-  if (d >= 0.01) return `${(d * 100).toFixed(d >= 0.1 ? 0 : 1)} cm`;
-  return `${(d * 1000).toFixed(1)} mm`;
-}
+export { sizeLabel };
 
 export class UI {
   private root: HTMLElement;
@@ -150,7 +147,7 @@ export class UI {
     const top = el('div', 'title-top');
     top.append(
       el('div', 'arcade-mark', 'ERODE'),
-      el('div', 'title-tag', 'One boulder. One mountain.<br><b>How small can you grind it?</b>'),
+      el('div', 'title-tag', 'Steer it down the mountain. Smash it on the rocks.<br><b>How small can you grind it?</b>'),
     );
     const bottom = el('div', 'title-bottom');
     const best = el('div', 'title-best');
@@ -202,11 +199,31 @@ export class UI {
     track.append(this.distFill, this.distMarker);
     this.distLabel = el('div', 'dist-label');
     dist.append(track, this.distLabel);
+    // hold-to-steer buttons (drag anywhere works too)
     const nudge = el('div', 'nudge');
-    const nl = this.btn('nudge-btn interactive', ICONS.left, () => this.h.nudge(-1), 'Nudge left');
-    const nr = this.btn('nudge-btn interactive', ICONS.right, () => this.h.nudge(1), 'Nudge right');
+    const hold = (dir: number, label: string, icon: string) => {
+      const b = el('button', 'nudge-btn interactive', icon);
+      b.setAttribute('aria-label', label);
+      const on = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        b.classList.add('held');
+        this.h.steer(dir);
+      };
+      const off = () => {
+        b.classList.remove('held');
+        this.h.steer(0);
+      };
+      b.addEventListener('pointerdown', on);
+      b.addEventListener('pointerup', off);
+      b.addEventListener('pointerleave', off);
+      b.addEventListener('pointercancel', off);
+      return b;
+    };
+    const nl = hold(-1, 'Steer left', ICONS.left);
+    const nr = hold(1, 'Steer right', ICONS.right);
     this.nudgeBtns = [nl, nr];
-    this.nudgeDots = el('div', 'nudge-dots');
+    this.nudgeDots = el('div', 'steer-hint', 'Drag to steer · aim for the rocks');
     nudge.append(nl, this.nudgeDots, nr);
     this.calloutEl = el('div', 'callout');
     this.popLayer = el('div', 'pops');
@@ -361,6 +378,10 @@ export class UI {
     this.comboEl.className = 'combo';
     this.setPaused(false);
     this.setNudges(nudges);
+    const hint = this.nudgeDots;
+    hint.style.animation = 'none';
+    void hint.offsetWidth;
+    hint.style.animation = '';
     // zone ticks along the distance bar
     const track = this.run.querySelector('.dist-track')!;
     track.querySelectorAll('.dist-tick').forEach((t) => t.remove());
@@ -381,10 +402,8 @@ export class UI {
   setPaused(p: boolean) {
     this.pauseBtn.innerHTML = p ? ICONS.play : ICONS.pause;
   }
-  setNudges(n: number) {
-    this.nudgeDots.innerHTML = '';
-    for (let i = 0; i < n; i++) this.nudgeDots.append(el('i'));
-    for (const b of this.nudgeBtns) b.toggleAttribute('disabled', n <= 0);
+  setNudges(_n: number) {
+    for (const b of this.nudgeBtns) b.classList.remove('held');
   }
   setRun(s: { score: number; combo: number; stage: number; best: number; size: number; progress: number; distance: number; zone: string }) {
     this.targetScore = s.score;
@@ -462,9 +481,9 @@ export class UI {
         <div class="stats">
           <div class="stat"><div class="k">Distance</div><div class="v">${Math.round(r.distance)}<small>m</small></div></div>
           <div class="stat"><div class="k">Final size</div><div class="v">${sizeLabel(r.size)}</div></div>
-          <div class="stat"><div class="k">Smashes</div><div class="v">${r.smashes}</div></div>
+          <div class="stat"><div class="k">Hits</div><div class="v">${r.smashes + r.chips}</div></div>
           <div class="stat"><div class="k">Best combo</div><div class="v">×${Math.max(1, r.maxCombo)}</div></div>
-          <div class="stat"><div class="k">Air time</div><div class="v">${r.airTime.toFixed(1)}<small>s</small></div></div>
+          <div class="stat"><div class="k">Top speed</div><div class="v">${Math.round(r.topSpeed * 3.6)}<small>km/h</small></div></div>
           <div class="stat"><div class="k">Ended at</div><div class="v small">${cap(r.destination)}</div></div>
         </div>
         <div class="section-label">Score</div>
@@ -476,9 +495,9 @@ export class UI {
     this.results.querySelector('.res-chain')!.append(ch);
     const b = this.results.querySelector('.buttons')!;
     b.append(
-      this.actBtn('Run it back', 'primary', () => this.h.adjust(), 'hand'),
+      this.actBtn('Go again', 'primary', () => this.h.adjust(), 'bolt'),
       this.actBtn('Replay', '', () => this.h.replay(), 'replay'),
-      this.actBtn('Reset mountain', '', () => this.h.reset(), 'reset'),
+      this.actBtn('Title', '', () => this.h.toTitle(), 'menu'),
     );
     this.results.style.display = '';
     requestAnimationFrame(() => this.results.classList.add('show'));

@@ -43,7 +43,7 @@ export class CameraDirector {
     const c = level.camera;
     this.plan = { target: new Vector3(...c.target), yaw: c.yaw, pitch: c.pitch, dist: c.distance };
     this.desired = this.cloneRig(this.plan);
-    this.cur = { target: new Vector3(0, 296, 4), yaw: 0.55, pitch: 0.16, dist: 46 };
+    this.cur = { target: new Vector3(0, 296, 4), yaw: -0.5, pitch: 0.16, dist: 46 };
   }
 
   private cloneRig(r: Rig): Rig {
@@ -51,8 +51,13 @@ export class CameraDirector {
   }
 
   setMode(m: CamMode) {
+    if (m !== 'follow' && this.mode === 'follow') {
+      this.cam.fov = this.baseFov;
+      this.cam.updateProjectionMatrix();
+    }
     this.mode = m;
     if (m === 'follow') {
+      this.snapNext = true;
       this.followYaw = this.cur.yaw;
       this.closeUntil = 0;
       this.pullBackUntil = 0;
@@ -130,7 +135,11 @@ export class CameraDirector {
     this.desired = { target: c, yaw: 0, pitch: 0.9, dist: clamp(fit * 0.85, 22, 110) };
   }
 
-  update(dt: number, now: number, follow?: { focus: Vector3; vel: Vector3; spread: number; small?: boolean }) {
+  private snapNext = false;
+  /** the lens the scene rig chose for this screen; the follow camera widens it with speed */
+  baseFov = 50;
+
+  update(dt: number, now: number, follow?: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number }) {
     this.time += dt;
     let k = 3;
     if (this.mode === 'intro') {
@@ -138,7 +147,7 @@ export class CameraDirector {
       const t = this.time;
       this.desired = {
         target: new Vector3(Math.sin(t * 0.07) * 3, 296, 4 + Math.sin(t * 0.05) * 3),
-        yaw: 0.55 + Math.sin(t * 0.06) * 0.35,
+        yaw: -0.5 + Math.sin(t * 0.06) * 0.3,
         pitch: 0.16 + Math.sin(t * 0.045) * 0.05,
         dist: 46,
       };
@@ -148,27 +157,42 @@ export class CameraDirector {
       this.desired.target.y = this.ground(this.plan.target.x, this.plan.target.z);
       k = 6;
     } else if (this.mode === 'follow' && follow) {
-      // lead slightly ahead of the motion
-      this.focus.lerp(follow.focus, damp(6, dt));
+      // high and behind, looking down the course; never inside the dust
+      this.focus.lerp(follow.focus, damp(8, dt));
       this.focusVel.lerp(follow.vel, damp(2, dt));
-      const sp = Math.hypot(this.focusVel.x, this.focusVel.z);
-      if (sp > 1.2) {
-        const yawTarget = clamp(Math.atan2(this.focusVel.x, this.focusVel.z), -0.7, 0.7);
-        this.followYaw += (yawTarget - this.followYaw) * damp(0.7, dt);
+      const sp = this.focusVel.length();
+      if (follow.courseYaw !== undefined) {
+        let dy = follow.courseYaw - this.followYaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        this.followYaw += dy * damp(1.2, dt);
       }
-      let dist = (follow.small ? 9 : 17) + follow.spread * 0.8 + Math.min(12, sp * 0.45);
-      let pitch = 0.42;
+      // distance scales with the stone: a boulder fills a big frame, a pebble a tight one
+      const r = follow.size ?? 1;
+      let dist = 8 + Math.sqrt(r) * 10 + Math.min(10, sp * 0.3);
+      let pitch = 0.66;
       if (now < this.closeUntil) {
-        dist = (follow.small ? 7 : 11) + follow.spread * 0.4;
-        pitch = 0.34;
+        dist *= 0.8;
+        pitch = 0.6;
       } else if (now < this.pullBackUntil) {
-        dist = 26 + follow.spread * 1.1;
-        pitch = 0.62;
+        dist *= 1.25;
+        pitch = 0.74;
       }
-      const lead = this.focusVel.clone().multiplyScalar(0.35);
+      const lead = this.focusVel.clone().multiplyScalar(0.28);
       lead.y = 0;
       this.desired = { target: this.focus.clone().add(lead), yaw: this.followYaw, pitch, dist };
-      k = 2.6;
+      // speed reads as a wider lens
+      const fovTarget = this.baseFov + Math.min(16, sp * 0.45);
+      this.cam.fov += (fovTarget - this.cam.fov) * damp(2, dt);
+      this.cam.updateProjectionMatrix();
+      k = 3.2;
+      if (this.snapNext) {
+        // hard cut into the chase camera: never drag the lens through the ground
+        this.snapNext = false;
+        this.focus.copy(follow.focus);
+        this.desired.target.copy(follow.focus);
+        this.cur = this.cloneRig(this.desired);
+      }
     } else if (this.mode === 'aftermath') {
       k = 1.4;
     }

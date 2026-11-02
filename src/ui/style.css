@@ -670,8 +670,8 @@ button {
   padding: 0 calc(14px + var(--safe-l));
 }
 .nudge-btn {
-  width: 72px;
-  height: 64px;
+  width: 88px;
+  height: 76px;
   border-radius: 16px;
   display: grid;
   place-items: center;
@@ -690,8 +690,26 @@ button {
   transform: scale(0.92);
   background: rgba(56, 225, 255, 0.45);
 }
-.nudge-btn[disabled] {
-  opacity: 0.25;
+.nudge-btn.held {
+  transform: scale(0.92);
+  background: rgba(56, 225, 255, 0.5);
+}
+.steer-hint {
+  font-family: var(--display);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  text-align: center;
+  animation: fadeHint 6s ease forwards;
+}
+@keyframes fadeHint {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 .nudge-dots {
   display: flex;
