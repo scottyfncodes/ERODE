@@ -28,6 +28,8 @@ export interface ChaseInfo {
   fork: { t: number; at: Vector3 } | null;
   /** the boulder is in the air */
   air: boolean;
+  /** riding through tall timber: look down from higher */
+  canopy: boolean;
 }
 
 /**
@@ -46,6 +48,7 @@ export class CameraDirector {
   private time = 0;
   private yaw = 0;
   private forkF = 0;
+  private canopyF = 0;
   private fovKick = 0;
   private focus = new Vector3();
   private snapNext = false;
@@ -140,6 +143,9 @@ export class CameraDirector {
         dist += 2;
         pitch += 0.04;
       }
+      this.canopyF += ((chase.canopy ? 1 : 0) - this.canopyF) * damp(1.2, dt);
+      pitch += this.canopyF * 0.12;
+      dist += this.canopyF * 3;
       const target = this.focus.clone().add(new Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(6 + sp * 0.3 + ff * 10));
       target.y += r * 0.6;
       if (chase.fork && ff > 0.01) target.lerp(new Vector3(chase.fork.at.x, chase.fork.at.y, chase.fork.at.z), 0.16 * ff);

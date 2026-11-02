@@ -76,6 +76,12 @@ function medalBadge(m: Medal, size = ''): string {
 }
 
 export const pts = (n: number) => Math.round(n).toLocaleString('en-US');
+
+/** ways down (route stretches between forks) the player has ridden, of all there are */
+function waysFound(level: LevelDef, lp: LevelProgress | undefined): [number, number] {
+  const ways = level.segments.filter((s) => s.kind !== 'summit' && s.kind !== 'finale');
+  return [ways.filter((s) => lp?.found.includes(s.id)).length, ways.length];
+}
 const short = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)}k` : pts(n));
 
 export class UI {
@@ -248,8 +254,7 @@ export class UI {
     const list = el('div', 'mt-list');
     for (const c of cards) {
       const lp = c.progress;
-      const total = c.level.segments.length - 2;
-      const found = Math.max(0, (lp?.found.length ?? 0) - Math.min(2, lp?.found.length ?? 0));
+      const [found, total] = waysFound(c.level, lp);
       const b = el('button', `mt-card${c.unlocked ? '' : ' locked'}${current === c.level.id ? ' current' : ''}`);
       b.innerHTML = `
         <div class="mt-stage">${c.level.stage}</div>
@@ -286,8 +291,7 @@ export class UI {
     card.querySelector('.targets')!.innerHTML =
       (['silver', 'gold', 'platinum'] as const).map((k) => `<span class="tg">${medalBadge(k, 'xs')}<b>${short(level.medals[k])}</b></span>`).join('') +
       (lp?.bestScore ? `<span class="tg best">Best <b>${pts(lp.bestScore)}</b></span>` : '');
-    const total = level.segments.length - 2;
-    const found = Math.max(0, (lp?.found.length ?? 0) - Math.min(2, lp?.found.length ?? 0));
+    const [found, total] = waysFound(level, lp);
     card.querySelector('.lc-found')!.innerHTML = `<span>${found}/${total} ways down found</span>${lp?.medal && lp.medal !== 'none' ? medalBadge(lp.medal, 'xs') : ''}`;
     (this.ready.querySelector('.release-hint') as HTMLElement).style.display = firstTime ? '' : 'none';
     this.ready.classList.remove('hidden');

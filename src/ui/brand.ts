@@ -3,8 +3,8 @@
 
 export const BRAND = {
   name: 'ROCKSLIDE',
-  tagline: 'Keep it together. Get to the bottom.',
-  description: 'Plan your descent. Break your path. Survive the mountain.',
+  tagline: 'Unleash a geological catastrophe.',
+  description: 'Choose the way down. Watch the mountain come apart.',
 } as const;
 
 /** Granite density (t/m³): turns the boulder's volume into a mass a player can feel. */

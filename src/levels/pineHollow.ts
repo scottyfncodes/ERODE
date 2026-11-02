@@ -40,7 +40,7 @@ export const PINE_HOLLOW = buildMountain({
     { z: 1, fog: [0.86, 0.84, 0.72], density: 0.00133, sky: [0.92, 0.88, 0.78], zenith: [0.26, 0.5, 0.86], ground: [0.46, 0.42, 0.28], sun: [1.0, 0.88, 0.68], sunI: 2.7, hemiI: 0.95, exposure: 0.99 },
   ],
   look: { sunAzimuth: 130 * deg, sunElevation: 34 * deg },
-  snowLine: 398,
+  snowLine: 470,
   noise: [
     { amp: 1.1, scale: 26 },
     { amp: 0.25, scale: 6 },

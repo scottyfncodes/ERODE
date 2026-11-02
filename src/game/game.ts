@@ -422,7 +422,7 @@ export class Game {
     if (this.paused || this.menuOpen) return;
     let scale = this.fast ? 4 : 1;
     if (!this.fast && this.now < this.slowUntil) scale = this.slowTo;
-    else if (sim.decision && sim.decision.chosen === null) scale = 0.62;
+    else if (sim.decision && sim.decision.chosen === null) scale = 0.7;
     this.timeScale += (scale - this.timeScale) * Math.min(1, dt * 10);
     this.acc += dt * this.timeScale;
     let steps = 0;
@@ -488,6 +488,7 @@ export class Game {
       speed: sim.speed,
       fork: sim.forkAhead ? { t: sim.forkAhead.t, at: sim.forkAhead.at } : null,
       air: !sim.grounded,
+      canopy: sim.kind === 'forest' || sim.kind === 'camp',
     };
   }
 
@@ -799,6 +800,20 @@ export class Game {
     }
 
     this.cam.update(dt, this.state === 'run' || this.state === 'results' ? this.chaseInfo() : undefined);
+    // keep the line of sight to the boulder clear of timber
+    const occ = shared.occluder.value;
+    if ((this.cam.mode === 'chase' || this.cam.mode === 'finale') && this.sim && !this.sim.shattered) {
+      occ[0] = this.sim.pos.x;
+      occ[1] = this.sim.pos.y;
+      occ[2] = this.sim.pos.z;
+      occ[3] = this.level.boulder.radius * 2.6;
+    } else if (this.state === 'ready' || this.state === 'title') {
+      const [bx, bz] = this.level.boulder.position;
+      occ[0] = bx;
+      occ[1] = this.w.data.heightAt(bx, bz) + this.level.boulder.radius;
+      occ[2] = bz;
+      occ[3] = this.state === 'ready' ? this.level.boulder.radius * 2.6 : 0;
+    } else occ[3] = 0;
     const look = this.cam.lookTarget;
     this.rig.focusShadows(look, this.cam.distance * 0.75 + 16);
     this.rig.setAtmosphere(look.z, dt);

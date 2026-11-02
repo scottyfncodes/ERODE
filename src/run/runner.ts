@@ -11,7 +11,7 @@ import { Debris, type Body } from './debris';
 export const DT = 1 / 60;
 const G = 9.81;
 /** seconds (game time) the player has to choose at a fork */
-export const DECISION_WINDOW = 2.8;
+export const DECISION_WINDOW = 2.5;
 /** the camera starts framing a fork this long before it */
 export const FORK_LOOKAHEAD = 5.5;
 const MAX_TIME = 200;

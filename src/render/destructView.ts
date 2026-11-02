@@ -7,7 +7,7 @@ import { generateStone } from '../sim/fracture';
 import { banded, fitBounds, type Banded } from './banded';
 import { pieceGeometry } from './pieceGeometry';
 import { broadleafGeometry, coniferGeometry } from './vegetation';
-import { createBarkMaterial, createFoliageMaterial, createRockMaterial, ROCK_LOOKS, rockUniforms } from './materials';
+import { cameraFade, createBarkMaterial, createFoliageMaterial, createRockMaterial, ROCK_LOOKS, rockUniforms } from './materials';
 
 const UP = new Vector3(0, 1, 0);
 const _m = new Matrix4();
@@ -90,7 +90,10 @@ export class DestructView {
     const boxGeo = new BoxGeometry(2, 2, 2);
     const logGeo: BufferGeometry = new CylinderGeometry(1, 1, 2, 8, 1);
     logGeo.rotateZ(Math.PI / 2);
-    this.boxes = new InstancedMesh(boxGeo, new MeshStandardMaterial({ roughness: 0.86, metalness: 0 }), Math.max(1, nBox));
+    const boxMat = new MeshStandardMaterial({ roughness: 0.86, metalness: 0 });
+    boxMat.onBeforeCompile = (shader) => cameraFade(shader);
+    boxMat.customProgramCacheKey = () => 'timber';
+    this.boxes = new InstancedMesh(boxGeo, boxMat, Math.max(1, nBox));
     this.logs = new InstancedMesh(logGeo, createBarkMaterial(new Color(1, 1, 1)), Math.max(1, nLog));
     this.boxes.count = nBox;
     this.logs.count = nLog;
