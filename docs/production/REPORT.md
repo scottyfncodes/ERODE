@@ -166,7 +166,7 @@ The renderer is SwiftShader (software), so frame times are relative only and noi
 | Rockslide sled-into-tor collision (browser) | **pass**: stopped at radius + sled radius. Boulder run inconclusive (the sled slid off-line on the slope) |
 | GITCRAFT `tests/test_policy.py` | **pass**: 28/28 |
 | GITCRAFT `tests/test_forgecraft.py` | **pass**: 37/37 |
-| GITCRAFT `tests/test_meshcraft.py` | see the PR description (still running when this report was written) |
+| GITCRAFT `tests/test_meshcraft.py` | **pass**: 59/59 |
 | MeshCraft validation, every asset | 13/13 (lantern 17/17) pass, 0 warn, 0 fail, Khronos validator included |
 | MeshCraft engine check (three.js r170), every asset | 3/3 pass (load, COLOR_0, base on ground; lantern clip) |
 | PDFCraft verification of the art bible | 3 pages, text searchable |
