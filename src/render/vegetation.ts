@@ -4,6 +4,7 @@ import {
   Color,
   CylinderGeometry,
   ConeGeometry,
+  IcosahedronGeometry,
   Group,
   InstancedMesh,
   Matrix4,
@@ -87,6 +88,33 @@ export function coniferGeometry(seed: number, tiers = 7, slender = 1, segs = 13,
   return { trunk, crown };
 }
 
+/** A broadleaf tree for the warm lower valley: a trunk and a lumpy crown of leaf clusters. */
+export function broadleafGeometry(seed: number, segs = 1): { trunk: BufferGeometry; crown: BufferGeometry } {
+  const rng = mulberry32(seed);
+  const trunk = new CylinderGeometry(0.03, 0.05, 0.55, 7, 1);
+  trunk.translate(0, 0.27, 0);
+  const parts: BufferGeometry[] = [];
+  const dark = new Color(0.16, 0.3, 0.1);
+  const light = new Color(0.46, 0.6, 0.2);
+  const n = 5 + Math.floor(rng() * 3);
+  for (let i = 0; i < n; i++) {
+    const r = 0.14 + rng() * 0.12;
+    const g = new IcosahedronGeometry(r, segs);
+    const a = rng() * Math.PI * 2;
+    const rr = i === 0 ? 0 : 0.1 + rng() * 0.14;
+    g.translate(Math.cos(a) * rr, 0.6 + rng() * 0.28 + (i === 0 ? 0.12 : 0), Math.sin(a) * rr);
+    const p = g.getAttribute('position');
+    for (let k = 0; k < p.count; k++) {
+      const j = 1 + (rng() - 0.5) * 0.18;
+      p.setXYZ(k, p.getX(k) * j, p.getY(k), p.getZ(k) * j);
+    }
+    g.computeVertexNormals();
+    colorize(g, (py) => dark.clone().lerp(light, Math.min(1, Math.max(0, (py - 0.45) / 0.55))));
+    parts.push(g.toNonIndexed());
+  }
+  return { trunk, crown: mergeGeometries(parts)! };
+}
+
 export interface Vegetation {
   group: Group;
 }
@@ -129,12 +157,18 @@ export function buildVegetation(data: LevelData, density: number, avoid: { x: nu
 
   const bark = createBarkMaterial(new Color(0.3, 0.22, 0.17));
   const foliage = createFoliageMaterial();
-  const near = placements.slice(0, farStart);
-  const farP = placements.slice(farStart);
+  // conifers on the mountain, broadleaf in the warm lower valley
+  const lowland = (p: { z: number; y: number }) => p.z > 640 || p.y < 18;
+  const near = placements.slice(0, farStart).filter((p) => !lowland(p));
+  const farP = placements.slice(farStart).filter((p) => !lowland(p));
+  const nearLow = placements.slice(0, farStart).filter(lowland);
+  const farLow = placements.slice(farStart).filter(lowland);
   const sets: { list: typeof placements; variants: { trunk: BufferGeometry; crown: BufferGeometry }[]; shadows: boolean }[] = [
     { list: near, variants: [coniferGeometry(3, 8, 1), coniferGeometry(9, 9, 0.82), coniferGeometry(21, 7, 1.1)], shadows: true },
     // distant forest: a cheaper tree, no shadow casting
     { list: farP, variants: [coniferGeometry(5, 5, 1, 8, 1), coniferGeometry(11, 6, 0.85, 8, 1)], shadows: false },
+    { list: nearLow, variants: [broadleafGeometry(51), broadleafGeometry(57), broadleafGeometry(63)], shadows: true },
+    { list: farLow, variants: [broadleafGeometry(71, 0), broadleafGeometry(77, 0)], shadows: false },
   ];
   const m = new Matrix4();
   const q = new Quaternion();

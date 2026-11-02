@@ -16,6 +16,7 @@ import {
   Vector3,
   DoubleSide,
   Euler,
+  IcosahedronGeometry,
 } from 'three';
 import type { LevelDef, LevelObject, Plan } from '../levels/types';
 import type { LevelData } from '../sim/levelData';
@@ -88,7 +89,7 @@ export class ObjectsView {
     foliage: createFoliageMaterial(),
     soil: createSoilMaterial(),
     ice: createIceMaterial(),
-    needles: new MeshStandardMaterial({ color: new Color(0.45, 0.32, 0.18), roughness: 1 }),
+    needles: new MeshStandardMaterial({ color: new Color(0.3, 0.3, 0.16), roughness: 1, flatShading: true }),
     wood: new MeshStandardMaterial({ color: new Color(0.45, 0.33, 0.22), roughness: 0.9 }),
     pool: new MeshStandardMaterial({ color: new Color(0.16, 0.3, 0.32), roughness: 0.15, metalness: 0.1 }),
   };
@@ -268,16 +269,34 @@ export class ObjectsView {
         };
         const style = o.style ?? 'deadfall';
         if (style === 'logjam') {
-          // storm-felled trunks stacked across the valley
-          const layers = Math.max(3, Math.round(bh / 1.1));
-          for (let l = 0; l < layers; l++)
-            for (let k = 0; k < 3; k++) {
-              const rad = 0.42 + rng() * 0.28;
-              const len = o.span * (0.45 + rng() * 0.4);
-              addStick(len, rad, place((rng() - 0.5) * o.span * 0.45, (rng() - 0.5) * 1.6, 0.4 + l * 1.0 + rad), o.yaw + (rng() - 0.5) * 0.35, (rng() - 0.5) * 0.12, this.mats.bark, true);
+          // storm-felled trunks: short logs that rest on the ground beneath them, stacked in a pile
+          const layers = Math.max(3, Math.round(bh / 1.15));
+          for (let l = 0; l < layers; l++) {
+            const n = Math.max(2, 6 - l);
+            for (let k = 0; k < n; k++) {
+              const rad = 0.38 + rng() * 0.24;
+              const len = o.span * (0.26 + rng() * 0.18);
+              const along = ((k + 0.5) / n - 0.5) * o.span * Math.max(0.25, 0.8 - l * 0.16) + (rng() - 0.5) * 1.0;
+              const across = (rng() - 0.5) * 1.4;
+              const yaw = o.yaw + (rng() - 0.5) * 0.5;
+              // rest on the highest ground under the log
+              const c0 = place(along, across, 0);
+              let ground = 0;
+              for (let t = -2; t <= 2; t++) {
+                const gx = c0.x + Math.cos(yaw) * len * 0.25 * t,
+                  gz = c0.z + Math.sin(yaw) * len * 0.25 * t;
+                ground += this.h(gx, gz) / 5;
+              }
+              // tilt the log to follow the ground under it
+              const e1 = this.h(c0.x - Math.cos(yaw) * len * 0.5, c0.z - Math.sin(yaw) * len * 0.5);
+              const e2 = this.h(c0.x + Math.cos(yaw) * len * 0.5, c0.z + Math.sin(yaw) * len * 0.5);
+              const pitch = Math.atan2(e2 - e1, len);
+              const at = new Vector3(c0.x, ground + rad * 0.7 + l * rad * 1.65, c0.z);
+              addStick(len, rad, at, yaw, pitch + (rng() - 0.5) * 0.06, this.mats.bark, true);
             }
+          }
           for (let k = 0; k < 10; k++)
-            addStick(1.5 + rng() * 2.5, 0.06 + rng() * 0.08, place((rng() - 0.5) * o.span * 0.9, (rng() - 0.5) * 2.5, rng() * bh), rng() * 6.28, (rng() - 0.5) * 1.2, this.mats.deadBark, false);
+            addStick(1.5 + rng() * 2.5, 0.06 + rng() * 0.08, place((rng() - 0.5) * o.span * 0.8, (rng() - 0.5) * 2.5, rng() * bh * 0.8), rng() * 6.28, (rng() - 0.5) * 1.2, this.mats.deadBark, false);
         } else if (style === 'beaver') {
           const mud = new Mesh(new SphereGeometry(1, 18, 10), this.mats.soil);
           mud.scale.set(o.span * 0.5, bh * 0.75, 1.8);
@@ -300,9 +319,10 @@ export class ObjectsView {
           for (let k = 0; k < n; k++) {
             addStick(o.span * (0.12 + rng() * 0.3), 0.05 + rng() * 0.1, place((rng() - 0.5) * o.span * 0.9, (rng() - 0.5) * 1.6, 0.2 + rng() * bh), o.yaw + (rng() - 0.5) * 1.4, (rng() - 0.5) * 0.9, this.mats.deadBark, false);
             if (rng() < 0.5) {
-              const tuft = new Mesh(new SphereGeometry(0.35 + rng() * 0.45, 6, 5), this.mats.needles);
+              const tuft = new Mesh(new IcosahedronGeometry(0.22 + rng() * 0.3, 0), this.mats.needles);
               tuft.position.copy(place((rng() - 0.5) * o.span * 0.85, (rng() - 0.5) * 1.6, rng() * bh));
-              tuft.scale.set(1.4, 0.6, 1);
+              tuft.scale.set(1.6, 0.45, 1.1);
+              tuft.rotation.set(rng() * 3, rng() * 3, rng() * 3);
               tuft.castShadow = true;
               g.add(tuft);
             }

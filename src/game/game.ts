@@ -1271,6 +1271,7 @@ export class Game {
     this.cam.update(dt, this.now, follow);
     const look = this.cam.lookTarget;
     this.rig.focusShadows(look, this.cam.distance * 0.75 + 12);
+    this.rig.setAtmosphere(look.z, dt);
     this.objects.update(dt);
     this.props.update(dt);
     this.pieces.update(dt);
@@ -1321,6 +1322,17 @@ export class Game {
       replay: () => this.startReplay(),
       adjust: () => this.toPlanning(),
       snapCamera: () => this.cam.snap(),
+      /** test hook: frame a stretch of the course from the planning camera */
+      look: (id: string, pitch = 0.32, dist = 70) => {
+        this.ui.hideTitle();
+        this.state = 'plan';
+        this.cam.setMode('plan');
+        this.goZone(id);
+        this.cam.plan.pitch = pitch;
+        this.cam.plan.dist = dist;
+        this.cam.snap();
+        for (let i = 0; i < 90; i++) this.rig.setAtmosphere(this.cam.lookTarget.z, 0.1);
+      },
       /** test hook: run the rest of the descent instantly */
       finishNow: () => {
         if (!this.sim) return;

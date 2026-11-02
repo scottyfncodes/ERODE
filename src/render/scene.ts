@@ -51,7 +51,25 @@ export interface SceneRig {
   focusShadows(target: Vector3, radius: number): void;
   /** dynamic resolution: call every frame with the frame time */
   adapt(dt: number): void;
+  /** blend the air and light toward the stretch of mountain at course position z */
+  setAtmosphere(z: number, dt: number): void;
 }
+
+/** Light and air for each stretch of the descent, keyed by course z. */
+const ATMOS: { z: number; fog: [number, number, number]; density: number; sky: [number, number, number]; zenith: [number, number, number]; ground: [number, number, number]; sun: [number, number, number]; sunI: number; hemiI: number; exposure: number }[] = [
+  // high alpine: thin, cold, crystal clear
+  { z: -40, fog: [0.8, 0.88, 0.98], density: 0.0011, sky: [0.8, 0.9, 1.0], zenith: [0.14, 0.42, 0.95], ground: [0.5, 0.52, 0.58], sun: [1.0, 0.97, 0.93], sunI: 2.9, hemiI: 1.0, exposure: 0.92 },
+  { z: 200, fog: [0.78, 0.85, 0.92], density: 0.0014, sky: [0.8, 0.88, 0.97], zenith: [0.2, 0.5, 0.95], ground: [0.48, 0.42, 0.34], sun: [1.0, 0.95, 0.85], sunI: 2.7, hemiI: 1.0, exposure: 0.95 },
+  // forest: green, humid haze
+  { z: 380, fog: [0.6, 0.72, 0.6], density: 0.0026, sky: [0.72, 0.84, 0.8], zenith: [0.25, 0.5, 0.8], ground: [0.32, 0.38, 0.22], sun: [1.0, 0.9, 0.72], sunI: 2.4, hemiI: 1.05, exposure: 0.98 },
+  // the falls and gorge: cool spray, deep shade
+  { z: 500, fog: [0.7, 0.8, 0.84], density: 0.0034, sky: [0.75, 0.85, 0.92], zenith: [0.22, 0.46, 0.8], ground: [0.3, 0.34, 0.36], sun: [0.95, 0.95, 1.0], sunI: 2.0, hemiI: 1.15, exposure: 1.0 },
+  { z: 680, fog: [0.74, 0.82, 0.8], density: 0.0022, sky: [0.8, 0.88, 0.92], zenith: [0.22, 0.5, 0.9], ground: [0.38, 0.4, 0.28], sun: [1.0, 0.92, 0.78], sunI: 2.5, hemiI: 1.0, exposure: 0.97 },
+  // lower valley: warm, broad, afternoon
+  { z: 900, fog: [0.92, 0.84, 0.7], density: 0.0017, sky: [0.95, 0.88, 0.78], zenith: [0.28, 0.52, 0.88], ground: [0.5, 0.42, 0.28], sun: [1.0, 0.86, 0.62], sunI: 2.7, hemiI: 0.95, exposure: 1.0 },
+  // the coast: golden hour over the sea
+  { z: 1080, fog: [0.98, 0.8, 0.62], density: 0.0012, sky: [1.0, 0.82, 0.62], zenith: [0.3, 0.46, 0.82], ground: [0.6, 0.48, 0.32], sun: [1.0, 0.76, 0.5], sunI: 3.0, hemiI: 0.9, exposure: 1.02 },
+];
 
 export function createSceneRig(canvas: HTMLCanvasElement, level: LevelDef, quality: Quality): SceneRig {
   const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -146,8 +164,35 @@ export function createSceneRig(canvas: HTMLCanvasElement, level: LevelDef, quali
   scene.environmentIntensity = 0.22;
   pmrem.dispose();
 
+  const tmpA = new Color(),
+    tmpB = new Color();
+  const fog = scene.fog as FogExp2;
+  const lerp3 = (out: Color, a: [number, number, number], b: [number, number, number], u: number) => out.setRGB(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u);
+  let atmosZ = -40;
   const rig: SceneRig = {
     adapt: () => {},
+    setAtmosphere(z: number, dt: number) {
+      atmosZ += (z - atmosZ) * Math.min(1, dt * 1.5);
+      let i = 0;
+      while (i < ATMOS.length - 2 && ATMOS[i + 1].z < atmosZ) i++;
+      const a = ATMOS[i],
+        b = ATMOS[i + 1];
+      const u = Math.max(0, Math.min(1, (atmosZ - a.z) / (b.z - a.z)));
+      const s2 = u * u * (3 - 2 * u);
+      lerp3(fogColor, a.fog, b.fog, s2);
+      fog.color.copy(fogColor);
+      (scene.background as Color).copy(fogColor);
+      fog.density = a.density + (b.density - a.density) * s2;
+      lerp3(horizon, a.sky, b.sky, s2);
+      lerp3(zenith, a.zenith, b.zenith, s2);
+      lerp3(tmpA, a.sun, b.sun, s2);
+      sun.color.copy(tmpA);
+      sun.intensity = a.sunI + (b.sunI - a.sunI) * s2;
+      hemi.intensity = a.hemiI + (b.hemiI - a.hemiI) * s2;
+      lerp3(tmpB, a.ground, b.ground, s2);
+      hemi.groundColor.copy(tmpB);
+      renderer.toneMappingExposure = a.exposure + (b.exposure - a.exposure) * s2;
+    },
     renderer,
     scene,
     camera,

@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Color, Group, Mesh, PlaneGeometry, ShaderMaterial, UniformsLib, UniformsUtils, Vector3 } from 'three';
 import type { LevelData } from '../sim/levelData';
 import { fbm2 } from '../sim/noise';
-import { smoothstep } from '../sim/geom';
+import { pathDistance, smoothstep } from '../sim/geom';
 import { createTerrainMaterial, shared } from './materials';
 
 const C = {
@@ -17,6 +17,8 @@ const C = {
   rock: new Color(0.5, 0.45, 0.42),
   valley: new Color(0.34, 0.55, 0.16),
   sand: new Color(0.98, 0.85, 0.56),
+  strata: new Color(0.62, 0.42, 0.32),
+  wet: new Color(0.2, 0.2, 0.17),
   wetSand: new Color(0.72, 0.58, 0.38),
 };
 
@@ -58,6 +60,7 @@ export function buildTerrain(data: LevelData, withFar: boolean): Group {
   const col = new Float32Array(nx * nz * 3);
   const nrm = new Float32Array(nx * nz * 3);
   const c = new Color();
+  const stra = new Color();
   for (let j = 0; j < nz; j++)
     for (let i = 0; i < nx; i++) {
       const k = j * nx + i;
@@ -72,7 +75,21 @@ export function buildTerrain(data: LevelData, withFar: boolean): Group {
       nrm[k * 3 + 1] = ny;
       nrm[k * 3 + 2] = -dz / l;
       surfaceColor(terrain.surface(x, z, ny, y), x, z, c);
-      c.lerp(C.rock, smoothstep(0.86, 0.6, ny) * 0.75);
+      // exposed faces show their geology: layered strata, warmer and bolder in the gorge
+      const steep = smoothstep(0.86, 0.6, ny);
+      if (steep > 0) {
+        const gorge = smoothstep(440, 480, z) * (1 - smoothstep(640, 720, z));
+        const band = Math.sin(y * (1.1 + gorge * 0.6) + fbm2(x / 20, z / 20, 2, 33) * 3);
+        stra.copy(C.rock).lerp(C.strata, 0.25 + gorge * 0.6).multiplyScalar(0.78 + 0.24 * band + gorge * 0.08 * Math.sign(band));
+        c.lerp(stra, steep * 0.8);
+      }
+      // wet stone and dark earth along running water
+      for (const w of data.water) {
+        const pl = w.pl;
+        if (x < pl.minX - 9 || x > pl.maxX + 9 || z < pl.minZ - 9 || z > pl.maxZ + 9) continue;
+        const d = pathDistance(pl, x, z).d;
+        if (d < 9) c.lerp(C.wet, (1 - smoothstep(w.spec.width * 0.5, 9, d)) * 0.55);
+      }
       const curv = (H(i - 2, j) + H(i + 2, j) + H(i, j - 2) + H(i, j + 2)) / 4 - y;
       c.multiplyScalar(1 - Math.max(-0.12, Math.min(0.22, curv * 0.12)));
       if (y > snowLine - 10) c.lerp(C.snow, smoothstep(snowLine - 10, snowLine + 6, y + fbm2(x / 12, z / 12, 2, 9) * 6) * (ny > 0.72 ? 1 : 0.35));

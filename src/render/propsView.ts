@@ -1,6 +1,6 @@
 import { Color, Group, Mesh, Quaternion, Vector3 } from 'three';
 import type { Props } from '../sim/props';
-import { coniferGeometry } from './vegetation';
+import { broadleafGeometry, coniferGeometry } from './vegetation';
 import { createBarkMaterial, createFoliageMaterial } from './materials';
 import { mulberry32 } from '../sim/noise';
 
@@ -27,9 +27,10 @@ export class PropsView {
     const bark = createBarkMaterial(new Color(0.42, 0.26, 0.16));
     const foliage = createFoliageMaterial();
     const variants = [coniferGeometry(31, 7, 1, 10, 2), coniferGeometry(37, 8, 0.85, 10, 2), coniferGeometry(43, 6, 1.1, 10, 2)];
+    const broad = [broadleafGeometry(91), broadleafGeometry(97)];
     const rng = mulberry32(77);
     for (const tr of props.trees) {
-      const v = variants[tr.id % variants.length];
+      const v = tr.z > 640 ? broad[tr.id % broad.length] : variants[tr.id % variants.length];
       const pivot = new Group();
       pivot.position.set(tr.x, tr.y - 0.2, tr.z);
       const yaw = rng() * Math.PI * 2;
