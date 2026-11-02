@@ -10,6 +10,9 @@ export const SURFACE_HARDNESS: Record<SurfaceKind, number> = {
   streambed: 0.55,
   snow: 0.25,
   sand: 0.2,
+  mud: 0.1,
+  ash: 0.22,
+  ice: 0.7,
 };
 
 export const SURFACE_FRICTION: Record<SurfaceKind, number> = {
@@ -20,6 +23,50 @@ export const SURFACE_FRICTION: Record<SurfaceKind, number> = {
   streambed: 0.55,
   snow: 0.4,
   sand: 0.9,
+  mud: 1.0,
+  ash: 0.85,
+  ice: 0.05,
+};
+
+/** Wear per metre rolled (fraction of mass), for granite. */
+export const SURFACE_ABRASION: Record<SurfaceKind, number> = {
+  meadow: 1.5e-5,
+  soil: 1e-5,
+  scree: 12e-5,
+  bedrock: 9e-5,
+  streambed: 5e-5,
+  snow: 0.4e-5,
+  sand: 4e-5,
+  mud: 1e-5,
+  ash: 3e-5,
+  ice: 0.3e-5,
+};
+
+/** Rolling drag (m/s² per m/s) — mud and deep snow swallow momentum. */
+export const SURFACE_DRAG: Record<SurfaceKind, number> = {
+  meadow: 0.02,
+  soil: 0.05,
+  scree: 0.03,
+  bedrock: 0,
+  streambed: 0.02,
+  snow: 0.1,
+  sand: 0.25,
+  mud: 0.55,
+  ash: 0.12,
+  ice: 0,
+};
+
+export const SURFACE_LABEL: Record<SurfaceKind, string> = {
+  meadow: 'the slope',
+  soil: 'soft earth',
+  scree: 'the scree',
+  bedrock: 'bedrock',
+  streambed: 'the riverbed',
+  snow: 'the snow',
+  sand: 'the sand',
+  mud: 'the mud',
+  ash: 'the ash',
+  ice: 'the ice',
 };
 
 interface CompiledFeature {
