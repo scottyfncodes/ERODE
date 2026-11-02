@@ -41,6 +41,7 @@ export interface UIHandlers {
   closeContext(): void;
   replay(): void;
   adjust(): void;
+  retry(): void;
   pause(): void;
   skip(): void;
   scrub(frac: number): void;
@@ -471,12 +472,14 @@ export class UI {
     const headline = r.unstable
       ? 'Something slipped'
       : r.sand
-        ? 'PERFECT EROSION'
+        ? 'Perfect erosion'
         : r.landed
-          ? 'Beached!'
+          ? 'Reached the sea'
           : r.reason === 'lost'
             ? 'Lost to the mountain'
-            : 'It stopped';
+            : `Stopped at ${r.destination}`;
+    const hl = highlight(r);
+    const kmh = Math.round(r.topSpeed * 3.6);
     this.results.innerHTML = `
       <div class="scroll">
         <div class="res-top">
@@ -484,21 +487,25 @@ export class UI {
           <div>
             <div class="verdict">${headline}</div>
             <div class="res-score">${fmt(r.score)}</div>
-            ${best.isBest ? '<div class="newbest">New best!</div>' : `<div class="bestline">Best ${fmt(best.score)}</div>`}
+            ${best.isBest ? '<div class="newbest">New best</div>' : `<div class="bestline">Best ${fmt(best.score)}</div>`}
           </div>
         </div>
-        <p class="why">${why}</p>
+        <div class="highlight"><span>Run highlight</span><b>${hl}</b></div>
+        <div class="journey"><span>${sizeLabel(r.startSize)}</span><i></i><span>${sizeLabel(r.size)}</span></div>
         <div class="res-chain"></div>
         <div class="stats">
           <div class="stat"><div class="k">Distance</div><div class="v">${Math.round(r.distance)}<small>m</small></div></div>
-          <div class="stat"><div class="k">Final size</div><div class="v">${sizeLabel(r.size)}</div></div>
-          <div class="stat"><div class="k">Hits</div><div class="v">${r.smashes + r.chips}</div></div>
+          <div class="stat"><div class="k">Mass lost</div><div class="v">${(r.massLost * 100).toFixed(r.massLost > 0.995 ? 2 : 0)}<small>%</small></div></div>
+          <div class="stat"><div class="k">Top speed</div><div class="v">${kmh}<small>km/h</small></div></div>
+          <div class="stat"><div class="k">Rock hits</div><div class="v">${r.smashes + r.chips}</div></div>
+          <div class="stat"><div class="k">Trees down</div><div class="v">${r.trees}</div></div>
+          <div class="stat"><div class="k">Bowled</div><div class="v">${r.bowled}</div></div>
           <div class="stat"><div class="k">Best combo</div><div class="v">×${Math.max(1, r.maxCombo)}</div></div>
-          <div class="stat"><div class="k">Top speed</div><div class="v">${Math.round(r.topSpeed * 3.6)}<small>km/h</small></div></div>
-          <div class="stat"><div class="k">Ended at</div><div class="v small">${cap(r.destination)}</div></div>
+          <div class="stat"><div class="k">In water</div><div class="v">${Math.round(r.waterTime)}<small>s</small></div></div>
+          <div class="stat"><div class="k">Airtime</div><div class="v">${r.airTime.toFixed(1)}<small>s</small></div></div>
         </div>
-        <div class="section-label">Score</div>
-        <ul class="breakdown">${rows}</ul>
+        <p class="why">${why}</p>
+        <details class="score-details"><summary>Score breakdown</summary><ul class="breakdown">${rows}</ul></details>
       </div>
       <div class="buttons"></div>`;
     const ch = this.chain();
@@ -506,7 +513,8 @@ export class UI {
     this.results.querySelector('.res-chain')!.append(ch);
     const b = this.results.querySelector('.buttons')!;
     b.append(
-      this.actBtn('Go again', 'primary', () => this.h.adjust(), 'bolt'),
+      this.actBtn('Try again', 'primary', () => this.h.retry(), 'bolt'),
+      this.actBtn('Plan', '', () => this.h.adjust(), 'hand'),
       this.actBtn('Replay', '', () => this.h.replay(), 'replay'),
       this.actBtn('Title', '', () => this.h.toTitle(), 'menu'),
     );
@@ -566,6 +574,18 @@ export class UI {
   }
 }
 
-function cap(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+/** The single most memorable thing about a run, from its real numbers. */
+function highlight(r: SimResult): string {
+  const kmh = Math.round(r.topSpeed * 3.6);
+  if (r.sand) return 'A mountain boulder, ground to sand on the beach';
+  if (r.massLost > 0.999) return `${(r.massLost * 100).toFixed(2)}% of the boulder worn away`;
+  if (r.trees >= 6) return `${r.trees} trees flattened`;
+  if (r.maxCombo >= 5) return `×${r.maxCombo} combo`;
+  if (kmh >= 100) return `Hit ${kmh} km/h`;
+  if (r.airTime >= 2.5) return `${r.airTime.toFixed(1)} seconds of air`;
+  if (r.landed) return `Made the sea as ${STAGES[r.stage].name.toLowerCase()}`;
+  if (r.trees >= 3) return `${r.trees} trees flattened`;
+  return `${Math.round(r.distance)} m down the mountain`;
 }
+
+

@@ -123,6 +123,12 @@ export interface SimResult {
   smashes: number;
   chips: number;
   trees: number;
+  /** size of the boulder at the summit (radius, m) */
+  startSize: number;
+  /** loose boulders bowled over */
+  bowled: number;
+  /** fraction of the original boulder's volume no longer in the stone you finished with */
+  massLost: number;
   maxCombo: number;
   airTime: number;
   waterTime: number;
@@ -182,6 +188,7 @@ export class Simulation {
   private bowled = new Set<number>();
   private heroId = 1;
   private startZ: number;
+  private originalVolume: number;
   private finishZ: number;
   private maxZ: number;
   private heroStill = 0;
@@ -262,6 +269,7 @@ export class Simulation {
     const pose = restingBoulder(level);
     const boulder = this.spawn('stone', pose.shape, pose.pos, [0, 0, 0, 1], [0, 0, 0], [0, 0, 0], 0, null);
     this.heroId = boulder.id;
+    this.originalVolume = pose.shape.volume;
     this.startZ = pose.pos[2];
     this.maxZ = this.startZ;
     this.finishZ = level.beach?.z[0] ?? level.terrain.bounds.z[1];
@@ -604,14 +612,18 @@ export class Simulation {
       tz = this.courseHit.tz;
     const m = p.body.mass();
     const v = p.body.linvel();
-    const control = grounded ? 1 : 0.55;
+    // in the water the current has a say; in the air you have a little
+    const control = p.wet ? 0.6 : grounded ? 1 : 0.55;
     // Steering targets a sideways speed: full lock = 11 m/s across the course. The stone
     // gets there quickly and holds it, so input maps directly to where it goes.
     const side = v.x * rx + v.z * rz;
     let steerAcc = 0;
+    // weight: a boulder carves wide and answers slowly; a pebble darts
+    const smallness = 1 - Math.min(1, p.size / this.level.boulder.radius);
     if (Math.abs(this.steer) > 0.02) {
-      const want = this.steer * 11;
-      steerAcc = Math.max(-26, Math.min(26, (want - side) * 5)) * control;
+      const want = this.steer * (8 + 5 * smallness);
+      const resp = 3 + 4 * smallness;
+      steerAcc = Math.max(-26, Math.min(26, (want - side) * resp)) * control;
     } else if (grounded) {
       // let go: sideways drift settles a little so it tracks straight
       steerAcc = -side * 0.8;
@@ -1091,6 +1103,9 @@ export class Simulation {
       smashes: this.smashes,
       chips: this.chips,
       trees: this.treesFelled,
+      bowled: this.bowled.size,
+      startSize: this.level.boulder.radius,
+      massLost: hero ? 1 - (hero.shape.volume * Math.pow(hero.size / hero.shape.radius, 3)) / this.originalVolume : 1,
       maxCombo: this.maxCombo,
       airTime: this.totalAir,
       waterTime: this.waterSteps * DT,

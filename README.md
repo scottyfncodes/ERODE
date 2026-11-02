@@ -7,23 +7,22 @@ How far can it travel — and how small can you grind it — before it lands on 
 
 ## The Long Fall
 
-You steer. A granite boulder snaps off the summit and goes over the edge; drag left/right (or hold the arrow
-buttons, or use ←/→ / A/D) to steer it down 1.1 km of mountain: the Face, the Scree Field, the Forest,
-a 25 m waterfall, the Rapids, the Delta and the Beach.
+**Plan, release, steer.** A granite boulder sits on the summit. Before you let it go you have three moves:
+set a smasher in the line (two granite teeth, a crusher rock in the rapids) or clear a blocker
+(the log jam, the debris dam, the beaver dam). Then break it loose and drag left/right (or hold the
+arrow buttons, or ←/→) to steer it 1.1 km down to the sea.
 
-- **Crash it into the rock** — granite teeth, scree blocks, crusher rocks. Every hard hit knocks real chips off
-  and the stone shrinks; brutal hits split it, and the camera stays with the **largest piece**.
-- **Ride the water and the sand** — they wear the stone down and polish it from jagged granite to a smooth pebble.
-- **Smaller is faster.** The camera zooms right in as it shrinks — a wide shot for the boulder, macro for a pebble — and the lens widens with speed.
-- **Bowl it all over** — a big stone flattens the pines along the line (TIMBER!) and scatters loose boulders.
-  Small stones just bounce off.
-- **Cartoon physics** — squash-and-stretch on every hit, comic BAM!/KRAK! pops, ink outlines and cel shading;
-  a stall anywhere but a blocker gets a BOING! kick back into the run.
-- **Steer through the gaps** in the log jam, the debris dam and the beaver dam, and take the right-hand channel
-  at the delta — the left one dies in a marsh.
+- **The mountain breaks it down.** Rock hits knock real chips off; brutal hits split it and the camera
+  stays with the largest piece. Big stones flatten trees and bowl loose boulders aside.
+- **Water and sand wear it smooth** — jagged granite becomes a polished pebble, then gravel, then sand.
+- **Boulder → Fragment → Rock → Pebble → Gravel → Sand.** A boulder carves wide and steers heavy;
+  a pebble darts. The camera closes in as it shrinks.
+- **Each stretch has its own air and light:** alpine summit, forest haze, misty gorge and falls,
+  warm valley, golden coast.
 
-Score: distance, hit combos, big air, a bonus for each new size class, the beach, then a size multiplier.
-Grind it to sand on the beach for **PERFECT EROSION** and an S.
+Score: distance, rock-hit combos, trees, air, a bonus for each new size class, the beach, then a
+size multiplier. The results show the run's highlight and its real numbers — mass lost, trees down,
+top speed, time in the water.
 
 ## How it works
 

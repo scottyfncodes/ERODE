@@ -121,7 +121,8 @@ export class Game {
       action: (k) => this.doAction(k),
       closeContext: () => this.select(null),
       replay: () => this.startReplay(),
-      adjust: () => this.startRun(),
+      adjust: () => this.toPlanning(),
+      retry: () => this.startRun(),
       pause: () => this.togglePause(),
       skip: () => this.toggleFast(),
       scrub: (f) => this.scrub(f),
@@ -314,7 +315,7 @@ export class Game {
     this.audio.unlock();
     this.audio.click();
     this.ui.hideTitle();
-    this.startRun();
+    this.toPlanning();
   }
 
   private toTitle() {
@@ -360,10 +361,10 @@ export class Game {
       const touch = window.matchMedia('(pointer: coarse)').matches;
       this.ui.tip(
         touch
-          ? 'Tap the glowing objects: red ones block the run, orange ones smash it. Swipe to fly down the mountain.'
-          : 'Click the glowing objects: red ones block the run, orange ones smash it. Drag to fly down the mountain.',
+          ? 'Plan the descent: tap the glowing rocks to set them in the line, or clear a blocker. Three moves. Swipe to look down the mountain.'
+          : 'Plan the descent: click the glowing rocks to set them in the line, or clear a blocker. Three moves. Drag to look down the mountain.',
       );
-    } else if (!this.progress.tutorial.released) this.ui.tip('Hit BREAK IT LOOSE and see how far it goes.', 5000);
+    } else if (!this.progress.tutorial.released) this.ui.tip('Ready? Break it loose — then drag left and right to steer.', 5000);
   }
 
   /** Fly the planning camera to a stretch of the course. */
@@ -734,6 +735,7 @@ export class Game {
     this.steerTouch = 0;
     this.steerButtons = 0;
     this.props.reset();
+    this.anticipated.clear();
     this.select(null);
     this.ui.tip(null);
     this.ui.hidePlanning();
@@ -761,10 +763,16 @@ export class Game {
     this.slowUntil = 0;
     this.effects.clear();
     this.pieces.clear();
-    this.cam.setMode('follow');
+    // the release: a side-on shot of the boulder breaking away, then into the chase
+    const rb = restingBoulder(this.level);
+    this.cam.subject.set(rb.pos[0], rb.pos[1], rb.pos[2]);
+    this.cam.subjectYaw = this.courseYawAt(rb.pos[0], rb.pos[2]);
+    this.cam.setMode('release');
+    this.releaseUntil = this.now + 1.4;
     this.ui.showRun(this.level.zones ?? [], this.sim.nudgesLeft);
     this.audio.release();
-    this.audio.startDrums();
+    this.audio.riser(1.2);
+    window.setTimeout(() => this.audio.startDrums(), 1200);
     this.hadFirstRelease = true;
     this.lastStage = 0;
   }
@@ -820,6 +828,15 @@ export class Game {
     for (const e of sim.drainEvents()) this.handleEvent(e, true);
     const states = this.statesFromSim(sim);
     this.pieces.sync(states);
+    this.groundFx(sim, dt);
+    if (this.cam.mode === 'release') {
+      const h = sim.hero;
+      if (h) {
+        const t = h.body.translation();
+        this.cam.subject.set(t.x, t.y, t.z);
+      }
+      if (this.now > this.releaseUntil) this.cam.setMode('follow');
+    }
     this.followFrom(states, sim.leader?.id ?? -1, (id) => {
       const p = sim.pieces.get(id);
       if (!p) return new Vector3();
@@ -853,6 +870,54 @@ export class Game {
   }
   private lastStage = 0;
   private hitStopUntil = 0;
+  private releaseUntil = 0;
+
+  private courseYawAt(x: number, z: number): number {
+    if (!this.coursePl) return 0;
+    const h = pathDistance(this.coursePl, x, z);
+    return Math.atan2(h.tx, h.tz);
+  }
+  private anticipated = new Set<string>();
+  private get targets() {
+    return this.level.formations.filter((f) => f.hardness >= 1.5);
+  }
+  private sprayAcc = 0;
+
+  /** Gravel spray under a grinding stone, and a breath of slow-motion before a big hit. */
+  private groundFx(sim: Simulation, dt: number) {
+    const h = sim.hero;
+    if (!h) return;
+    const t = h.body.translation();
+    const v = h.body.linvel();
+    const vel = new Vector3(v.x, v.y, v.z);
+    const sp = vel.length();
+    const grounded = sim.step - h.lastContactStep < 4 && !h.wet;
+    if (grounded && sp > 6) {
+      this.sprayAcc += dt * Math.min(1.5, sp / 12) * (0.5 + Math.min(1, h.size));
+      const surf = h.contactSurface;
+      const col =
+        surf === 'snow' ? new Color(0.95, 0.97, 1) : surf === 'sand' ? new Color(0.95, 0.82, 0.58) : surf === 'meadow' ? new Color(0.42, 0.36, 0.22) : new Color(0.62, 0.56, 0.48);
+      while (this.sprayAcc > 0.02) {
+        this.sprayAcc -= 0.02;
+        const r = h.shape.radius * h.physScale;
+        this.effects.spray(new Vector3(t.x, t.y - r * 0.8, t.z), vel, 1, col);
+      }
+    }
+    if (sp < 8) return;
+    const dir = vel.clone().normalize();
+    const r = h.shape.radius * h.physScale;
+    for (const f of this.targets) {
+      if (this.anticipated.has(f.id)) continue;
+      const rel = new Vector3(f.position[0] - t.x, 0, f.position[1] - t.z);
+      const along = rel.dot(new Vector3(dir.x, 0, dir.z));
+      if (along <= 0 || along / sp > 0.32) continue;
+      const lateral = rel.clone().sub(new Vector3(dir.x, 0, dir.z).multiplyScalar(along)).length();
+      if (lateral > Math.max(f.size[0], f.size[2]) * 0.5 + r + 0.4) continue;
+      this.anticipated.add(f.id);
+      this.slowUntil = this.now + 0.4;
+      this.cam.punchIn(this.now);
+    }
+  }
   private steerKeys = { left: false, right: false };
   private steerTouch = 0;
   private steerButtons = 0;
@@ -884,7 +949,8 @@ export class Game {
       const h = pathDistance(this.coursePl, focus.x, focus.z);
       courseYaw = Math.atan2(h.tx, h.tz);
     }
-    this.followInfo = { focus: focus.add(new Vector3(0, r * 0.4, 0)), vel, spread: Math.min(18, spread), small: r < 0.3, size: r, courseYaw };
+    const wet = this.sim?.hero?.wet ?? false;
+    this.followInfo = { focus: focus.add(new Vector3(0, r * 0.4, 0)), vel, spread: Math.min(18, spread), small: r < 0.3, size: r, courseYaw, wet };
     let rolling = 0;
     let gravel = 0;
     for (const s of states) {
@@ -898,7 +964,7 @@ export class Game {
     this.rolling = Math.min(1, rolling);
     this.gravel = Math.min(1, gravel);
   }
-  private followInfo: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number } | undefined;
+  private followInfo: { focus: Vector3; vel: Vector3; spread: number; small?: boolean; size?: number; courseYaw?: number; wet?: boolean } | undefined;
   private coursePlCache: ReturnType<typeof makePolyline> | null | undefined;
   private get coursePl() {
     if (this.coursePlCache === undefined) this.coursePlCache = this.level.terrain.course ? makePolyline(this.level.terrain.course) : null;
@@ -941,6 +1007,8 @@ export class Game {
         break;
       case 'fracture': {
         this.squashHero(0.45, live);
+        this.effects.ring(pos, 9 + e.intensity * 8, new Color(1, 0.93, 0.82));
+        this.effects.ring(pos, 5 + e.intensity * 4, new Color(0.9, 0.8, 0.65));
 
         this.audio.fracture(e.intensity * att + 0.3, pan);
         this.effects.dust(pos, 0.6 + e.intensity * 0.6);
@@ -966,11 +1034,14 @@ export class Game {
       case 'impact':
         if (e.intensity > 0.25) this.squashHero(e.intensity * 0.35, live);
         this.audio.impact(Math.min(1, e.intensity * 1.3) * att, e.material === 'terrain' ? 'granite' : (e.material as 'granite'), pan);
+        // minor knocks stay quiet; heavy landings slam
         if (e.intensity > 0.3) this.effects.dust(pos, e.intensity * 0.45, e.material === 'wood' ? new Color(0.5, 0.42, 0.32) : undefined);
+        if (e.intensity > 0.65 && e.material === 'terrain') this.effects.ring(pos, 4 + e.intensity * 4, new Color(0.92, 0.88, 0.8));
         if (e.intensity > 0.35) this.cam.shake(e.intensity * 0.5);
         break;
       case 'chip':
         this.squashHero(0.2 + e.intensity * 0.3, live);
+        if (e.intensity > 0.45) this.effects.ring(pos, 3 + e.intensity * 5, new Color(0.95, 0.9, 0.82));
         this.audio.fracture(Math.min(1, e.intensity) * att * 0.8 + 0.15, pan);
         this.effects.grit(pos, 0.5 + e.intensity * 0.6);
         this.effects.dust(pos, 0.25 + e.intensity * 0.3);
@@ -994,6 +1065,9 @@ export class Game {
         break;
       }
       case 'stage':
+        this.effects.ring(pos, 6, new Color(0.6, 0.95, 1.0));
+        this.effects.grit(pos, 0.6);
+        if (live) this.cam.punchIn(this.now);
         if (fx) {
           this.ui.bigBanner(`${(e.label ?? '').toUpperCase()}!`, `+${(e.points ?? 0).toLocaleString('en-US')}`, 1700);
           this.audio.stageUp(e.intensity);
@@ -1042,6 +1116,7 @@ export class Game {
     this.result = r;
     this.recording = sim.recording;
     this.audio.stopDrums();
+    this.audio.finish(r.sand ? 2 : r.landed ? 1 : 0);
     const lp = levelProgress(this.progress, this.level.id);
     const isBest = r.score > (lp.bestScore ?? 0);
     if (isBest) {
@@ -1069,10 +1144,19 @@ export class Game {
     const r = this.result!;
     this.state = 'results';
     this.ui.hideRun();
-    this.cam.setMode('aftermath');
-    // frame the end of the run, with a little of the path that led there
-    const tail = r.trajectory.slice(-12).map((p) => new Vector3(...p));
-    this.cam.frameAftermath([...finalPositions, ...tail]);
+    const end = finalPositions[0];
+    if (r.landed && end) {
+      // the arrival: circle the stone on the sand, close for a pebble, wider for a boulder
+      this.cam.subject.copy(end);
+      this.cam.subjectYaw = this.courseYawAt(end.x, end.z);
+      this.cam.orbitDist = Math.max(3.5, Math.min(18, 2.5 + r.size * 7));
+      this.cam.setMode('orbit');
+    } else {
+      this.cam.setMode('aftermath');
+      // frame the end of the run, with a little of the path that led there
+      const tail = r.trajectory.slice(-12).map((p) => new Vector3(...p));
+      this.cam.frameAftermath([...finalPositions, ...tail]);
+    }
     this.drawTrails();
     this.addFractureMarkers();
     this.ui.showResults(r, explainRun(r, this.level, this.plan), this.lastBest);
@@ -1271,6 +1355,7 @@ export class Game {
     this.cam.update(dt, this.now, follow);
     const look = this.cam.lookTarget;
     this.rig.focusShadows(look, this.cam.distance * 0.75 + 12);
+    this.rig.setAtmosphere(look.z, dt);
     this.objects.update(dt);
     this.props.update(dt);
     this.pieces.update(dt);
@@ -1284,7 +1369,15 @@ export class Game {
       const d = p.distanceTo(this.rig.camera.position);
       waterNear = Math.max(waterNear, clamp(1 - (d - 8) / 60, 0, 1));
     }
-    this.audio.update(dt, { waterNear, rolling: this.rolling, gravel: this.gravel, wind: 1 });
+    const hero = this.sim?.hero;
+    const hv = hero?.body.linvel();
+    const speed = hv && this.state === 'sim' ? Math.hypot(hv.x, hv.y, hv.z) : 0;
+    const heroSize = hero?.size ?? this.level.boulder.radius;
+    this.audio.weight = Math.min(1, Math.sqrt(heroSize / this.level.boulder.radius));
+    // the waterfall: loud when the camera is near the drop
+    const fz = this.level.zones?.find((q) => q.id === 'falls')?.z[0] ?? -1e9;
+    const fallsNear = clamp(1 - (Math.hypot(this.rig.camera.position.x, this.rig.camera.position.z - (fz + 10)) - 10) / 70, 0, 1);
+    this.audio.update(dt, { waterNear, rolling: this.rolling, gravel: this.gravel, wind: 1, speed, size: heroSize, falls: fallsNear, sand: hero?.contactSurface === 'sand' });
 
     this.rig.renderer.render(this.rig.scene, this.rig.camera);
     if (!document.hidden && !this.automation) this.rig.adapt(dt);
@@ -1321,6 +1414,17 @@ export class Game {
       replay: () => this.startReplay(),
       adjust: () => this.toPlanning(),
       snapCamera: () => this.cam.snap(),
+      /** test hook: frame a stretch of the course from the planning camera */
+      look: (id: string, pitch = 0.32, dist = 70) => {
+        this.ui.hideTitle();
+        this.state = 'plan';
+        this.cam.setMode('plan');
+        this.goZone(id);
+        this.cam.plan.pitch = pitch;
+        this.cam.plan.dist = dist;
+        this.cam.snap();
+        for (let i = 0; i < 90; i++) this.rig.setAtmosphere(this.cam.lookTarget.z, 0.1);
+      },
       /** test hook: run the rest of the descent instantly */
       finishNow: () => {
         if (!this.sim) return;
