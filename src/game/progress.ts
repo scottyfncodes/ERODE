@@ -12,6 +12,8 @@ export interface LevelProgress {
   bestGrade?: string;
   bestStage?: number;
   bestDistance?: number;
+  /** most of the original boulder ever brought to the bottom (0…1) */
+  bestRetained?: number;
 }
 
 export interface Progress {
@@ -21,6 +23,7 @@ export interface Progress {
   tutorial: { selected: boolean; released: boolean; reviewed: boolean };
 }
 
+// Storage key predates the ROCKSLIDE name; kept so existing players keep their progress.
 const KEY = 'erode.progress.v2';
 
 const fresh = (): Progress => ({

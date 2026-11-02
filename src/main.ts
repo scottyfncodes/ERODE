@@ -1,6 +1,7 @@
 import { loadRapier } from './sim/rapier';
 import { SUMMIT_TO_SEA } from './levels/summitToSea';
 import { Game } from './game/game';
+import { BRAND, wordmark } from './ui/brand';
 
 const loading = document.getElementById('loading')!;
 const fill = loading.querySelector('.loading-fill') as HTMLElement;
@@ -11,9 +12,11 @@ function progress(f: number, text: string) {
   label.textContent = text;
 }
 
-function fail(title: string, detail: string) {
+function fail(title: string, detail: string, retry = true) {
   loading.classList.remove('gone');
-  loading.innerHTML = `<div class="error-box"><h2>${title}</h2><p>${detail}</p></div>`;
+  loading.innerHTML = `<div class="error-box">${wordmark('sm')}<h2>${title}</h2><p>${detail}</p>${
+    retry ? '<button class="btn-go" type="button" onclick="location.reload()">Try again</button>' : ''
+  }</div>`;
 }
 
 function webglAvailable(): boolean {
@@ -29,10 +32,10 @@ const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => set
 
 async function boot() {
   if (!webglAvailable()) {
-    fail('WebGL is unavailable', 'ERODE needs a browser with WebGL. Try a recent Safari, Chrome or Firefox.');
+    fail('WebGL is unavailable', `${BRAND.name} needs a browser with WebGL. Try a recent Safari, Chrome or Firefox.`, false);
     return;
   }
-  progress(0.05, 'Waking the physics…');
+  progress(0.05, 'Loosening the boulder…');
   const R = await loadRapier();
   await nextFrame();
   const canvas = document.getElementById('view') as HTMLCanvasElement;
@@ -40,11 +43,13 @@ async function boot() {
   await nextFrame();
   progress(1, 'Ready');
   game.start();
-  (window as unknown as { erode: unknown }).erode = game.debug();
+  // debug handle for the scripts in /scripts (`erode` kept as an alias for older tooling)
+  const w = window as unknown as { rockslide: unknown; erode: unknown };
+  w.rockslide = w.erode = game.debug();
   setTimeout(() => loading.classList.add('gone'), 250);
 }
 
-window.addEventListener('error', (e) => console.error('ERODE error', e.message));
+window.addEventListener('error', (e) => console.error(`${BRAND.name} error`, e.message));
 boot().catch((err) => {
   console.error(err);
   fail('The mountain would not load', 'Something went wrong while starting the game. Please reload the page.');

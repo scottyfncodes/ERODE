@@ -17,7 +17,8 @@ import { CameraDirector } from './camera';
 import { attachGestures } from './input';
 import { loadProgress, saveProgress, levelProgress, type Progress } from './progress';
 import { AudioEngine } from '../audio/audio';
-import { UI, sizeLabel, type ContextAction } from '../ui/ui';
+import { UI, sizeLabel, type ContextAction, type MenuContext } from '../ui/ui';
+import { GRANITE_T_PER_M3, pctLabel } from '../ui/brand';
 import { clamp, makePolyline, pathDistance } from '../sim/geom';
 
 type State = 'title' | 'plan' | 'sim' | 'results' | 'replay';
@@ -132,6 +133,11 @@ export class Game {
       toggleSound: () => this.setSound(!this.progress.settings.sound),
       toggleMusic: () => this.setMusic(!this.progress.settings.music),
       toTitle: () => this.toTitle(),
+      restart: () => {
+        this.closeMenu();
+        this.audio.stopDrums();
+        this.startRun();
+      },
       resumeFromMenu: () => this.closeMenu(),
       toggleGhost: () => {
         this.ghostOn = !this.ghostOn;
@@ -197,7 +203,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         this.audio.suspend();
-        if (this.state === 'sim' && !this.paused) this.togglePause();
+        if (this.state === 'sim' && !this.menuOpen) this.openMenu();
       } else this.audio.resume();
     });
     this.resize();
@@ -207,7 +213,7 @@ export class Game {
   start() {
     // show the boulder on its shelf in the title view
     this.showRestingBoulder();
-    this.ui.showTitle(this.progress, this.level);
+    this.ui.showTitle(this.progress, this.level, this.courseLength());
     this.state = 'title';
     this.cam.setMode('intro');
     this.cam.snap();
@@ -220,6 +226,14 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ helpers
+  /** summit to the far edge of the beach, in metres */
+  private courseLength(): number {
+    return (this.level.beach?.z[1] ?? 1100) - this.level.boulder.position[1];
+  }
+  /** the starting boulder's mass in tonnes */
+  private startMassT(): number {
+    return restingBoulder(this.level).shape.volume * GRANITE_T_PER_M3;
+  }
   private resize() {
     this.rig.resize();
     this.cam.baseFov = this.rig.camera.fov;
@@ -336,7 +350,7 @@ export class Game {
     this.showRestingBoulder();
     this.state = 'title';
     this.cam.setMode('intro');
-    this.ui.showTitle(this.progress, this.level);
+    this.ui.showTitle(this.progress, this.level, this.courseLength());
   }
 
   private toPlanning() {
@@ -786,11 +800,11 @@ export class Game {
     }
   }
 
+  /** pausing a run opens the pause screen; resuming closes it */
   private togglePause() {
-    if (this.state === 'sim') {
-      this.paused = !this.paused;
-      this.ui.setPaused(this.paused);
-    }
+    if (this.state !== 'sim') return;
+    if (this.menuOpen) this.closeMenu();
+    else this.openMenu();
   }
 
   private toggleFast() {
@@ -861,6 +875,7 @@ export class Game {
         progress: (sim.liveDistance + (restingBoulder(this.level).pos[2] - z0)) / (zEnd - z0),
         distance: sim.liveDistance,
         zone: this.zoneAt(lz)?.name ?? '',
+        mass: sim.liveMassFraction,
       });
       this.lastStage = Math.max(this.lastStage, st);
     }
@@ -1126,6 +1141,7 @@ export class Game {
     lp.bestStage = Math.max(lp.bestStage ?? 0, r.bestStage);
     lp.bestDistance = Math.max(lp.bestDistance ?? 0, r.distance);
     lp.completed = lp.completed || r.landed;
+    if (r.landed) lp.bestRetained = Math.max(lp.bestRetained ?? 0, 1 - r.massLost);
     lp.lastTrail = r.trajectory.map((p) => [round2(p[0]), round2(p[1]), round2(p[2])] as [number, number, number]);
     saveProgress(this.progress);
     this.lastBest = { score: lp.bestScore ?? r.score, isBest };
@@ -1134,8 +1150,8 @@ export class Game {
     const lead = sim.leader ? sim.pose(sim.leader).pos : states[0]?.pos;
     sim.dispose();
     this.sim = null;
-    if (r.sand) this.ui.bigBanner('PERFECT EROSION', 'Sand on the beach', 2600);
-    else if (r.landed) this.ui.bigBanner('BEACHED!', `${STAGES[r.stage].name} · ${sizeLabel(r.size)}`, 2000);
+    if (r.sand) this.ui.bigBanner('Ground to sand', 'Sand on the beach', 2600);
+    else if (r.landed) this.ui.bigBanner('Made the bottom!', `${pctLabel(1 - r.massLost)}% intact · ${STAGES[r.stage].name} ${sizeLabel(r.size)}`, 2200);
     window.setTimeout(() => this.showAftermath(lead ? [new Vector3(...lead)] : []), r.landed ? 1400 : 600);
   }
   private lastBest = { score: 0, isBest: false };
@@ -1159,7 +1175,7 @@ export class Game {
     }
     this.drawTrails();
     this.addFractureMarkers();
-    this.ui.showResults(r, explainRun(r, this.level, this.plan), this.lastBest);
+    this.ui.showResults(r, explainRun(r, this.level, this.plan), this.lastBest, this.startMassT());
     if (!this.progress.tutorial.reviewed) {
       this.progress.tutorial.reviewed = true;
       this.progress.tutorial.released = true;
@@ -1318,11 +1334,15 @@ export class Game {
   // ------------------------------------------------------------------ menu & settings
   private openMenu() {
     this.menuOpen = true;
-    this.ui.showMenu(this.progress.settings.sound, this.progress.settings.music, this.state === 'sim');
+    const ctx: MenuContext = this.state === 'sim' ? 'run' : this.state === 'title' ? 'title' : 'plan';
+    this.ui.showMenu(this.progress.settings.sound, this.progress.settings.music, ctx);
+    if (ctx === 'run') this.ui.setPaused(true);
   }
   private closeMenu() {
     this.menuOpen = false;
     this.ui.hideMenu();
+    this.paused = false;
+    this.ui.setPaused(false);
   }
   private setSound(on: boolean) {
     this.progress.settings.sound = on;
@@ -1498,6 +1518,6 @@ export function explainRun(r: SimResult, level: LevelDef, _plan: Plan): string {
     else if (r.destination === 'the marsh') tips.push('The left channel dies in the marsh. Steer right at the delta.');
     else tips.push('Keep it on the line — drag left and right to steer.');
   }
-  if (r.stage < STAGES.length - 1) tips.push('Aim straight at the granite teeth and crusher rocks to knock more off, and ride the water to wear it smooth.');
+  if (r.stage < STAGES.length - 1) tips.push('Smashers and fast water break it down for points — but every chip is mass you won’t bring to the bottom.');
   return [lead, ...tips].join(' ');
 }

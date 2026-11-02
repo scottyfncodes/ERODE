@@ -3,22 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#1b1d1b" />
+    <title>ROCKSLIDE — Keep it together. Get to the bottom.</title>
+    <meta name="description" content="ROCKSLIDE is a physics-driven mountain descent. You are a granite boulder at the summit: plan your descent, break your path, and reach the bottom with as much of yourself intact as you can." />
+    <meta name="application-name" content="ROCKSLIDE" />
+    <meta name="theme-color" content="#16181b" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- installable / home screen -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="ERODE — a boulder snaps off the summit. Smash it, steer it, grind it to sand before it hits the beach." />
-    <title>ERODE</title>
-    <meta name="apple-mobile-web-app-title" content="ERODE" />
+    <meta name="apple-mobile-web-app-title" content="ROCKSLIDE" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- sharing -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ROCKSLIDE" />
+    <meta property="og:title" content="ROCKSLIDE — Keep it together. Get to the bottom." />
+    <meta property="og:description" content="Plan your descent. Break your path. Survive the mountain. A physics-driven boulder run from summit to sea." />
+    <meta property="og:url" content="https://erode-orpin.vercel.app/" />
+    <meta property="og:image" content="https://erode-orpin.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ROCKSLIDE wordmark over a granite boulder perched above a mountain descent at golden hour." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ROCKSLIDE — Keep it together. Get to the bottom." />
+    <meta name="twitter:description" content="Plan your descent. Break your path. Survive the mountain." />
+    <meta name="twitter:image" content="https://erode-orpin.vercel.app/og-image.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet" />
   </head>
   <body>
     <canvas id="view" aria-label="The mountain"></canvas>
@@ -27,12 +45,13 @@
 
     <div id="loading" class="screen">
       <div class="loading-inner">
-        <div class="wordmark">ERODE</div>
+        <div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div>
+        <div class="loading-tag label">Keep it together. Get to the bottom.</div>
         <div class="loading-bar"><div class="loading-fill"></div></div>
-        <div class="loading-text">Loading the mountain…</div>
+        <div class="loading-text label">Loading the mountain…</div>
       </div>
     </div>
-    <noscript>ERODE needs JavaScript and WebGL to run.</noscript>
+    <noscript>ROCKSLIDE needs JavaScript and WebGL to run.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

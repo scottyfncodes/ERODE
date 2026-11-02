@@ -293,6 +293,14 @@ export class Simulation {
   get liveDistance(): number {
     return Math.max(0, this.maxZ - this.startZ);
   }
+  /** fraction of the original boulder's volume still in the leading stone (1 at the summit) */
+  get liveMassFraction(): number {
+    const hero = this.hero;
+    return hero ? this.massFractionOf(hero) : 0;
+  }
+  private massFractionOf(p: Piece): number {
+    return (p.shape.volume * Math.pow(p.size / p.shape.radius, 3)) / this.originalVolume;
+  }
   get liveCombo(): number {
     return this.step - this.lastSmashStep < COMBO_STEPS ? this.combo : 0;
   }
@@ -1105,7 +1113,7 @@ export class Simulation {
       trees: this.treesFelled,
       bowled: this.bowled.size,
       startSize: this.level.boulder.radius,
-      massLost: hero ? 1 - (hero.shape.volume * Math.pow(hero.size / hero.shape.radius, 3)) / this.originalVolume : 1,
+      massLost: hero ? 1 - this.massFractionOf(hero) : 1,
       maxCombo: this.maxCombo,
       airTime: this.totalAir,
       waterTime: this.waterSteps * DT,
