@@ -1,5 +1,6 @@
 import {
   AdditiveBlending,
+  BackSide,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -32,9 +33,31 @@ export interface PieceState {
 }
 
 /** Renders the boulder, its fragments and loose stones. */
+const OUTLINE_VERT = /* glsl */ `
+  uniform float uSmooth;
+  uniform float uRadius;
+  uniform float uWidth;
+  void main() {
+    vec3 round = normalize(position) * uRadius * vec3(1.08, 0.82, 1.0);
+    vec3 p = mix(position, round, uSmooth * 0.8);
+    vec3 n = normalize(mix(normal, normalize(position), 0.5 + uSmooth * 0.5));
+    p += n * uWidth;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  }
+`;
+
+interface PieceEntry {
+  root: Group;
+  mesh: Mesh;
+  u: RockUniforms & { uWidth: { value: number } };
+  squash: number;
+  squashT: number;
+}
+
+/** Renders the boulder, its fragments and chips: cartoon ink outlines and squash-and-stretch. */
 export class PiecesView {
   readonly group = new Group();
-  private meshes = new Map<number, { mesh: Mesh; u: RockUniforms }>();
+  private meshes = new Map<number, PieceEntry>();
   private geoCache = new WeakMap<PieceShape, BG>();
 
   private geo(shape: PieceShape): BG {
@@ -46,34 +69,73 @@ export class PiecesView {
     return g;
   }
 
+  /** a cartoon squash on impact (0..1) */
+  squash(id: number, amount: number) {
+    const e = this.meshes.get(id);
+    if (!e) return;
+    e.squash = Math.min(0.45, Math.max(e.squash * Math.exp(-e.squashT * 6), amount));
+    e.squashT = 0;
+  }
+
+  update(dt: number) {
+    for (const e of this.meshes.values()) {
+      if (e.squash <= 0.001) continue;
+      e.squashT += dt;
+      const a = e.squash * Math.cos(e.squashT * 26) * Math.exp(-e.squashT * 6);
+      e.root.scale.set(1 + a * 0.55, 1 - a, 1 + a * 0.55);
+      if (e.squashT > 1) {
+        e.squash = 0;
+        e.root.scale.set(1, 1, 1);
+      }
+    }
+  }
+
   sync(states: PieceState[]) {
     const seen = new Set<number>();
     for (const s of states) {
       seen.add(s.id);
       let e = this.meshes.get(s.id);
       if (!e) {
-        // each stone gets its own uniforms (wear), sharing one shader program
-        const u: RockUniforms = { uSmooth: { value: 0 }, uRadius: { value: s.shape.radius } };
-        const mesh = new Mesh(this.geo(s.shape), createRockMaterial({ uniforms: u }));
+        const u = { uSmooth: { value: 0 }, uRadius: { value: s.shape.radius }, uWidth: { value: 0.05 } };
+        const geo = this.geo(s.shape);
+        const mesh = new Mesh(geo, createRockMaterial({ uniforms: u }));
         mesh.castShadow = s.kind !== 'chip';
         mesh.receiveShadow = true;
-        e = { mesh, u };
+        const outline = new Mesh(
+          geo,
+          new ShaderMaterial({ uniforms: u, vertexShader: OUTLINE_VERT, fragmentShader: 'void main() { gl_FragColor = vec4(0.07, 0.05, 0.04, 1.0); }', side: BackSide }),
+        );
+        mesh.add(outline);
+        const root = new Group();
+        root.add(mesh);
+        e = { root, mesh, u, squash: 0, squashT: 0 };
         this.meshes.set(s.id, e);
-        this.group.add(mesh);
+        this.group.add(root);
       }
       const m = e.mesh;
-      m.visible = true;
-      m.position.set(s.pos[0], s.pos[1], s.pos[2]);
+      e.root.visible = true;
+      // cartoon minimum: gravel and sand stay readable on screen (the HUD shows the true size)
+      let scale = s.scale;
+      let lift = 0;
+      const vis = s.shape.radius * scale;
+      if (s.kind === 'stone' && vis < 0.035) {
+        scale = 0.035 / s.shape.radius;
+        lift = (0.035 - vis) * 0.85;
+      }
+      e.root.position.set(s.pos[0], s.pos[1] + lift, s.pos[2]);
       m.quaternion.set(s.quat[0], s.quat[1], s.quat[2], s.quat[3]);
-      m.scale.setScalar(s.scale);
+      m.scale.setScalar(scale);
       e.u.uSmooth.value = s.smooth ?? 0;
+      // outline thickness in object space, so it reads the same at any size
+      const r = s.shape.radius * scale;
+      e.u.uWidth.value = Math.min(0.12, Math.max(0.004, r * 0.08)) / Math.max(0.0001, scale);
     }
-    for (const [id, e] of this.meshes) if (!seen.has(id)) e.mesh.visible = false;
+    for (const [id, e] of this.meshes) if (!seen.has(id)) e.root.visible = false;
   }
 
   clear() {
     for (const e of this.meshes.values()) {
-      this.group.remove(e.mesh);
+      this.group.remove(e.root);
       (e.mesh.material as MeshStandardMaterial).dispose();
     }
     this.meshes.clear();
@@ -187,7 +249,7 @@ export class Effects {
   }
 
   /** A billow of rock dust (impacts, fractures). */
-  dust(at: Vector3, strength: number, tint = new Color(0.72, 0.68, 0.62)) {
+  dust(at: Vector3, strength: number, tint = new Color(0.97, 0.92, 0.82)) {
     const n = Math.round(6 + strength * 30);
     for (let i = 0; i < n; i++) {
       const a = this.rng() * Math.PI * 2;

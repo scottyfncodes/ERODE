@@ -168,9 +168,10 @@ export class CameraDirector {
         this.followYaw += dy * damp(1.2, dt);
       }
       // distance scales with the stone: a boulder fills a big frame, a pebble a tight one
-      const r = follow.size ?? 1;
-      let dist = 8 + Math.sqrt(r) * 10 + Math.min(10, sp * 0.3);
-      let pitch = 0.66;
+      // the frame shrinks with the stone: a wide shot for the boulder, macro for a pebble
+      const r = Math.max(0.03, follow.size ?? 1);
+      let dist = 1.1 + r * 6.5 + Math.min(r * 4, sp * 0.12) + Math.min(6, sp * 0.06);
+      let pitch = 0.42 + Math.min(0.26, r * 0.13);
       if (now < this.closeUntil) {
         dist *= 0.8;
         pitch = 0.6;
@@ -209,8 +210,8 @@ export class CameraDirector {
       this.cur.target.y + Math.sin(this.cur.pitch) * this.cur.dist,
       this.cur.target.z - Math.cos(this.cur.yaw) * cp * this.cur.dist,
     );
-    // never dip under the ground
-    const g = this.ground(pos.x, pos.z) + 2.5;
+    // never dip under the ground (closer allowed when the shot is tight)
+    const g = this.ground(pos.x, pos.z) + Math.max(0.35, Math.min(2.5, this.cur.dist * 0.18));
     if (pos.y < g) pos.y = g;
     if (this.shakeAmt > 0.001) {
       const s = this.shakeAmt * 0.35;
@@ -221,6 +222,11 @@ export class CameraDirector {
     }
     this.cam.position.copy(pos);
     this.cam.lookAt(this.cur.target);
+    const near = Math.max(0.04, Math.min(0.3, this.cur.dist * 0.04));
+    if (Math.abs(this.cam.near - near) > 0.005) {
+      this.cam.near = near;
+      this.cam.updateProjectionMatrix();
+    }
   }
 
   /** jump straight to the desired framing (used by tests and after loads) */

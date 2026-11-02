@@ -33,7 +33,7 @@ export function makeAutopilot(sim: Simulation, mode: 'line' | 'aim') {
       tx = gap.x;
       tz = gap.zz;
     } else if (mode === 'aim') {
-      const rock = rocks.find((r) => r.z > t.z + 3 && r.z - t.z < 35);
+      const rock = rocks.find((r) => r.z > t.z + 7 && r.z - t.z < 38);
       if (rock) {
         tx = rock.x;
         tz = rock.z;

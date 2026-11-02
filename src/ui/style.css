@@ -1209,3 +1209,25 @@ button {
     padding-top: calc(4vh + var(--safe-t));
   }
 }
+
+/* comic-book impact words */
+.pop.comic span {
+  display: inline-block;
+  padding: 10px 16px;
+  font-size: 20px;
+  color: #2a0d00;
+  text-shadow: none;
+  background: var(--sun);
+  clip-path: polygon(50% 0%, 61% 22%, 86% 8%, 78% 34%, 100% 42%, 80% 56%, 94% 80%, 66% 72%, 56% 100%, 44% 76%, 18% 94%, 24% 66%, 0% 58%, 20% 44%, 6% 18%, 36% 26%);
+  transform: rotate(-8deg);
+}
+.pop.comic.big span {
+  font-size: 30px;
+  padding: 16px 24px;
+  background: var(--hot);
+  color: #fff;
+}
+.pop.comic.boing span {
+  background: var(--cyan);
+  transform: rotate(6deg);
+}

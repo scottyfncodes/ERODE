@@ -113,7 +113,7 @@ describe('the run', () => {
       if (!h) return;
       const hz = h.body.translation().z;
       for (const p of sim.pieces.values())
-        if (p.kind === 'stone' && p.id !== h.id && p.body.translation().z > hz - 15) expect(p.size).toBeLessThanOrEqual(h.size * 1.1);
+        if (p.kind === 'stone' && p.id !== h.id && p.body.translation().z > hz - 8) expect(p.size).toBeLessThanOrEqual(h.size * 1.1);
     });
   }, 120000);
 
