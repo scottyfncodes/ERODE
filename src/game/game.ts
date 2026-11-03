@@ -31,7 +31,7 @@ import { Panels } from '../ui/panels';
 import type { Colliders } from '../world/colliders';
 import { plantForest, TreeGrid, type Tree } from '../world/forest';
 import { CHARGE_SPOTS, elevation } from '../world/places';
-import { buildColliders, HQ, inGarage, inLodge, SPOTS, UPGRADES, type UpgradeId } from '../world/station';
+import { buildColliders, HQ, inGarage, inLodge, LODGE, SPOTS, UPGRADES, type UpgradeId } from '../world/station';
 import { getTerrain, SURFACE_LABEL, type Terrain } from '../world/terrain';
 import { avalancheDanger, clock, conditions, DANGER_LABEL, nextDay, SKY_LABEL, tickWeather, type Conditions } from '../world/weather';
 import { FollowCamera } from './camera';
@@ -485,10 +485,12 @@ export class Game {
   }
 
   private titleFrame(dt: number) {
-    const a = this.time * 0.05;
+    // a symmetrical, one-point view of the lodge front, square on, with a slow push in and out
     const c = this.rig.camera;
-    c.position.set(HQ.x + Math.sin(a) * 60, this.station.y + 22, HQ.z + Math.cos(a) * 60);
-    c.lookAt(HQ.x - 8, this.station.y + 3, HQ.z);
+    const push = 0.5 - 0.5 * Math.cos(this.time * 0.06);
+    const front = LODGE.x + LODGE.w / 2;
+    c.position.set(front + 40 - push * 12, this.station.y + 3.6 + push * 0.6, LODGE.z);
+    c.lookAt(front - 2, this.station.y + 3.4, LODGE.z);
     this.cond = conditions(this.p.weather);
     this.rig.setConditions(this.cond);
     this.grade();
@@ -804,7 +806,11 @@ export class Game {
     this.audio.radio();
     this.audio.accept();
     this.hud.radio(def.from, def.alert, 5);
-    this.hud.toast(def.title);
+    // the title card: story missions are chapters, callouts are interludes
+    const story = MISSIONS.filter((m) => !m.dynamic);
+    const n = story.findIndex((m) => m.id === id);
+    const WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+    this.hud.chapter(n >= 0 ? `Chapter ${WORDS[n] ?? n + 1}` : 'An interlude', def.title, `${FAMILY_LABEL[def.family]} · called in by ${def.from}`, def.family);
     if (id === 'tree') {
       this.props.resetTree();
       this.props.tree.visible = true;
@@ -1179,11 +1185,12 @@ export class Game {
     pl.group.visible = this.mode !== 'heli';
     let pose: Pose = 'idle';
     if (title) {
-      pl.group.position.set(SPOTS.lodgeDoor.x + 3, this.station.y + 0.3, SPOTS.lodgeDoor.z + 1);
-      pl.group.rotation.y = -1.2;
+      // either side of the door, square to the camera
+      pl.group.position.set(SPOTS.lodgeDoor.x + 4, this.station.y + 0.3, SPOTS.lodgeDoor.z - 1.4);
+      pl.group.rotation.y = -Math.PI / 2;
       pl.animate('idle', 0, 0, 0, dt);
-      this.dogMesh.group.position.set(SPOTS.lodgeDoor.x + 4.2, this.station.y + 0.3, SPOTS.lodgeDoor.z + 2);
-      this.dogMesh.group.rotation.y = -1.6;
+      this.dogMesh.group.position.set(SPOTS.lodgeDoor.x + 4, this.station.y + 0.3, SPOTS.lodgeDoor.z + 1.4);
+      this.dogMesh.group.rotation.y = -Math.PI / 2;
       return;
     }
     if (this.mode === 'foot') {
@@ -1194,7 +1201,11 @@ export class Game {
       pl.group.quaternion.setFromAxisAngle(UP, w.yaw);
       const carrying = !!this.p.active?.carrying;
       pose = this.holdT > 0 && this.holdId && this.holdId !== 'pet-pose' ? 'work' : this.holdId === 'pet-pose' ? 'pet' : carrying ? 'carry' : w.speed > 4 ? 'run' : w.speed > 0.3 ? 'walk' : 'idle';
-      pl.animate(pose, w.stride, w.speed, 0, dt);
+      // the ground's rise ahead, so planted feet meet a slope instead of floating over it
+      const fx = -Math.sin(w.yaw);
+      const fz = -Math.cos(w.yaw);
+      const slope = indoors ? 0 : this.terrain.height(w.x + fx * 0.4, w.z + fz * 0.4) - this.terrain.height(w.x - fx * 0.4, w.z - fz * 0.4);
+      pl.animate(pose, w.stride, w.speed, 0, dt, THREE.MathUtils.clamp(slope / 0.8, -0.8, 0.8));
     } else if (this.mode === 'sled') {
       this.sledMesh.group.updateMatrixWorld(true);
       this.seat.copy(this.sledMesh.seat);

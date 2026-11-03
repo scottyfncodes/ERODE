@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cyl, glow, mat, paint, PAL } from './kit';
+import { box, cyl, glow, mat, paint, PAL, repaint } from './kit';
 
 const cylZ = (rt: number, rb: number, len: number, seg: number, m: THREE.Material) => {
   const c = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, len, seg), m);
@@ -138,8 +138,8 @@ export class HeliMesh {
   }
 
   setPaint(main: number, second: number) {
-    this.main.color.setHex(main);
-    this.second.color.setHex(second);
+    repaint(this.main, main);
+    repaint(this.second, second);
   }
 
   /** Searchlight on (night) when fitted. */

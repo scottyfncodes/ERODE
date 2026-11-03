@@ -74,15 +74,16 @@ export function createSnowMaterial(): THREE.MeshStandardMaterial {
   return m;
 }
 
-const SNOW = new THREE.Color(0.95, 0.965, 0.99);
-const SHADE = new THREE.Color(0.86, 0.9, 0.97);
-const ROCK = new THREE.Color(0.38, 0.37, 0.38);
-const ROCK_WARM = new THREE.Color(0.47, 0.41, 0.36);
-const ROAD = new THREE.Color(0.8, 0.77, 0.72);
-const TRACK = new THREE.Color(0.87, 0.85, 0.82);
-const PISTE = new THREE.Color(0.985, 0.99, 1);
-const ICE = new THREE.Color(0.62, 0.77, 0.86);
-const YARD = new THREE.Color(0.86, 0.84, 0.8);
+// storybook snow: cream in the light, lavender in the shade, sandy-pink roads
+const SNOW = new THREE.Color(0.975, 0.955, 0.93);
+const SHADE = new THREE.Color(0.84, 0.83, 0.93);
+const ROCK = new THREE.Color(0.47, 0.41, 0.45);
+const ROCK_WARM = new THREE.Color(0.58, 0.47, 0.44);
+const ROAD = new THREE.Color(0.84, 0.74, 0.69);
+const TRACK = new THREE.Color(0.9, 0.84, 0.8);
+const PISTE = new THREE.Color(0.99, 0.975, 0.96);
+const ICE = new THREE.Color(0.64, 0.83, 0.82);
+const YARD = new THREE.Color(0.89, 0.82, 0.78);
 
 function groundColor(t: Terrain, x: number, z: number, nx: number, ny: number, nz: number, out: THREE.Color): THREE.Color {
   const slope = Math.acos(Math.min(1, ny));
@@ -209,7 +210,7 @@ function buildBackdrop(t: Terrain): THREE.Mesh {
       y *= 1 - smoothstep(0.85, 1, k) * 0.2;
       pos.push(x, y, z);
       const snowLine = 260 + fbm2(x / 200, z / 200, 2, 3) * 60;
-      c.setRGB(0.55, 0.6, 0.66).lerp(new THREE.Color(0.95, 0.96, 0.99), smoothstep(snowLine - 60, snowLine + 60, y));
+      c.setRGB(0.58, 0.55, 0.66).lerp(new THREE.Color(0.97, 0.95, 0.94), smoothstep(snowLine - 60, snowLine + 60, y));
       cols.push(c.r, c.g, c.b);
     }
   }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { DogAnim } from '../actors/husky';
-import { ball, box, cyl, mat, paint } from './kit';
+import { ball, box, cyl, mat, paint, repaint } from './kit';
 
 const GREY = 0x5f6873;
 const DARK = 0x3a4048;
@@ -154,15 +154,15 @@ export class HuskyMesh {
   }
 
   setGear(collar: number, harness: { main: number; second: number; pack: boolean } | null, bandana: number | null) {
-    this.collar.color.setHex(collar);
+    repaint(this.collar, collar);
     this.harness.visible = !!harness;
     if (harness) {
-      this.harnessMain.color.setHex(harness.main);
-      this.harnessSecond.color.setHex(harness.second);
+      repaint(this.harnessMain, harness.main);
+      repaint(this.harnessSecond, harness.second);
       this.pack.visible = harness.pack;
     }
     this.bandana.visible = bandana !== null;
-    if (bandana !== null) this.bandanaMat.color.setHex(bandana);
+    if (bandana !== null) repaint(this.bandanaMat, bandana);
   }
 
   animate(anim: DogAnim, stride: number, dt: number) {

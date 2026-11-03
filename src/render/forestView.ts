@@ -10,7 +10,7 @@ function snowyConifer(seed: number) {
   const pos = crown.getAttribute('position');
   const col = crown.getAttribute('color');
   const rng = mulberry32(seed * 3 + 1);
-  const snow = new THREE.Color(0.97, 0.98, 1);
+  const snow = new THREE.Color(0.98, 0.965, 0.95);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -33,7 +33,7 @@ export class ForestView {
   constructor(trees: readonly Tree[]) {
     const variants = [snowyConifer(11), snowyConifer(47)];
     const foliage = createFoliageMaterial();
-    const bark = createBarkMaterial(new THREE.Color(0.33, 0.24, 0.18));
+    const bark = createBarkMaterial(new THREE.Color(0.42, 0.27, 0.25));
     const cells = 5;
     const size = 2000 / cells;
     const buckets = new Map<string, Tree[]>();

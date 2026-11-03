@@ -47,7 +47,8 @@ for path in sorted(glob.glob(f"{R}/public/models/*.glb")):
     if not ok or not levels or any(l == "fail" for l in levels):
         fails.append(f"{a}: engine_check {levels or eng}")
     # the rebuild from source (1_build_kit.py) should match what ships
-    rebuilt = glob.glob(f"{REBUILT}/{a}/exports/*.glb")
+    # the primary export only (not the LOD or collision variants beside it)
+    rebuilt = [f for f in glob.glob(f"{REBUILT}/{a}/exports/*.glb") if not any(k in f for k in (".lod", ".collision"))]
     if rebuilt:
         ok2, info2 = g.call("meshcraft", "inspect_file", {"path": rebuilt[0]})
         t1, t2 = tris_of(info), tris_of(info2)

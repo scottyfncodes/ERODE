@@ -5,6 +5,35 @@ import * as THREE from 'three';
  * silhouettes. Everything hand-placed in the valley is built from these.
  */
 
+/**
+ * The storybook grade: every colour the valley is built from passes through this once, when its
+ * material is made. Darks lift to aubergine instead of black, loud colours settle to a painted
+ * pastel, and everything warms a touch, so even a one-off colour sits in the Kessel palette.
+ */
+const _c = new THREE.Color();
+const _hsl = { h: 0, s: 0, l: 0 };
+export function storybook(hex: number): number {
+  // in sRGB, the space the colours were picked in
+  _c.setHex(hex, THREE.SRGBColorSpace).getHSL(_hsl, THREE.SRGBColorSpace);
+  let { h, s, l } = _hsl;
+  // no pure blacks: near-black leans to plum (the short way round the hue circle)
+  if (l < 0.22) {
+    const k = 1 - l / 0.22;
+    let dh = 0.93 - h;
+    if (dh > 0.5) dh -= 1;
+    if (dh < -0.5) dh += 1;
+    h += dh * k * 0.5;
+    s = Math.max(s, 0.16 * k);
+  }
+  l = 0.1 + l * 0.86;
+  // painted, not neon
+  s = Math.min(s, 0.7) * (l > 0.75 ? 0.85 : 0.95);
+  // greens lean teal
+  if (h > 0.22 && h < 0.42) h += 0.03;
+  _c.setHSL(((h % 1) + 1) % 1, s, l, THREE.SRGBColorSpace);
+  return _c.getHex(THREE.SRGBColorSpace);
+}
+
 const matCache = new Map<string, THREE.MeshLambertMaterial>();
 export function mat(color: number, extra?: Partial<THREE.MeshLambertMaterialParameters>): THREE.MeshLambertMaterial {
   const key = extra ? '' : `${color}`;
@@ -12,35 +41,60 @@ export function mat(color: number, extra?: Partial<THREE.MeshLambertMaterialPara
     const m = matCache.get(key);
     if (m) return m;
   }
-  const m = new THREE.MeshLambertMaterial({ color, ...extra });
+  const m = new THREE.MeshLambertMaterial({ color: storybook(color), ...extra });
   if (key) matCache.set(key, m);
   return m;
 }
 
 /** A material that can be recoloured (customisation) without touching the shared cache. */
-export const paint = (color: number) => new THREE.MeshLambertMaterial({ color });
+export const paint = (color: number) => new THREE.MeshLambertMaterial({ color: storybook(color) });
+
+/** Recolour a `paint` material through the same grade. */
+export const repaint = (m: THREE.MeshLambertMaterial, color: number) => m.color.setHex(storybook(color));
 
 export const glow = (color: number) => new THREE.MeshBasicMaterial({ color });
 
+/**
+ * The Kessel storybook palette (art/rockslide-palette.json): a painted Swiss valley. Powder-blue
+ * sky over cream snow with lavender shade, teal spruce, raspberry and mustard chalets with cream
+ * trim under burgundy roofs; the patrol's tomato red and cream cross wherever help is.
+ */
 export const PAL = {
-  snow: 0xf4f6f8,
-  snowShade: 0xd9e3ee,
-  log: 0x8a5a36,
-  logDark: 0x5e3a22,
-  logLight: 0xa8744a,
-  roof: 0x3b4a58,
-  roofSnow: 0xf2f5f8,
-  stone: 0x8d8f91,
-  stoneDark: 0x66686b,
-  window: 0xffcf7a,
-  windowDay: 0x7fb2cf,
-  red: 0xd8382a,
-  white: 0xf3efe6,
-  dark: 0x262a30,
-  metal: 0x9aa3ab,
-  yellow: 0xf2c230,
-  wood: 0xb98a55,
-  green: 0x3c6b4a,
+  snow: 0xf7f1ea,
+  snowShade: 0xd6d2ea,
+  // the station is painted timber now, raspberry with cream
+  log: 0xc8747f,
+  logDark: 0x8e3f4c,
+  logLight: 0xe3a3a6,
+  roof: 0x7b2f3b,
+  roofSnow: 0xf8f3ec,
+  stone: 0xb7a69e,
+  stoneDark: 0x8d7c78,
+  window: 0xffd59a,
+  windowDay: 0x9cc6d9,
+  red: 0xd4422f,
+  white: 0xf6ecdc,
+  dark: 0x3a2632,
+  metal: 0xa9a4ad,
+  yellow: 0xe0b042,
+  wood: 0xc79a62,
+  green: 0x5f9c86,
+  // the people
+  trousers: 0x3b3550,
+  boot: 0x6a2e2a,
+  sock: 0xefe3c8,
+  mitt: 0x3b3550,
+  brass: 0xd9a843,
+  pack: 0x56606c,
+  packDark: 0x434b56,
+  hair: 0x5a3a26,
+  // the village row
+  mint: 0x9cc9b3,
+  powder: 0xa9c8e0,
+  mustard: 0xe0b042,
+  blush: 0xe7aaa6,
+  lavender: 0xb7a9d1,
+  burgundy: 0x7b2f3b,
 };
 
 export function box(w: number, h: number, d: number, m: THREE.Material | number, x = 0, y = 0, z = 0): THREE.Mesh {
