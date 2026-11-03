@@ -3,13 +3,18 @@ import type { Terrain } from '../world/terrain';
 
 export type CamMode = 'foot' | 'sled' | 'skis' | 'heli' | 'indoor' | 'watch';
 
-const PROFILE: Record<CamMode, { dist: number; pitch: number; lift: number; follow: number; fov?: number }> = {
-  foot: { dist: 6.2, pitch: 0.3, lift: 1.5, follow: 0.6 },
-  sled: { dist: 8.6, pitch: 0.26, lift: 1.6, follow: 3.2 },
-  skis: { dist: 7.2, pitch: 0.3, lift: 1.4, follow: 2.6 },
-  heli: { dist: 19, pitch: 0.36, lift: 2.5, follow: 1.4 },
-  indoor: { dist: 9.5, pitch: 0.95, lift: 0.8, follow: 0 },
-  watch: { dist: 115, pitch: 0.2, lift: 4, follow: 0 },
+/**
+ * `ahead`: how far past the character the camera aims, as a share of its distance. Aiming past
+ * you rather than at you puts you in the lower third and shows the ground you are heading into.
+ * `portrait`: how much further back the camera sits on a tall, narrow phone screen.
+ */
+const PROFILE: Record<CamMode, { dist: number; pitch: number; lift: number; follow: number; ahead: number; portrait: number }> = {
+  foot: { dist: 6.2, pitch: 0.3, lift: 1.5, follow: 0.6, ahead: 0.32, portrait: 0.3 },
+  sled: { dist: 8.6, pitch: 0.26, lift: 1.6, follow: 3.2, ahead: 0.5, portrait: 0.32 },
+  skis: { dist: 7.2, pitch: 0.3, lift: 1.4, follow: 2.6, ahead: 0.5, portrait: 0.3 },
+  heli: { dist: 19, pitch: 0.36, lift: 2.5, follow: 1.4, ahead: 0.4, portrait: 0.4 },
+  indoor: { dist: 9.5, pitch: 0.95, lift: 0.8, follow: 0, ahead: 0, portrait: 0.15 },
+  watch: { dist: 115, pitch: 0.2, lift: 4, follow: 0, ahead: 0, portrait: 0.35 },
 };
 
 /**
@@ -24,16 +29,25 @@ export class FollowCamera {
   mode: CamMode = 'foot';
   private target = new THREE.Vector3();
   private idle = 10;
+  private recover = 0;
   private shake = 0;
   private readonly tmp = new THREE.Vector3();
+  private readonly aim = new THREE.Vector3();
+  private ahead = 0;
+  /** 0 on a landscape screen, 1 on a tall phone held upright */
+  portrait = 0;
 
   constructor(private cam: THREE.PerspectiveCamera, private terrain: Terrain) {}
 
   setMode(m: CamMode) {
     if (m === this.mode) return;
+    const was = this.mode;
     this.mode = m;
     if (m === 'indoor') this.pitch = PROFILE.indoor.pitch;
     if (m === 'heli') this.pitch = Math.max(this.pitch, 0.3);
+    // out of the lodge (or off the avalanche view): ease back to an over-the-shoulder view instead
+    // of staying on the steep indoor angle until you happen to walk somewhere
+    if (was === 'indoor' || was === 'watch') this.recover = 1.4;
   }
 
   kick(amount: number) {
@@ -65,7 +79,11 @@ export class FollowCamera {
       this.yaw += d * k;
       this.pitch += (p.pitch - this.pitch) * k * 0.5;
     }
-    const wantDist = p.dist * (this.mode === 'sled' ? 1 + Math.min(0.25, speed / 120) : 1);
+    if (this.recover > 0) {
+      this.recover -= dt;
+      if (this.idle > 0.3) this.pitch += (p.pitch - this.pitch) * Math.min(1, dt * 3.5);
+    }
+    const wantDist = p.dist * (1 + p.portrait * this.portrait) * (this.mode === 'sled' ? 1 + Math.min(0.25, speed / 120) : 1);
     this.dist += (wantDist - this.dist) * Math.min(1, dt * 3);
     // target: smoothed, a little ahead of fast vehicles
     const lead = this.mode === 'sled' || this.mode === 'skis' ? Math.min(3, speed * 0.12) : 0;
@@ -97,7 +115,13 @@ export class FollowCamera {
       this.cam.position.x += (Math.random() - 0.5) * s;
       this.cam.position.y += (Math.random() - 0.5) * s;
     }
-    this.cam.lookAt(this.target);
+    // aim a little past the character, along the way the camera looks
+    this.ahead += (p.ahead * (1 + this.portrait * 0.25) - this.ahead) * Math.min(1, dt * 4);
+    const reach = this.ahead * dist;
+    this.aim.set(this.target.x - Math.sin(this.yaw) * reach, this.target.y, this.target.z - Math.cos(this.yaw) * reach);
+    // over a crest the ground ahead falls away: never aim below the character's own feet
+    this.aim.y = Math.max(this.target.y - p.lift, Math.min(this.target.y, this.terrain.height(this.aim.x, this.aim.z) + p.lift));
+    this.cam.lookAt(this.aim);
   }
 
   /** The camera's ground-plane forward, for camera-relative movement. */

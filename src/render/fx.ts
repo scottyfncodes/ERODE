@@ -58,9 +58,19 @@ interface P {
   rise: number;
 }
 
+type EmitOpts = { life?: number; size?: number; grow?: number; alpha?: number; color?: readonly [number, number, number]; drag?: number; rise?: number };
+const NO_OPTS: EmitOpts = {};
+const WHITE = [0.97, 0.98, 1] as const;
+const SMOKE = [0.78, 0.78, 0.8] as const;
+const FLASH = [1, 0.75, 0.4] as const;
+const CLOUD = [0.95, 0.97, 1] as const;
+
 export class Particles {
   readonly points: THREE.Points;
   private pool: P[] = [];
+  private spare: P[] = [];
+  private back: P[] = [];
+  private oldest = 0;
   private pos: Float32Array;
   private size: Float32Array;
   private alpha: Float32Array;
@@ -91,10 +101,34 @@ export class Particles {
     this.points.renderOrder = 5;
   }
 
-  emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, opts: { life?: number; size?: number; grow?: number; alpha?: number; color?: [number, number, number]; drag?: number; rise?: number } = {}) {
-    if (this.pool.length >= this.max) this.pool.shift();
-    const c = opts.color ?? [0.97, 0.98, 1];
-    this.pool.push({ x, y, z, vx, vy, vz, life: 0, max: opts.life ?? 1.2, size: opts.size ?? 1, grow: opts.grow ?? 1.5, alpha: opts.alpha ?? 0.8, r: c[0], g: c[1], b: c[2], drag: opts.drag ?? 1.5, rise: opts.rise ?? -4 });
+  emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, opts: EmitOpts = NO_OPTS) {
+    // a fixed pool: when it is full the oldest puff is recycled (no allocation, no array shifting
+    // while an avalanche is throwing hundreds a second)
+    let p: P;
+    if (this.pool.length < this.max) {
+      p = this.spare.pop() ?? ({} as P);
+      this.pool.push(p);
+    } else {
+      p = this.pool[this.oldest];
+      this.oldest = (this.oldest + 1) % this.pool.length;
+    }
+    const c = opts.color ?? WHITE;
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    p.vx = vx;
+    p.vy = vy;
+    p.vz = vz;
+    p.life = 0;
+    p.max = opts.life ?? 1.2;
+    p.size = opts.size ?? 1;
+    p.grow = opts.grow ?? 1.5;
+    p.alpha = opts.alpha ?? 0.8;
+    p.r = c[0];
+    p.g = c[1];
+    p.b = c[2];
+    p.drag = opts.drag ?? 1.5;
+    p.rise = opts.rise ?? -4;
   }
 
   /** A burst of powder (sled spray, a landing, a fall). */
@@ -109,7 +143,7 @@ export class Particles {
       size: 1.4,
       grow: 4,
       alpha: 0.35,
-      color: [0.78, 0.78, 0.8],
+      color: SMOKE,
       drag: 0.2,
       rise: 0.15,
     });
@@ -122,7 +156,7 @@ export class Particles {
       const s = 6 + Math.random() * 16;
       this.emit(x, y + 1, z, Math.cos(a) * s * 0.6, 8 + Math.random() * 18, Math.sin(a) * s * 0.6, { life: 1.6 + Math.random() * 1.4, size: 4 + Math.random() * 5, grow: 3, alpha: 0.9, drag: 1.2, rise: -6 });
     }
-    for (let i = 0; i < 12; i++) this.emit(x, y + 1.5, z, (Math.random() - 0.5) * 4, 6 + Math.random() * 4, (Math.random() - 0.5) * 4, { life: 0.5, size: 6, grow: 2, alpha: 1, color: [1, 0.75, 0.4], drag: 3, rise: 0 });
+    for (let i = 0; i < 12; i++) this.emit(x, y + 1.5, z, (Math.random() - 0.5) * 4, 6 + Math.random() * 4, (Math.random() - 0.5) * 4, { life: 0.5, size: 6, grow: 2, alpha: 1, color: FLASH, drag: 3, rise: 0 });
   }
 
   /** The avalanche's powder cloud boiling off the moving snow. */
@@ -134,7 +168,7 @@ export class Particles {
       alpha: 0.38,
       drag: 0.6,
       rise: 0.2,
-      color: [0.95, 0.97, 1],
+      color: CLOUD,
     });
   }
 
@@ -144,10 +178,19 @@ export class Particles {
     this.uniforms.uFogNear.value = fog.near;
     this.uniforms.uFogFar.value = fog.far;
     let j = 0;
-    for (let i = 0; i < this.pool.length; i++) {
-      const p = this.pool[i];
+    // walk oldest first (the pool is a ring once full) into the other buffer, so survivors stay in
+    // age order and the next recycle takes the genuinely oldest puff
+    const from = this.pool;
+    const into = this.back;
+    into.length = 0;
+    const len = from.length;
+    for (let n = 0; n < len; n++) {
+      const p = from[(this.oldest + n) % len];
       p.life += dt;
-      if (p.life >= p.max) continue;
+      if (p.life >= p.max) {
+        this.spare.push(p);
+        continue;
+      }
       const k = Math.exp(-p.drag * dt);
       p.vx *= k;
       p.vz *= k;
@@ -155,7 +198,8 @@ export class Particles {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      this.pool[j++] = p;
+      into.push(p);
+      j++;
       const f = p.life / p.max;
       const o = (j - 1) * 3;
       this.pos[o] = p.x;
@@ -167,11 +211,32 @@ export class Particles {
       this.color[o + 1] = p.g;
       this.color[o + 2] = p.b;
     }
-    this.pool.length = j;
+    this.back = from;
+    this.pool = into;
+    this.oldest = 0;
     this.n = j;
     this.geo.setDrawRange(0, this.n);
     for (const k of ['position', 'aSize', 'aAlpha', 'aColor']) (this.geo.getAttribute(k) as THREE.BufferAttribute).needsUpdate = true;
   }
+}
+
+/** A 32 px soft disc, made in memory (no image to load). */
+function flakeSprite(): THREE.DataTexture {
+  const n = 32;
+  const data = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const r = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2) / (n / 2);
+      const a = Math.max(0, Math.min(1, (1 - r) / 0.55));
+      const o = (y * n + x) * 4;
+      data[o] = data[o + 1] = data[o + 2] = 255;
+      data[o + 3] = Math.round(a * a * (3 - 2 * a) * 255);
+    }
+  const t = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
 }
 
 /** Falling snow in a box that travels with the camera. */
@@ -193,7 +258,9 @@ export class Snowfall {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
-    this.mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, transparent: true, opacity: 0.9, depthWrite: false, sizeAttenuation: true, fog: true });
+    // a soft round flake: without a sprite, points draw as hard squares, and the ones that drift
+    // past the lens show up as big white tiles
+    this.mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, map: flakeSprite(), alphaTest: 0.02, transparent: true, opacity: 0.9, depthWrite: false, sizeAttenuation: true, fog: true });
     this.points = new THREE.Points(geo, this.mat);
     this.points.frustumCulled = false;
   }
@@ -203,7 +270,7 @@ export class Snowfall {
     this.points.geometry.setDrawRange(0, shown);
     this.points.visible = shown > 0;
     if (!shown) return;
-    this.mat.size = 0.14 + intensity * 0.08;
+    this.mat.size = 0.2 + intensity * 0.1;
     const bx = this.box.x;
     const by = this.box.y;
     const bz = this.box.z;
@@ -226,6 +293,8 @@ export class Snowfall {
   }
 }
 
+const ORDER = [0, 2, 1, 1, 2, 3];
+
 /** Ribbons pressed into the snow. Each source lays down quads; old ones fade and are reused. */
 export class Tracks {
   readonly mesh: THREE.Mesh;
@@ -236,6 +305,7 @@ export class Tracks {
   private last = new Map<string, { lx: number; lz: number; rx: number; rz: number; y1: number; y2: number; x: number; z: number }>();
   /** seconds a track lasts (fresh snow fills them in faster) */
   life = 240;
+  private readonly quad = new Float32Array(12);
 
   constructor(private terrain: Terrain, private max = 1600) {
     this.pos = new Float32Array(max * 6 * 3);
@@ -274,13 +344,41 @@ export class Tracks {
     const i = this.head;
     this.head = (this.head + 1) % this.max;
     this.ages[i] = 0;
-    const v = [prev.lx, prev.y1, prev.lz, prev.rx, prev.y2, prev.rz, lx, y1, lz, qx, y2, qz];
-    const order = [0, 2, 1, 1, 2, 3];
+    const v = this.quad;
+    v[0] = prev.lx;
+    v[1] = prev.y1;
+    v[2] = prev.lz;
+    v[3] = prev.rx;
+    v[4] = prev.y2;
+    v[5] = prev.rz;
+    v[6] = lx;
+    v[7] = y1;
+    v[8] = lz;
+    v[9] = qx;
+    v[10] = y2;
+    v[11] = qz;
     for (let k = 0; k < 6; k++) {
-      const s = order[k] * 3;
-      this.pos.set([v[s], v[s + 1], v[s + 2]], (i * 6 + k) * 3);
-      this.col.set([0.62, 0.7, 0.82, depth], (i * 6 + k) * 4);
+      const s = ORDER[k] * 3;
+      const o = (i * 6 + k) * 3;
+      this.pos[o] = v[s];
+      this.pos[o + 1] = v[s + 1];
+      this.pos[o + 2] = v[s + 2];
+      const c = (i * 6 + k) * 4;
+      this.col[c] = 0.62;
+      this.col[c + 1] = 0.7;
+      this.col[c + 2] = 0.82;
+      this.col[c + 3] = depth;
     }
+  }
+
+  /** Smooth snow again (a new patrol). */
+  clear() {
+    this.last.clear();
+    this.ages.fill(1e9);
+    this.pos.fill(0);
+    this.col.fill(0);
+    (this.mesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    (this.mesh.geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
   }
 
   /** Stop a ribbon (so the next one does not join it). */

@@ -60,6 +60,8 @@ const storage = (): Store | null => {
   }
 };
 
+const UP = new THREE.Vector3(0, 1, 0);
+
 export class Game {
   private rig: Rig;
   private terrain: Terrain;
@@ -109,6 +111,7 @@ export class Game {
   private stepClock = 0;
   private seat = new THREE.Vector3();
   private tmp = new THREE.Vector3();
+  private tmp2 = new THREE.Vector3();
   private smokeT = 0;
   private rng = Math.random;
   private passengerVisible = false;
@@ -170,6 +173,11 @@ export class Game {
       } else this.audio.resume();
     });
     window.addEventListener('pagehide', () => this.save());
+    // a touch wakes sound the phone put to sleep (a call, the lock screen, another app)
+    window.addEventListener('pointerdown', () => this.audio.ready && this.audio.unlock(), { capture: true, passive: true });
+    // iOS reports the new size a beat after it turns
+    window.addEventListener('orientationchange', () => setTimeout(() => this.rig.resize(), 250));
+    window.visualViewport?.addEventListener('resize', () => this.rig.resize());
   }
 
   // ------------------------------------------------------------------ setup
@@ -294,9 +302,26 @@ export class Game {
     this.sled = newGlider(this.p.sled.x, this.p.sled.z, this.p.sled.yaw, this.terrain);
     this.heli = newHeli(this.p.heli.x, this.p.heli.z, this.p.heli.yaw, this.terrain);
     this.dog = newHusky(pl.x + 1.5, pl.z + 1, this.terrain);
+    this.skis = newGlider(pl.x, pl.z, pl.yaw, this.terrain);
     this.pack.reset();
     this.props.resetTree();
     this.mode = 'foot';
+    // nothing from the last patrol carries over: the avalanche camera, a half-held job, an
+    // unanswered call, queued radio, Koda's scent trail, pins and old tracks in the snow
+    this.watching = 0;
+    this.watchSkip = false;
+    this.holdId = '';
+    this.holdT = 0;
+    this.alertShown = null;
+    this.passengerVisible = false;
+    this.hud.reset();
+    this.markers.setPaws([], 0);
+    this.markers.setPins([]);
+    this.markers.setBeacon(null);
+    this.tracks.clear();
+    this.player.hold(null);
+    this.cam.setMode('foot');
+    this.cam.snapBehind(pl.yaw);
     this.applyProfile();
   }
 
@@ -465,7 +490,7 @@ export class Game {
     this.cond = conditions(this.p.weather);
     this.rig.setConditions(this.cond);
     this.grade();
-    this.rig.focus(new THREE.Vector3(HQ.x, this.station.y, HQ.z), 70);
+    this.rig.focus(this.tmp2.set(HQ.x, this.station.y, HQ.z), 70);
     this.station.update(dt, this.rig.night);
     this.world.update(dt, this.rig.night, this.cond.wind);
     this.kitView.update(dt, this.rig.night);
@@ -479,9 +504,11 @@ export class Game {
   /** While a panel is open: the world holds still, the fire still flickers. */
   private idleFrame(dt: number) {
     this.input.frame();
+    // the keys that open a panel also close it
+    if (this.input.pressed('Escape') || (this.panels.kind === 'map' && (this.input.pressed('KeyM') || this.input.pressed('Tab')))) this.panels.close();
     this.station.update(dt, this.rig.night);
     this.hud.update(Math.max(dt, this.realDt));
-    this.audio.update(dt, { engine: 0, speed: 0, rotor: this.mode === 'heli' ? this.heli.rotor * 0.5 : 0, hiss: 0, wind: this.cond.wind, rumble: 0, fire: this.indoors, outdoors: 1 - this.indoors });
+    this.audio.update(dt, { engine: 0, speed: 0, rotor: this.mode === 'heli' ? this.heli.rotor * 0.5 : 0, hiss: 0, wind: this.cond.wind, rumble: 0, fire: this.indoors, outdoors: 1 - this.indoors, day: 1 - this.rig.night, talking: this.hud.talking });
   }
 
   private pixelScale() {
@@ -524,6 +551,7 @@ export class Game {
     this.station.cutaway(px, pz, this.rig.camera.position);
 
     // camera
+    this.cam.portrait = THREE.MathUtils.clamp((1 - this.rig.camera.aspect) / 0.5, 0, 1);
     const pos = this.focusPos();
     if (this.watching > 0 && !this.watchSkip) {
       const t = this.avalancheFocus();
@@ -772,6 +800,7 @@ export class Game {
     this.hud.clearAlert();
     this.alertShown = null;
     this.audio.radio();
+    this.audio.accept();
     this.hud.radio(def.from, def.alert, 5);
     this.hud.toast(def.title);
     if (id === 'tree') {
@@ -855,6 +884,7 @@ export class Game {
     const before = available(this.p);
     const r = complete(this.p, def.id);
     this.audio.reward();
+    if (r.rankAfter > r.rankBefore) this.audio.promote();
     this.hud.radio(def.from, def.done, 5);
     this.dog.mode = this.dog.mode === 'track' ? 'follow' : this.dog.mode;
     this.dog.trail = [];
@@ -1065,6 +1095,7 @@ export class Game {
     const held = this.input.held('action');
     const pressed = this.input.pressed('btn:action') || this.input.pressed('KeyE') || this.input.pressed('Space') || this.input.pressed('Enter');
     const enabled = a.enabled !== false;
+    if (pressed && !enabled) this.audio.deny();
     if (a.hold <= 0) {
       if (pressed && enabled) a.run();
       this.hud.setAction(a.label, !!a.red, 0, enabled);
@@ -1080,6 +1111,8 @@ export class Game {
       if (this.holdT >= a.hold) {
         this.holdT = 0;
         this.holdId = '';
+        this.audio.done();
+        this.hud.actDone();
         a.run();
       }
     } else if (this.holdId !== 'pet-pose') {
@@ -1156,7 +1189,7 @@ export class Game {
       const w = this.walker;
       const indoors = inLodge(w.x, w.z) || inGarage(w.x, w.z);
       pl.group.position.set(w.x, w.y + (indoors ? 0.32 : 0), w.z);
-      pl.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), w.yaw);
+      pl.group.quaternion.setFromAxisAngle(UP, w.yaw);
       const carrying = !!this.p.active?.carrying;
       pose = this.holdT > 0 && this.holdId && this.holdId !== 'pet-pose' ? 'work' : this.holdId === 'pet-pose' ? 'pet' : carrying ? 'carry' : w.speed > 4 ? 'run' : w.speed > 0.3 ? 'walk' : 'idle';
       pl.animate(pose, w.stride, w.speed, 0, dt);
@@ -1171,14 +1204,14 @@ export class Game {
     } else if (this.mode === 'skis') {
       const s = this.skis;
       pl.group.position.set(s.x, s.y + 0.08, s.z);
-      pl.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.yaw);
+      pl.group.quaternion.setFromAxisAngle(UP, s.yaw);
       pl.animate('ski', s.x + s.z, glideSpeed(s), s.lean, dt);
     }
     // Nils on the back of the sled
     const r = this.p.active;
     const nilsRiding = r?.id === 'skier' && r.passenger;
     if (nilsRiding) {
-      const seat = this.sledMesh.rack.clone();
+      const seat = this.tmp2.copy(this.sledMesh.rack);
       seat.z -= 0.35;
       this.sledMesh.body.localToWorld(seat);
       this.props.nils.group.position.copy(seat).y -= 0.62;
@@ -1199,7 +1232,7 @@ export class Game {
     const d = this.dog;
     const dm = this.dogMesh;
     if (d.mode === 'ride' && this.mode === 'sled') {
-      const rack = this.sledMesh.rack.clone();
+      const rack = this.tmp2.copy(this.sledMesh.rack);
       this.sledMesh.body.localToWorld(rack);
       dm.group.visible = true;
       dm.group.position.copy(rack).y -= 0.45;
@@ -1210,7 +1243,7 @@ export class Game {
     } else {
       dm.group.visible = true;
       dm.group.position.set(d.x, d.y + (inLodge(d.x, d.z) ? 0.32 : 0), d.z);
-      dm.group.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), d.yaw);
+      dm.group.quaternion.setFromAxisAngle(UP, d.yaw);
       dm.animate(d.anim, d.stride, dt);
       if ((d.anim === 'run' || d.anim === 'trot') && Math.random() < dt * 6 && this.terrain.surface(d.x, d.z) === 'powder') this.particles.powder(d.x, d.y + 0.1, d.z, 1, 0.6, 0.6, 0, 0, 0.4);
     }
@@ -1221,10 +1254,11 @@ export class Game {
     if (this.smokeT > 0) return;
     this.smokeT = this.rig.quality.tier === 'low' ? 0.35 : 0.2;
     const camPos = this.rig.camera.position;
-    for (const s of [...this.station.smokeSources, ...this.world.smokeSources]) {
-      if (s.distanceToSquared(camPos) > 400 * 400) continue;
-      this.particles.smoke(s.x, s.y, s.z, this.cond.wind);
-    }
+    for (const list of [this.station.smokeSources, this.world.smokeSources])
+      for (const s of list) {
+        if (s.distanceToSquared(camPos) > 400 * 400) continue;
+        this.particles.smoke(s.x, s.y, s.z, this.cond.wind);
+      }
   }
 
   // ------------------------------------------------------------------ HUD
@@ -1316,6 +1350,8 @@ export class Game {
       rumble: this.pack.fired && !this.pack.done ? Math.min(1, this.pack.moving / 120) : 0,
       fire: this.indoors * (inLodge(this.walker.x, this.walker.z) ? 1 : 0),
       outdoors: 1 - this.indoors * 0.7,
+      day: 1 - this.rig.night,
+      talking: this.hud.talking,
     });
   }
 
@@ -1323,6 +1359,7 @@ export class Game {
 
   private openBoard(tab: 'calls' | 'station' | 'log' = 'calls') {
     this.input.release();
+    if (!this.panels.open) this.audio.paper();
     const danger = avalancheDanger(this.p.weather, this.cond);
     this.panels.board(
       this.p,
@@ -1336,7 +1373,7 @@ export class Game {
           this.solid.setEnabled(u, true);
           this.hud.toast(`Built: ${UPGRADES.find((k) => k.id === u)!.name}`, 'good', 3);
           this.save();
-        } else this.audio.click();
+        } else this.audio.deny();
         this.openBoard('station');
       },
       tab,
@@ -1345,6 +1382,7 @@ export class Game {
 
   private openOutfit(title: string, groups: Group[]) {
     this.input.release();
+    if (!this.panels.open) this.audio.paper();
     this.panels.outfit(
       title,
       groups,
@@ -1354,7 +1392,7 @@ export class Game {
           this.audio.chime();
           this.applyProfile();
           this.save();
-        } else this.audio.click();
+        } else this.audio.deny();
       },
       (id) => {
         equip(this.p, id);
@@ -1367,6 +1405,7 @@ export class Game {
 
   private openMap() {
     this.input.release();
+    if (!this.panels.open) this.audio.paper();
     const pos = this.pos2();
     const r = this.p.active;
     let target: { x: number; z: number; label: string } | null = null;
@@ -1387,6 +1426,7 @@ export class Game {
 
   private openPause() {
     this.input.release();
+    if (!this.panels.open) this.audio.paper();
     this.save();
     this.panels.pause(
       this.p.settings,

@@ -240,6 +240,9 @@ button {
 }
 
 /* ---------------- HUD ---------------- */
+.hud > .stack {
+  display: contents;
+}
 .hud {
   position: fixed;
   inset: 0;
@@ -248,12 +251,12 @@ button {
 .hud > * {
   pointer-events: auto;
 }
-.hud > .task,
-.hud > .compass,
-.hud > .wp-dist,
+.hud .task,
+.hud .compass,
+.hud .wp-dist,
 .hud > .speedo,
-.hud > .radio,
-.hud > .toast,
+.hud .radio,
+.hud .toast,
 .hud > .scan,
 .hud > .alt,
 .hud > .hint {
@@ -519,6 +522,58 @@ button {
 .act.hidden {
   visibility: hidden;
 }
+.act.pop {
+  animation: act-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+.act.done {
+  animation: act-done 0.45s ease-out;
+}
+@keyframes act-pop {
+  from {
+    transform: scale(0.82);
+  }
+}
+@keyframes act-done {
+  0% {
+    box-shadow: 0 0 0 0 rgba(76, 194, 122, 0.85), 0 4px 0 #b9b1a0;
+  }
+  100% {
+    box-shadow: 0 0 0 22px rgba(76, 194, 122, 0), 0 4px 0 #b9b1a0;
+  }
+}
+/* paid: the funds box counts up and the amount floats off it */
+.cond .box {
+  position: relative;
+}
+.cond .box.paid .big {
+  color: var(--amber);
+}
+.cond .gain {
+  position: absolute;
+  right: 8px;
+  top: 100%;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--amber);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  animation: gain-up 1.5s ease-out forwards;
+}
+@keyframes gain-up {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
 .side {
   display: flex;
   flex-direction: column;
@@ -780,6 +835,31 @@ button {
 }
 
 /* ---------------- panels ---------------- */
+.panel-wrap.enter {
+  animation: wrap-in 0.22s ease-out both;
+}
+.panel-wrap.enter .panel {
+  animation: panel-in 0.32s cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+@keyframes wrap-in {
+  from {
+    background: rgba(10, 15, 20, 0);
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-wrap.enter,
+  .panel-wrap.enter .panel,
+  .act.pop,
+  .act.done {
+    animation: none;
+  }
+}
 .panel-wrap {
   position: fixed;
   inset: 0;
@@ -1187,6 +1267,23 @@ button {
 .title-screen .inner {
   max-width: 520px;
 }
+body:not(.booted) .title-screen .inner {
+  visibility: hidden;
+}
+body.booted .title-screen .inner {
+  animation: title-in 0.8s cubic-bezier(0.2, 0.8, 0.25, 1) 0.35s both;
+}
+@keyframes title-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.booted .title-screen .inner {
+    animation: none;
+  }
+}
 .title-screen p {
   font-size: 15px;
   line-height: 1.45;
@@ -1307,38 +1404,71 @@ button {
   .cond .box.wx {
     margin-right: auto;
   }
-  .task {
-    top: calc(66px + var(--safe-t));
-    max-width: calc(100vw - 20px);
+  /* the cards flow under the instruments, so a long objective pushes the compass down instead
+     of covering it */
+  .hud > .stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    position: absolute;
+    left: calc(10px + var(--safe-l));
     right: calc(10px + var(--safe-r));
+    top: calc(62px + var(--safe-t));
+    pointer-events: none;
+  }
+  .hud .stack > * {
+    position: relative;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    transform: none;
+  }
+  .task {
+    align-self: stretch;
+    max-width: none;
   }
   .compass {
-    top: calc(166px + var(--safe-t));
-    width: 70vw;
+    width: min(300px, 76vw);
+    height: 34px;
+    flex: none;
   }
   .wp-dist {
-    top: calc(208px + var(--safe-t));
+    margin-top: -2px;
   }
-  .toast {
-    top: calc(240px + var(--safe-t));
+  .toast,
+  .toast.on {
+    transform: none;
+  }
+  .radio {
+    max-width: 100%;
+    font-size: 13px;
+    padding: 7px 12px;
   }
   .alert {
     top: auto;
     bottom: calc(150px + var(--safe-b));
     max-width: calc(100vw - 20px);
   }
-  .radio {
-    bottom: calc(196px + var(--safe-b));
-    max-width: calc(100vw - 24px);
-  }
   .actions {
     right: calc(12px + var(--safe-r));
-  }
-  .alt {
-    top: 46%;
   }
   .speedo {
     left: calc(12px + var(--safe-l));
     transform: none;
+  }
+  /* the pilot's readout sits bottom left, clear of the helicopter in the middle of the screen */
+  .alt {
+    top: auto;
+    right: auto;
+    bottom: calc(16px + var(--safe-b));
+    left: calc(12px + var(--safe-l));
+    transform: none;
+    text-align: left;
+    padding: 6px 10px;
+  }
+  .alt .big {
+    font-size: 15px;
   }
 }

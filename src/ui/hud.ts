@@ -63,6 +63,9 @@ export class Hud {
   private altEl: HTMLElement;
   private hintEl: HTMLElement;
   private lastTask = '';
+  private cond: HTMLElement;
+  private compassW = 0;
+  private cache = new Map<string, string>();
   private queue: { who: string; text: string; secs: number }[] = [];
 
   constructor(parent: HTMLElement, input: Input) {
@@ -131,7 +134,14 @@ export class Hud {
     this.scanEl = el('div', 'scan', '<div class="ret"></div><div class="bar housing"><div class="l"></div><div class="p"><i></i></div></div>');
     this.altEl = el('div', 'alt housing hidden');
     this.hintEl = el('div', 'hint', '<div class="ghost"></div><div>Drag on the left to move<br/>Drag on the right to look</div>');
-    this.root.append(this.task, this.compass, this.wpDist, cond, actions, this.speedo, this.radioEl, this.toastEl, this.alertEl, this.scanEl, this.altEl, this.hintEl);
+    // the cards that stack under the instruments on a phone held upright (on a landscape screen the
+    // stack lays nothing out itself: `display: contents`, each card keeps its own place)
+    const stack = el('div', 'stack');
+    stack.append(this.task, this.compass, this.wpDist, this.toastEl, this.radioEl);
+    this.cond = cond;
+    this.root.append(stack, cond, actions, this.speedo, this.alertEl, this.scanEl, this.altEl, this.hintEl);
+    window.addEventListener('resize', () => this.layout());
+    window.visualViewport?.addEventListener('resize', () => this.layout());
     // compass ticks
     for (let d = 0; d < 360; d += 15) {
       const t = el('div', d % 45 === 0 ? 'tick big' : 'tick');
@@ -147,6 +157,7 @@ export class Hud {
 
   show(on: boolean) {
     this.root.classList.toggle('hidden', !on);
+    if (on) requestAnimationFrame(() => this.layout());
   }
 
   setTask(t: TaskInfo | null, freeHint: string) {
@@ -162,11 +173,56 @@ export class Hud {
     let pips = '';
     for (let i = 0; i < t.steps; i++) pips += `<b class="${i < t.current ? 'done' : i === t.current ? 'now' : ''}"></b>`;
     this.task.innerHTML = `<div class="fam label"><i></i>${t.family}</div><div class="title">${t.title}</div><div class="obj">${t.objective}</div><div class="pips">${pips}</div>`;
+    this.layout();
+  }
+
+  /**
+   * On a landscape phone the compass sits in whatever room the task card and the instruments
+   * leave at the top; when there is too little, it drops under them. Measured only when the
+   * layout changes, never per frame.
+   */
+  layout() {
+    const c = this.compass.style;
+    const d = this.wpDist.style;
+    const t = this.toastEl.style;
+    c.left = c.width = c.top = d.left = d.top = t.top = '';
+    if (this.root.classList.contains('hidden') || window.innerWidth < window.innerHeight) {
+      this.compassW = this.compass.clientWidth;
+      return;
+    }
+    const task = this.task.getBoundingClientRect();
+    const cond = this.cond.getBoundingClientRect();
+    const gap = cond.left - task.right - 20;
+    let bottom = Math.max(task.bottom, cond.bottom);
+    if (gap >= 150) {
+      const mid = `${Math.round((cond.left + task.right) / 2)}px`;
+      c.left = d.left = mid;
+      c.width = `${Math.min(300, gap)}px`;
+    } else {
+      // under the instruments, lined up with their right edge
+      const w = Math.min(280, cond.width);
+      const below = Math.round(cond.bottom + 6);
+      c.left = d.left = `${Math.round(cond.right - w / 2)}px`;
+      c.width = `${w}px`;
+      c.top = `${below}px`;
+      d.top = `${below + 42}px`;
+      bottom = Math.max(task.bottom, below + 64);
+    }
+    t.top = `${Math.round(bottom + 8)}px`;
+    this.compassW = this.compass.clientWidth;
+  }
+
+  /** Write text only when it changed: the HUD updates every frame, the DOM should not. */
+  private put(key: string, e: HTMLElement, v: string, html = false) {
+    if (this.cache.get(key) === v) return;
+    this.cache.set(key, v);
+    if (html) e.innerHTML = v;
+    else e.textContent = v;
   }
 
   /** Heading in degrees (0 = north), and the bearing to a waypoint. */
   setCompass(heading: number, bearing: number | null, dist: number, label: string) {
-    const w = this.compass.clientWidth || 300;
+    const w = this.compassW || (this.compassW = this.compass.clientWidth) || 300;
     const span = 120;
     const pxPer = w / span;
     for (const c of Array.from(this.tape.children) as HTMLElement[]) {
@@ -190,25 +246,59 @@ export class Hud {
     this.wp.style.opacity = Math.abs(d) > span / 2 ? '0.6' : '1';
     this.wpDist.style.display = '';
     const dtxt = dist >= 1000 ? `${(dist / 1000).toFixed(1)} km` : `${Math.round(dist)} m`;
-    this.wpDist.textContent = `${label ? label + '  ' : ''}${dtxt}`;
+    this.put('wp', this.wpDist, `${label ? label + '  ' : ''}${dtxt}`);
   }
 
   setConditions(time: string, wx: string, danger: number, dangerTxt: string, funds: number) {
-    this.time.textContent = time;
-    this.wx.textContent = wx;
-    this.dangerLvl.textContent = String(danger);
-    this.dangerLvl.className = `lvl d${danger}`;
-    this.dangerTxt.textContent = dangerTxt;
-    this.fundsEl.textContent = String(funds);
+    this.put('time', this.time, time);
+    this.put('wx', this.wx, wx);
+    this.put('lvl', this.dangerLvl, String(danger));
+    if (this.dangerLvl.className !== `lvl d${danger}`) this.dangerLvl.className = `lvl d${danger}`;
+    this.put('dtxt', this.dangerTxt, dangerTxt);
+    this.setFunds(funds);
   }
 
   setAction(label: string | null, red = false, progress = 0, enabled = true) {
+    const was = this.actLabel.textContent;
+    const hidden = this.act.classList.contains('hidden');
     this.act.classList.toggle('hidden', !label);
     if (!label) return;
-    if (this.actLabel.textContent !== label) this.actLabel.textContent = label;
+    if (was !== label || hidden) {
+      this.actLabel.textContent = label;
+      // a new thing to do pops in, so you notice the button changed under your thumb
+      this.act.classList.remove('pop');
+      void this.act.offsetWidth;
+      this.act.classList.add('pop');
+    }
     this.act.classList.toggle('red', red);
     this.act.classList.toggle('disabled', !enabled);
-    this.ringCircle.setAttribute('stroke-dashoffset', `${Math.PI * 92 * (1 - progress)}`);
+    const off = (Math.PI * 92 * (1 - progress)).toFixed(1);
+    if (this.ringCircle.getAttribute('stroke-dashoffset') !== off) this.ringCircle.setAttribute('stroke-dashoffset', off);
+  }
+
+  /** A held job finished: the button flashes. */
+  actDone() {
+    this.act.classList.remove('done');
+    void this.act.offsetWidth;
+    this.act.classList.add('done');
+  }
+
+  private fundsShown = -1;
+  private fundsTarget = 0;
+  /** Funds count up when you are paid, with the amount floating off the box. */
+  setFunds(funds: number) {
+    if (funds === this.fundsTarget && this.fundsShown >= 0) return;
+    const gain = funds - this.fundsTarget;
+    this.fundsTarget = funds;
+    if (this.fundsShown < 0 || gain <= 0 || this.root.classList.contains('hidden')) {
+      this.fundsShown = funds;
+      this.fundsEl.textContent = String(funds);
+      return;
+    }
+    const f = el('div', 'gain', `+${gain}`);
+    this.fundsEl.parentElement!.appendChild(f);
+    setTimeout(() => f.remove(), 1600);
+    this.fundsEl.parentElement!.classList.add('paid');
   }
 
   setChips(c: { off?: string | null; skis?: string | null; koda?: string | null; kodaOn?: boolean }) {
@@ -232,13 +322,13 @@ export class Hud {
   setSpeedo(kmh: number | null, sub: string) {
     this.speedo.classList.toggle('hidden', kmh === null);
     if (kmh === null) return;
-    this.speedo.innerHTML = `<span class="v">${Math.round(kmh)}</span><span class="u">km/h</span><span class="u">${sub}</span>`;
+    this.put('speedo', this.speedo, `<span class="v">${Math.round(kmh)}</span><span class="u">km/h</span><span class="u">${sub}</span>`, true);
   }
 
   setAlt(agl: number | null, elev = 0, speed = 0) {
     this.altEl.classList.toggle('hidden', agl === null);
     if (agl === null) return;
-    this.altEl.innerHTML = `<div class="label">Above ground</div><div class="big">${Math.round(agl)} m</div><div class="label" style="margin-top:6px">Altitude</div><div class="big">${elev} m</div><div class="label" style="margin-top:6px">Ground speed</div><div class="big">${Math.round(speed * 3.6)}</div>`;
+    this.put('alt', this.altEl, `<div class="label">Above ground</div><div class="big">${Math.round(agl)} m</div><div class="label" style="margin-top:6px">Altitude</div><div class="big">${elev} m</div><div class="label" style="margin-top:6px">Ground speed</div><div class="big">${Math.round(speed * 3.6)} km/h</div>`, true);
   }
 
   setScan(label: string | null, progress: number) {
@@ -250,6 +340,11 @@ export class Hud {
 
   hint(on: boolean) {
     this.hintEl.classList.toggle('hidden', !on);
+  }
+
+  /** someone is on the radio right now */
+  get talking() {
+    return this.radioT > 0;
   }
 
   /** A line on the radio, subtitled; lines queue. */
@@ -296,7 +391,26 @@ export class Hud {
     this.alertEl.classList.remove('on');
   }
 
+  /** A fresh patrol: no leftover radio, toast, call or held button. */
+  reset() {
+    this.queue.length = 0;
+    this.radioT = 0;
+    this.radioEl.classList.remove('on');
+    this.toastT = 0;
+    this.toastEl.classList.remove('on');
+    this.clearAlert();
+    this.setScan(null, 0);
+    this.lastTask = '';
+    this.fundsShown = -1;
+  }
+
   update(dt: number) {
+    if (this.fundsShown !== this.fundsTarget && this.fundsShown >= 0) {
+      const step = Math.max(1, Math.ceil(Math.abs(this.fundsTarget - this.fundsShown) * Math.min(1, dt * 5)));
+      this.fundsShown += Math.sign(this.fundsTarget - this.fundsShown) * step;
+      this.fundsEl.textContent = String(this.fundsShown);
+      if (this.fundsShown === this.fundsTarget) this.fundsEl.parentElement!.classList.remove('paid');
+    }
     if (this.radioT > 0) {
       this.radioT -= dt;
       if (this.radioT <= 0) this.nextRadio();
