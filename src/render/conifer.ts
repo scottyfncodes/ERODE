@@ -17,6 +17,27 @@ export function colorize(g: BufferGeometry, fn: (y: number, i: number) => Color)
   return g;
 }
 
+/**
+ * Tilt normals outward and up for soft, rounded foliage shading (a crown reads as a mass of boughs,
+ * not as cut cones). Normals that face into the tree are flipped first, so it works on any winding.
+ */
+export function softenFoliage(g: BufferGeometry): BufferGeometry {
+  const p = g.getAttribute('position');
+  const n = g.getAttribute('normal');
+  for (let i = 0; i < n.count; i++) {
+    const px = p.getX(i),
+      pz = p.getZ(i);
+    const l = Math.hypot(px, pz) || 1;
+    const k = n.getX(i) * px + n.getZ(i) * pz < 0 && n.getY(i) < 0 ? -1 : 1;
+    const nx = k * n.getX(i) * 0.4 + (px / l) * 0.6,
+      ny = k * n.getY(i) * 0.4 + 0.6,
+      nz = k * n.getZ(i) * 0.4 + (pz / l) * 0.6;
+    const nl = Math.hypot(nx, ny, nz);
+    n.setXYZ(i, nx / nl, ny / nl, nz / nl);
+  }
+  return g;
+}
+
 /** A conifer: trunk + layered, drooping tiers of boughs. Height ~1 unit, scaled per instance. */
 export function coniferGeometry(seed: number, tiers = 7, slender = 1, segs = 13, rows = 3): { trunk: BufferGeometry; crown: BufferGeometry } {
   const rng = mulberry32(seed);
@@ -51,18 +72,7 @@ export function coniferGeometry(seed: number, tiers = 7, slender = 1, segs = 13,
       p.setY(i, py - edge * edge * 0.05 - Math.abs(Math.sin(a * 7 + phase)) * 0.025 * edge);
     }
     cone.computeVertexNormals();
-    // tilt normals outward/up for soft, rounded foliage shading
-    const n = cone.getAttribute('normal');
-    for (let i = 0; i < n.count; i++) {
-      const px = p.getX(i),
-        pz = p.getZ(i);
-      const l = Math.hypot(px, pz) || 1;
-      const nx = n.getX(i) * 0.4 + (px / l) * 0.6,
-        ny = n.getY(i) * 0.4 + 0.6,
-        nz = n.getZ(i) * 0.4 + (pz / l) * 0.6;
-      const nl = Math.hypot(nx, ny, nz);
-      n.setXYZ(i, nx / nl, ny / nl, nz / nl);
-    }
+    softenFoliage(cone);
     colorize(cone, (py) => {
       const local = Math.min(1, Math.max(0, (py - y) / h));
       // inner/lower parts of each tier are in shadow; upper tiers catch more light

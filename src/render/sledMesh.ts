@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ball, box, cyl, glow, mat, paint, PAL, repaint } from './kit';
+import { dressModel, mountAtPivot, retire } from './patrolModels';
 
 /**
  * The patrol snowmobile: a rounded cowl, a tall screen, two skis up front, a lugged track
@@ -11,6 +12,11 @@ export class SledMesh {
   readonly body = new THREE.Group();
   private main: THREE.MeshLambertMaterial;
   private second: THREE.MeshLambertMaterial;
+  private glass: THREE.MeshLambertMaterial;
+  /** the code-built shape, until (unless) the MeshCraft model replaces it */
+  private shell: THREE.Object3D[] = [];
+  /** true once the MeshCraft model is in */
+  modelled = false;
   private skis: THREE.Group[] = [];
   private track: THREE.Mesh;
   private trackTex = 0;
@@ -29,7 +35,7 @@ export class SledMesh {
     this.second = paint(PAL.white);
     const dark = mat(0x25282c);
     const metal = mat(PAL.metal);
-    const glass = new THREE.MeshLambertMaterial({ color: 0x9ad2ea, transparent: true, opacity: 0.55, emissive: 0x153848 });
+    const glass = (this.glass = new THREE.MeshLambertMaterial({ color: 0x9ad2ea, transparent: true, opacity: 0.55, emissive: 0x153848 }));
     const b = this.body;
 
     // cowl: a stretched, squashed sphere, with a white belly pan
@@ -65,6 +71,7 @@ export class SledMesh {
       const w = cyl(0.21, 0.21, 0.76, 10, metal, 0, 0.26, z);
       w.rotation.z = Math.PI / 2;
       b.add(w);
+      this.shell.push(w);
     }
     // rack and taillight
     const rack = new THREE.Group();
@@ -92,6 +99,7 @@ export class SledMesh {
       const spindle = cyl(0.05, 0.05, 0.4, 6, metal, s * 0.55, 0.22, -1.0);
       this.skis.push(ski);
       b.add(ski, arm, spindle);
+      this.shell.push(plank, tip, arm, spindle);
     }
     // the crate, for deliveries
     this.crate = new THREE.Group();
@@ -102,10 +110,39 @@ export class SledMesh {
     this.crate.visible = false;
 
     b.add(cowl, pan, hood, stripe, screen, bar, stem, ...grips, seat, seatBack, tunnel, tunnelSide, this.track, lugs, rack, tail, this.lamp, this.headlight, this.headlight.target, this.crate);
+    this.shell.push(cowl, pan, hood, stripe, screen, bar, stem, ...grips, seat, seatBack, tunnel, tunnelSide, this.track, lugs, rack);
     this.group.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh) m.castShadow = true;
     });
+  }
+
+  /**
+   * Swap the code-built shape for the MeshCraft model (public/models/rs_sled.glb). Same size, same
+   * place, same pivots: the skis still steer, the paint still changes, the lamps, headlight and crate
+   * are the code's own. Returns false, leaving the code-built sled, if the model is unusable.
+   */
+  useModel(scene: THREE.Object3D | undefined): boolean {
+    const n = dressModel(scene, ['sled_body', 'sled_ski_L', 'sled_ski_R'], {
+      main: this.main,
+      second: this.second,
+      glass: this.glass,
+      dark: mat(0x25282c),
+      metal: mat(PAL.metal),
+      stripe: mat(0xffd23f),
+      grip: mat(0x111111),
+      lug: mat(0x3a3e44),
+      cross: mat(PAL.white),
+    });
+    if (!n) return false;
+    retire(this.shell);
+    this.shell = [];
+    this.body.add(n.sled_body);
+    // the model's ski nodes sit on the same pivots as the steering groups
+    mountAtPivot(n.sled_ski_L, this.skis[0]);
+    mountAtPivot(n.sled_ski_R, this.skis[1]);
+    this.modelled = true;
+    return true;
   }
 
   setPaint(main: number, second: number) {

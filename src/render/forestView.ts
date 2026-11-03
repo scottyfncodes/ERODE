@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../sim/noise';
 import type { Tree } from '../world/forest';
-import { coniferGeometry } from './conifer';
+import { coniferGeometry, softenFoliage } from './conifer';
 import { createBarkMaterial, createFoliageMaterial } from './materials';
+import type { PatrolModels } from './patrolModels';
 
 /** A conifer from ROCKSLIDE's forests with snow loaded on the inner boughs. */
 function snowyConifer(seed: number) {
@@ -27,11 +28,54 @@ function snowyConifer(seed: number) {
   return { trunk, crown };
 }
 
+/**
+ * The Kessel spruce from MeshCraft (public/models/rs_spruce_a/b.glb): the same 1-unit tree, star-cut
+ * tiers of drooping boughs with the snow already painted on, as geometry for the instanced forest.
+ * Null if the model is missing either node (the procedural conifer is used instead).
+ */
+export function modelConifer(scene: THREE.Object3D | undefined): { trunk: THREE.BufferGeometry; crown: THREE.BufferGeometry } | null {
+  if (!scene) return null;
+  scene.updateMatrixWorld(true);
+  const crownMesh = scene.getObjectByName('spruce_crown') as THREE.Mesh | undefined;
+  const trunkMesh = scene.getObjectByName('spruce_trunk') as THREE.Mesh | undefined;
+  if (!crownMesh?.isMesh || !trunkMesh?.isMesh || !crownMesh.geometry.getAttribute('color')) {
+    console.warn('ROCKSLIDE: spruce model is incomplete, keeping the procedural conifer');
+    return null;
+  }
+  const bake = (m: THREE.Mesh, colour: boolean) => {
+    let g = m.geometry.clone().applyMatrix4(m.matrixWorld);
+    if (g.index) g = g.toNonIndexed();
+    const pos = g.getAttribute('position');
+    const out = new THREE.BufferGeometry();
+    const p = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) p.set([pos.getX(i), pos.getY(i), pos.getZ(i)], i * 3);
+    out.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    if (colour) {
+      // COLOR_0 may be rgba or normalised integers: read through the accessor, keep rgb
+      const src = g.getAttribute('color');
+      const c = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) c.set([src.getX(i), src.getY(i), src.getZ(i)], i * 3);
+      out.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    }
+    out.computeVertexNormals();
+    return out;
+  };
+  return { crown: softenFoliage(bake(crownMesh, true)), trunk: bake(trunkMesh, false) };
+}
+
 export class ForestView {
   readonly group = new THREE.Group();
 
-  constructor(trees: readonly Tree[]) {
-    const variants = [snowyConifer(11), snowyConifer(47)];
+  /** true when the trees are the MeshCraft spruce */
+  readonly modelled: boolean;
+
+  constructor(trees: readonly Tree[], models: PatrolModels = {}) {
+    // the MeshCraft spruce when both variants loaded; otherwise the procedural conifer, so the
+    // forest never mixes the two looks
+    const a = modelConifer(models.rs_spruce_a);
+    const b = modelConifer(models.rs_spruce_b);
+    this.modelled = !!(a && b);
+    const variants = a && b ? [a, b] : [snowyConifer(11), snowyConifer(47)];
     const foliage = createFoliageMaterial();
     const bark = createBarkMaterial(new THREE.Color(0.42, 0.27, 0.25));
     const cells = 5;

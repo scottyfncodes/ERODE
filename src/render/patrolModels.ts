@@ -1,0 +1,99 @@
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+/**
+ * The patrol's own models: the snowmobile, the helicopter and the Kessel spruce, built by GITCRAFT's
+ * MeshCraft from art/3d/scripts/patrol_models.py and shipped in public/models/.
+ *
+ * They replace code-built meshes, so each is modelled in the game's own coordinates (metres, +Y up,
+ * vehicles nose to -Z) with its moving parts as named nodes whose origin is the pivot the code turns
+ * them about. Every material carries a palette role (glTF extras -> userData.gitcraft_role); the
+ * vehicle meshes map each role back onto the game's own materials, so paint jobs and the storybook
+ * grade work as before. If a file is missing or broken it is reported and skipped, and the code-built
+ * version it would have replaced stays in place.
+ */
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b'] as const;
+export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
+export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
+
+export async function loadPatrolModels(base: string, onProgress?: (f: number) => void): Promise<PatrolModels> {
+  const loader = new GLTFLoader();
+  const out: PatrolModels = {};
+  let n = 0;
+  await Promise.all(
+    PATROL_MODEL_IDS.map(async (id) => {
+      try {
+        const gltf = await loader.loadAsync(`${base}${id}.glb`);
+        out[id] = gltf.scene;
+      } catch (e) {
+        console.warn(`ROCKSLIDE: model ${id} did not load, keeping the code-built one`, e);
+      }
+      onProgress?.(++n / PATROL_MODEL_IDS.length);
+    }),
+  );
+  return out;
+}
+
+/** The palette role a glTF mesh was painted with ("main", "dark", ...). */
+export function roleOf(m: THREE.Mesh): string {
+  const mat = m.material as THREE.Material;
+  const r = mat?.userData?.gitcraft_role;
+  if (typeof r === 'string') return r;
+  // fall back to the material name: RS_Main -> main
+  return (mat?.name ?? '').replace(/^[A-Z]+_/, '').replace(/^./, (c) => c.toLowerCase());
+}
+
+/**
+ * Find the named nodes of a model and dress every mesh in it with the game's material for its role.
+ * Returns null (and changes nothing) if any node is missing or a role has no material, so the caller
+ * can keep its code-built mesh.
+ */
+export function dressModel(
+  scene: THREE.Object3D | undefined,
+  nodes: readonly string[],
+  materials: Record<string, THREE.Material>,
+): Record<string, THREE.Object3D> | null {
+  if (!scene) return null;
+  const found: Record<string, THREE.Object3D> = {};
+  for (const name of nodes) {
+    const o = scene.getObjectByName(name);
+    if (!o) {
+      console.warn(`ROCKSLIDE: model is missing its ${name} node, keeping the code-built one`);
+      return null;
+    }
+    found[name] = o;
+  }
+  const meshes: THREE.Mesh[] = [];
+  scene.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
+  });
+  for (const m of meshes) {
+    if (!materials[roleOf(m)]) {
+      console.warn(`ROCKSLIDE: model has an unknown paint role "${roleOf(m)}", keeping the code-built one`);
+      return null;
+    }
+  }
+  for (const m of meshes) {
+    m.material = materials[roleOf(m)];
+    // the game's materials take their colour from the material, not COLOR_0
+    m.geometry.deleteAttribute('color');
+    m.castShadow = true;
+  }
+  return found;
+}
+
+/** Re-home a pivot node under a group that already sits on the same pivot. */
+export function mountAtPivot(node: THREE.Object3D, pivot: THREE.Object3D) {
+  node.removeFromParent();
+  node.position.set(0, 0, 0);
+  node.rotation.set(0, 0, 0);
+  pivot.add(node);
+}
+
+/** Take code-built parts out of a mesh once a model stands in for them. */
+export function retire(parts: THREE.Object3D[]) {
+  for (const p of parts) {
+    p.removeFromParent();
+    p.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+  }
+}

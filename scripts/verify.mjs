@@ -49,6 +49,9 @@ for (const [name, width, height] of SIZES) {
   const kit = await P(() => window.patrol.kit());
   r.kit = { loaded: kit.loaded.length, placed: kit.placed, drawCalls: kit.drawCalls };
   check(KIT.every((k) => kit.loaded.includes(k)), `${name}: kit models missing: ${KIT.filter((k) => !kit.loaded.includes(k)).join(', ')}`);
+  // the patrol's MeshCraft models stand in for the code-built sled, helicopter and conifer
+  r.models = await P(() => window.patrol.models());
+  check(r.models.sled && r.models.heli && r.models.forest, `${name}: patrol models not in use: ${JSON.stringify(r.models)}`);
   check(kit.placed > 300, `${name}: only ${kit.placed} kit pieces placed`);
   // HUD geometry, on foot, on the sled and in the helicopter (with a mission card and the radio up)
   const hud = async (label) => {
