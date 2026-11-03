@@ -1,5 +1,6 @@
 import { Game } from './game/game';
 import { loadKit } from './render/kitView';
+import { loadPatrolModels } from './render/patrolModels';
 import './ui/style.css';
 
 const loading = document.getElementById('loading')!;
@@ -40,9 +41,14 @@ async function boot() {
   if (document.fonts?.ready) await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
   progress(0.08, 'Hauling up the rocks');
   // the Kessel kit: GLBs from GITCRAFT's MeshCraft (art/3d). The game still runs if one is missing.
-  const kit = await loadKit(`${import.meta.env.BASE_URL}models/`, (f) => progress(0.08 + f * 0.06, 'Hauling up the rocks'));
+  // ...and the patrol's sled, helicopter and spruce (art/3d/scripts/patrol_models.py). Any that fail to
+  // load leave their code-built version in place.
+  const [kit, models] = await Promise.all([
+    loadKit(`${import.meta.env.BASE_URL}models/`, (f) => progress(0.08 + f * 0.06, 'Hauling up the rocks')),
+    loadPatrolModels(`${import.meta.env.BASE_URL}models/`),
+  ]);
   const canvas = document.getElementById('view') as HTMLCanvasElement;
-  const game = new Game(canvas, document.getElementById('ui')!, progress, kit);
+  const game = new Game(canvas, document.getElementById('ui')!, progress, kit, models);
   await nextFrame();
   progress(1, 'Ready');
   game.start();

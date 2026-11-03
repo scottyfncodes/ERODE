@@ -105,12 +105,44 @@
    "sha256": "44f20cd5155bfb15d327133586fdedaa57fb4deb3a72bf93703de3814560020d"
   },
   {
+   "path": "../public/models/rs_heli.glb",
+   "bytes": 206708,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_heli: patrol helicopter (2784 tris), replaces the code-built HeliMesh shape; art/3d/scripts/patrol_models.py; validated (Khronos 0 errors) and engine-checked (three@0.170), game three.js in tests/models.test.ts",
+   "sha256": "fc1b942e7e9242f856d2d6dd861444bd4ea4d326ffa768308640720a9cee778e"
+  },
+  {
    "path": "../public/models/rs_lantern.glb",
    "bytes": 36848,
    "tools": "MeshCraft (lantern template)",
    "status": "shipped",
    "notes": "rs_lantern: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
    "sha256": "85ec0d5bf0db1e3450a02c46f08f77aa883e99c1a862420b9821aeb2545c183b"
+  },
+  {
+   "path": "../public/models/rs_sled.glb",
+   "bytes": 147852,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_sled: patrol snowmobile (1964 tris), replaces the code-built SledMesh shape; art/3d/scripts/patrol_models.py; validated (Khronos 0 errors) and engine-checked (three@0.170), game three.js in tests/models.test.ts",
+   "sha256": "35477831e78c05148680a5e59c587f30fdf2171131eea464c45d484b62a2f3c6"
+  },
+  {
+   "path": "../public/models/rs_spruce_a.glb",
+   "bytes": 8536,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_spruce_a: Kessel spruce (62 tris), replaces the procedural conifer in the instanced forest; art/3d/scripts/patrol_models.py; validated and engine-checked",
+   "sha256": "8d4f63d33c16ae7e7caa34e53def836b8aec9e797fb427a480a74c378b48f00f"
+  },
+  {
+   "path": "../public/models/rs_spruce_b.glb",
+   "bytes": 8328,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_spruce_b: Kessel spruce, slimmer variant (60 tris); art/3d/scripts/patrol_models.py; validated and engine-checked",
+   "sha256": "d765ac6920151857fde6a8921d8f90986e18f44741c8e5b3d20a19e2a40325cc"
   },
   {
    "path": "../public/models/rs_stump.glb",
@@ -129,6 +161,6 @@
    "sha256": "f2c222aad1fbb293f2060e75e69267afa0d53dce2c5366395ebda9fef13331db"
   }
  ],
- "files": 16,
+ "files": 20,
  "updated": "2026-11-03"
 }

@@ -66,6 +66,26 @@ same draw calls as the old one.
 | `rs_cache` | Rescue caches: top station, pass barrier, weather station, Fernhut, Kessel Ridge, the yard |
 | `rs_lantern` | Lanterns on posts by doors; they swing (MeshCraft `swing` clip) and glow at dusk |
 
+### The patrol's models (3D)
+
+`3d/scripts/patrol_models.py` (MeshCraft `run_script`) builds the models that replace the biggest
+code-built meshes. Each is modelled in the game's own coordinates with the numbers from the code it
+replaces, so it lands in the same place at the same size; moving parts are nodes on their pivots.
+
+| Asset | Replaces | Nodes | Triangles |
+| --- | --- | --- | --- |
+| `rs_sled` | `SledMesh` shape (`src/render/sledMesh.ts`) | `sled_body`, `sled_ski_L/R` (steer) | 1,964 |
+| `rs_heli` | `HeliMesh` shape (`src/render/heliMesh.ts`) | `heli_body`, `heli_rotor`, `heli_tail_rotor` | 2,784 |
+| `rs_spruce_a/b` | the procedural conifer (`src/render/conifer.ts`) in the instanced forest | `spruce_crown`, `spruce_trunk` | 62 / 60 (was 76) |
+
+Materials are palette roles; the vehicles map each role back onto the game's own materials, so paint
+jobs and the storybook grade still apply. Lamps, glows, nav lights, the rotor disc, the searchlight
+and the delivery crate stay in code. `src/render/patrolModels.ts` loads them; if a file is missing or
+broken, the code-built version stays (`tests/models.test.ts` covers fit, pivots, budgets and the
+fallback). Build: `run_script` with `{"asset": "rs_sled", "palette": ".../rockslide-palette.json",
+"out": ".../rs_sled.blend"}`, then `export_asset` (three-web-toon), `validate_asset`, `engine_check`,
+and copy the main GLB (not the LOD or collision sidecars) into `public/models/`.
+
 Placement is data (`src/world/scatter.ts`): deterministic, kept off roads, pads, the lake,
 the avalanche path, every mission point, badge and charge spot, and fed into the same
 collision grid as the trees. `src/render/kitView.ts` drapes each piece's base onto the

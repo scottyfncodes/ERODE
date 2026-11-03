@@ -25,6 +25,7 @@ import { buildTerrain, snowUniforms } from '../render/terrainView';
 import { drawTopo } from '../render/topoMap';
 import { WorldView } from '../render/worldView';
 import { KitView, type Kit } from '../render/kitView';
+import type { PatrolModels } from '../render/patrolModels';
 import { kitObstacles, scatterKit, type Placed } from '../world/scatter';
 import { Hud } from '../ui/hud';
 import { Panels } from '../ui/panels';
@@ -118,10 +119,12 @@ export class Game {
   private alertShown: string | null = null;
   private fps = 60;
   private kitLoaded: string[] = [];
+  /** which code-built meshes the MeshCraft models replaced (QA) */
+  private modelled = { sled: false, heli: false, forest: false };
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
 
-  constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void, kit: Kit = {}) {
+  constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void, kit: Kit = {}, models: PatrolModels = {}) {
     this.p = loadProfile(this.store) ?? newProfile();
     this.rig = new Rig(canvas, detectQuality(this.p.settings.quality));
     progress(0.15, 'Raising the mountains');
@@ -137,7 +140,10 @@ export class Game {
     this.topo = drawTopo(this.terrain, 640);
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
-    scene.add(new ForestView(this.trees).group);
+    const forest = new ForestView(this.trees, models);
+    scene.add(forest.group);
+    // the patrol's vehicles from MeshCraft; the code-built ones stay if a model did not load
+    this.modelled = { sled: this.sledMesh.useModel(models.rs_sled), heli: this.heliMesh.useModel(models.rs_heli), forest: forest.modelled };
     this.kitLoaded = Object.keys(kit).sort();
     this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z), this.rig.quality.tier === 'high');
     scene.add(this.kitView.group);
@@ -1507,6 +1513,8 @@ export class Game {
       game: this,
       profile: () => this.p,
       /** the Kessel kit (QA): how much is placed, in how many draw calls, and the pieces nearest a point */
+      /** which code-built meshes the MeshCraft models replaced */
+      models: () => ({ ...this.modelled }),
       kit: (x?: number, z?: number, kind?: string) => ({
         loaded: this.kitLoaded,
         placed: this.kitView.placed,

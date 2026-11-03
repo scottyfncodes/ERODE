@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { box, cyl, glow, mat, paint, PAL, repaint } from './kit';
+import { dressModel, mountAtPivot, retire } from './patrolModels';
 
 const cylZ = (rt: number, rb: number, len: number, seg: number, m: THREE.Material) => {
   const c = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, len, seg), m);
@@ -21,6 +22,11 @@ export class HeliMesh {
   private strobe: THREE.Mesh[] = [];
   private main: THREE.MeshLambertMaterial;
   private second: THREE.MeshLambertMaterial;
+  private glass: THREE.MeshLambertMaterial;
+  /** the code-built shape, until (unless) the MeshCraft model replaces it */
+  private shell: THREE.Object3D[] = [];
+  /** true once the MeshCraft model is in */
+  modelled = false;
   readonly light: THREE.SpotLight;
   private lightCone: THREE.Mesh;
   /** a scanner glow under the nose */
@@ -34,7 +40,7 @@ export class HeliMesh {
     const yellow = mat(0xffd23f);
     const dark = mat(0x2a2e33);
     const grey = mat(PAL.metal);
-    const glass = new THREE.MeshLambertMaterial({ color: 0x8fd6f2, transparent: true, opacity: 0.85, emissive: 0x1a4a5e });
+    const glass = (this.glass = new THREE.MeshLambertMaterial({ color: 0x8fd6f2, transparent: true, opacity: 0.85, emissive: 0x1a4a5e }));
     const add = (...o: THREE.Object3D[]) => this.body.add(...o);
 
     const cabin = new THREE.Mesh(new THREE.SphereGeometry(1.7, 18, 12), this.main);
@@ -65,6 +71,7 @@ export class HeliMesh {
     const crossV = box(0.08, 0.7, 0.22, this.main, 1.69, 0.35, 0.1);
     const crossH = box(0.08, 0.22, 0.7, this.main, 1.69, 0.35, 0.1);
     add(cabin, belly, nose, stripe, door, crossV, crossH, boom, fin, finTip, stab, mast, engine);
+    this.shell.push(cabin, belly, nose, stripe, door, crossV, crossH, boom, fin, finTip, stab, mast, engine);
 
     for (let i = 0; i < 4; i++) {
       const b = box(12.4, 0.08, 0.42, dark);
@@ -72,6 +79,7 @@ export class HeliMesh {
       this.rotor.add(b);
     }
     this.rotor.add(cyl(0.35, 0.45, 0.5, 10, grey));
+    this.shell.push(...this.rotor.children);
     this.rotor.position.set(0, 2.45, -0.2);
     this.disc = new THREE.Mesh(new THREE.CircleGeometry(6.2, 32), new THREE.MeshBasicMaterial({ color: 0x1b1f24, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
     this.disc.rotation.x = -Math.PI / 2;
@@ -81,6 +89,7 @@ export class HeliMesh {
       const b = box(0.06, 1.9, 0.22, dark);
       b.rotation.x = (i * Math.PI) / 2;
       this.tail.add(b);
+      this.shell.push(b);
     }
     this.tail.position.set(-0.25, 1.75, 6.55);
     add(this.tail);
@@ -93,14 +102,18 @@ export class HeliMesh {
       const tip = box(0.42, 0.08, 0.5, this.main, s * 1.25, -1.45, -1.65);
       tip.rotation.x = 0.5;
       add(rail, ski, tip);
+      this.shell.push(rail, ski, tip);
       for (const zz of [-1.3, 1.3]) {
         const strut = box(0.1, 1.3, 0.1, dark, s * 1.0, -0.72, -0.2 + zz);
         strut.rotation.z = -s * 0.3;
         add(strut);
+        this.shell.push(strut);
       }
     }
     // hoist arm over the right-hand door
-    add(box(1.4, 0.2, 0.25, grey, 2.15, 1.25, -0.2), box(0.4, 0.4, 0.4, yellow, 2.8, 1.15, -0.2));
+    const hoist = [box(1.4, 0.2, 0.25, grey, 2.15, 1.25, -0.2), box(0.4, 0.4, 0.4, yellow, 2.8, 1.15, -0.2)];
+    add(...hoist);
+    this.shell.push(...hoist);
     const navL = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), glow(0xff3b30));
     navL.position.set(-1.7, 0.2, -0.6);
     const navR = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), glow(0x34e05a));
@@ -121,6 +134,7 @@ export class HeliMesh {
     this.scanner = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), glow(0x7fe3ff));
     this.scanner.position.set(0, -0.8, -2.3);
     add(turret, this.scanner);
+    this.shell.push(turret);
 
     // searchlight (fitted later)
     this.light = new THREE.SpotLight(0xfff1d0, 0, 140, 0.32, 0.5, 1.2);
@@ -135,6 +149,31 @@ export class HeliMesh {
       const m = o as THREE.Mesh;
       if (m.isMesh && m !== this.disc && m !== this.lightCone) m.castShadow = true;
     });
+  }
+
+  /**
+   * Swap the code-built shape for the MeshCraft model (public/models/rs_heli.glb). Same size, same
+   * place: the rotor and tail rotor are nodes on the pivots they spin about, the paint still changes,
+   * and the nav lights, strobes, scanner, rotor disc and searchlight are the code's own.
+   * Returns false, leaving the code-built helicopter, if the model is unusable.
+   */
+  useModel(scene: THREE.Object3D | undefined): boolean {
+    const n = dressModel(scene, ['heli_body', 'heli_rotor', 'heli_tail_rotor'], {
+      main: this.main,
+      second: this.second,
+      glass: this.glass,
+      yellow: mat(0xffd23f),
+      dark: mat(0x2a2e33),
+      metal: mat(PAL.metal),
+    });
+    if (!n) return false;
+    retire(this.shell);
+    this.shell = [];
+    this.body.add(n.heli_body);
+    mountAtPivot(n.heli_rotor, this.rotor);
+    mountAtPivot(n.heli_tail_rotor, this.tail);
+    this.modelled = true;
+    return true;
   }
 
   setPaint(main: number, second: number) {
