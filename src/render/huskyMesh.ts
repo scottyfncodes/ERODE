@@ -3,7 +3,7 @@ import type { DogAnim } from '../actors/husky';
 import { Jiggle } from './characterMesh';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { box, facet, facetPaint, gem, repaint } from './kit';
-import { dressModel, retire } from './patrolModels';
+import { cullAsCharacter, dressModel, retire } from './patrolModels';
 
 const GREY = 0x5f6873;
 const DARK = 0x3a4048;
@@ -250,7 +250,8 @@ export class HuskyMesh {
     const parts = ['koda_body', 'koda_eyes_open', 'koda_eyes_shut', 'koda_tongue', 'koda_harness', 'koda_harness_pack', 'koda_bandana'];
     const n = dressModel(root, [...bones, ...parts], this.roles);
     if (!n) return false;
-    root.traverse((o) => (o.frustumCulled = !(o as THREE.SkinnedMesh).isSkinnedMesh));
+    // one sphere that holds every pose, from a stretched gallop to a jump
+    cullAsCharacter(root, new THREE.Vector3(0, 0.5, -0.1), 1.3);
     // every joint picks up where the code-built one is now (the ears' set, the current pose)
     const pairs: [THREE.Object3D, THREE.Object3D][] = [
       [this.body, n.body],

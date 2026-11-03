@@ -62,6 +62,23 @@ function drawnBounds(root: THREE.Object3D): THREE.Box3 {
   return box;
 }
 
+/** Every drawn vertex of every shown skinned mesh lies inside that mesh's culling sphere. */
+function insideCullSphere(root: THREE.Object3D) {
+  root.updateMatrixWorld(true);
+  let worst = -Infinity;
+  root.traverse((o) => {
+    const sm = o as THREE.SkinnedMesh;
+    if (!sm.isSkinnedMesh) return;
+    expect(sm.frustumCulled).toBe(true);
+    for (let p: THREE.Object3D | null = sm; p; p = p.parent) if (!p.visible) return;
+    sm.skeleton.update();
+    const v = new THREE.Vector3();
+    const pos = sm.geometry.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) worst = Math.max(worst, sm.applyBoneTransform(i, v.fromBufferAttribute(pos, i)).distanceTo(sm.boundingSphere!.center) - sm.boundingSphere!.radius);
+  });
+  return worst;
+}
+
 const visibleTris = (root: THREE.Object3D) => {
   let n = 0;
   root.traverse((o) => {
@@ -106,6 +123,7 @@ describe('the patroller model (MeshCraft, skinned)', () => {
           p.group.rotation.y += pose === 'run' ? 0.01 : 0;
           p.animate(pose, stride, speed, pose === 'ride' ? 0.4 : 0, 1 / 30, pose === 'walk' ? 0.1 : 0);
           frames.push(joints(p.group, p, P_JOINTS));
+          if (modelled && frames.length % 15 === 0) expect(insideCullSphere(p.group), `culling sphere, ${pose}`).toBeLessThan(0);
         }
       }
       vi.restoreAllMocks();
@@ -229,6 +247,7 @@ describe('Koda model (MeshCraft, skinned)', () => {
           stride += anim === 'run' ? 0.25 : anim === 'trot' ? 0.1 : 0;
           k.animate(anim, stride, 1 / 30);
           frames.push(joints(k.group, k, K_JOINTS));
+          if (modelled && frames.length % 15 === 0) expect(insideCullSphere(k.group), `culling sphere, ${anim}`).toBeLessThan(0);
           const kk = k as unknown as { tongueShow: THREE.Object3D; eyesOpen: THREE.Object3D[]; eyesShut: THREE.Object3D[] };
           flags.push([kk.tongueShow.visible, kk.eyesOpen[0].visible, kk.eyesShut[0].visible]);
           // the breathing chest: the code scales a mesh with its own proportions built in, the model a

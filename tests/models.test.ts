@@ -104,12 +104,16 @@ describe('the patrol models (GITCRAFT MeshCraft)', () => {
       // trunk from the ground up, as before
       v.trunk.computeBoundingBox();
       expect(Math.abs(v.trunk.boundingBox!.min.y)).toBeLessThan(0.01);
-      // some of the crown is snow (bright), most of it is spruce
+      // snow-loaded (caps, notches and crown points are snow) with the spruce still showing at the tips
       const c = v.crown.getAttribute('color');
       let snow = 0;
-      for (let i = 0; i < c.count; i++) if (c.getX(i) > 0.6) snow++;
-      expect(snow / c.count).toBeGreaterThan(0.15);
-      expect(snow / c.count).toBeLessThan(0.6);
+      let green = 0;
+      for (let i = 0; i < c.count; i++) {
+        if (c.getX(i) > 0.6) snow++;
+        if (c.getY(i) < 0.4) green++;
+      }
+      expect(snow / c.count).toBeGreaterThan(0.5);
+      expect(green / c.count).toBeGreaterThan(0.2);
     }
   });
 

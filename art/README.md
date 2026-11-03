@@ -76,7 +76,7 @@ replaces, so it lands in the same place at the same size; moving parts are nodes
 | --- | --- | --- | --- |
 | `rs_sled` | `SledMesh` shape (`src/render/sledMesh.ts`) | `sled_body`, `sled_ski_L/R` (steer) | 1,964 |
 | `rs_heli` | `HeliMesh` shape (`src/render/heliMesh.ts`) | `heli_body`, `heli_rotor`, `heli_tail_rotor` | 2,784 |
-| `rs_spruce_a/b` | the procedural conifer (`src/render/conifer.ts`) in the instanced forest; snow caps on every tier but the (white) top | `spruce_crown`, `spruce_trunk` | 75 / 73 (was 76) |
+| `rs_spruce_a/b` | the procedural conifer (`src/render/conifer.ts`) in the instanced forest; snow caps on the four lower tiers (the small top two are painted white) | `spruce_crown`, `spruce_trunk` | 68 / 66 (was 76) |
 | `rs_patroller` | `PatrollerMesh` (`src/render/characterMesh.ts`): the patroller and the villagers | skinned, 25 bones (below) | 2,606 drawn (was 2,558) |
 | `rs_koda` | `HuskyMesh` (`src/render/huskyMesh.ts`) | skinned, 21 bones (below) | 1,284 drawn (was 1,324) |
 

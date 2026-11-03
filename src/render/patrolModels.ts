@@ -83,6 +83,21 @@ export function dressModel(
   return found;
 }
 
+/**
+ * Skinned meshes are culled against their bind pose by default, which says little once the bones move.
+ * A rigged character never strays far from its root, so give each skinned mesh one fixed sphere (in
+ * the model's own space) that holds every pose, and keep culling on: characters out of view, like the
+ * villagers down in Hollin, cost nothing.
+ */
+export function cullAsCharacter(root: THREE.Object3D, center: THREE.Vector3, radius: number) {
+  root.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (!m.isSkinnedMesh) return;
+    m.boundingSphere = new THREE.Sphere(center.clone(), radius);
+    m.frustumCulled = true;
+  });
+}
+
 /** Re-home a pivot node under a group that already sits on the same pivot. */
 export function mountAtPivot(node: THREE.Object3D, pivot: THREE.Object3D) {
   node.removeFromParent();

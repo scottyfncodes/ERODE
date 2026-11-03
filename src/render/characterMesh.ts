@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ball, box, cyl, facet, facetPaint, gem, PAL, repaint } from './kit';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { dressModel, retire } from './patrolModels';
+import { cullAsCharacter, dressModel, retire } from './patrolModels';
 import { ANKLE, cycleLength, footAt, legIK, LEG, pelvisBob, runBlend, SHIN, Spring, THIGH, type Foot, type LegAngles } from './gait';
 
 export type Pose = 'idle' | 'walk' | 'run' | 'ride' | 'ski' | 'pilot' | 'work' | 'pet' | 'carry' | 'sleep';
@@ -495,8 +495,8 @@ export class PatrollerMesh {
     const parts = ['pat_body', 'pat_gear', 'pat_skis_back', 'pat_ski_L', 'pat_ski_R', 'pat_pole_L', 'pat_pole_R', 'pat_hat_beanie', 'pat_hat_helmet', 'pat_hat_trapper', 'pat_hat_bobble'];
     const n = dressModel(root, [...bones, ...parts], this.roles);
     if (!n) return false;
-    // skinned meshes move with their bones, so their bind-pose bounds say little about where they are
-    root.traverse((o) => (o.frustumCulled = !(o as THREE.SkinnedMesh).isSkinnedMesh));
+    // one sphere that holds every pose: the poles, swung while skiing, reach furthest (~2 m)
+    cullAsCharacter(root, new THREE.Vector3(0, 0.9, 0), 2.3);
     // carry the current look across
     const hat = Object.entries(this.hats).find(([, h]) => h.visible)?.[0] ?? 'hat-beanie';
     const onFeet = this.feetSkis[0]?.visible ?? false;
