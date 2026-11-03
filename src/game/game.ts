@@ -117,6 +117,7 @@ export class Game {
   private passengerVisible = false;
   private alertShown: string | null = null;
   private fps = 60;
+  private kitLoaded: string[] = [];
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
 
@@ -137,6 +138,7 @@ export class Game {
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
     scene.add(new ForestView(this.trees).group);
+    this.kitLoaded = Object.keys(kit).sort();
     this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z), this.rig.quality.tier === 'high');
     scene.add(this.kitView.group);
     progress(0.7, 'Lighting the stove');
@@ -1495,6 +1497,7 @@ export class Game {
       profile: () => this.p,
       /** the Kessel kit (QA): how much is placed, in how many draw calls, and the pieces nearest a point */
       kit: (x?: number, z?: number, kind?: string) => ({
+        loaded: this.kitLoaded,
         placed: this.kitView.placed,
         drawCalls: this.kitView.drawCalls,
         near:

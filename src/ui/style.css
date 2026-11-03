@@ -455,6 +455,8 @@ button {
 .d5 { background: repeating-linear-gradient(45deg, #e0412c 0 6px, #111 6px 12px); color: #fff !important; }
 .iconbtn {
   width: 44px;
+  min-height: 44px;
+  flex: none;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: rgba(20, 28, 36, 0.82);
@@ -581,7 +583,8 @@ button {
   align-items: flex-end;
 }
 .chip {
-  height: 40px;
+  /* 44 px: Apple's minimum comfortable touch target */
+  height: 44px;
   min-width: 44px;
   padding: 0 12px;
   border-radius: 10px;
@@ -1264,6 +1267,14 @@ button {
   padding: calc(24px + var(--safe-t)) calc(28px + var(--safe-r)) calc(28px + var(--safe-b)) calc(28px + var(--safe-l));
   background: linear-gradient(180deg, rgba(10, 15, 20, 0) 30%, rgba(10, 15, 20, 0.75) 100%);
 }
+/* on a wide screen the copy sits over bright snow on the left: shade that side too */
+@media (orientation: landscape) {
+  .title-screen {
+    background:
+      linear-gradient(90deg, rgba(10, 15, 20, 0.72) 0%, rgba(10, 15, 20, 0.45) 38%, rgba(10, 15, 20, 0) 64%),
+      linear-gradient(180deg, rgba(10, 15, 20, 0) 40%, rgba(10, 15, 20, 0.6) 100%);
+  }
+}
 .title-screen .inner {
   max-width: 520px;
 }
@@ -1364,6 +1375,17 @@ body.booted .title-screen .inner {
   }
 }
 @media (max-height: 460px) {
+  /* the pilot's readout, compact, under the compass (top set by the HUD layout) */
+  .alt {
+    transform: none;
+    padding: 5px 9px;
+  }
+  .alt .label {
+    font-size: 9px;
+  }
+  .alt .big {
+    font-size: 14px;
+  }
   .task {
     max-width: 38vw;
     padding: 7px 10px 8px;
@@ -1383,7 +1405,13 @@ body.booted .title-screen .inner {
     height: 88px;
   }
   .radio {
-    bottom: calc(60px + var(--safe-b));
+    left: calc(10px + var(--safe-l));
+    bottom: auto;
+    top: calc(96px + var(--safe-t));
+    transform: none;
+    max-width: min(360px, 40vw);
+    font-size: 12.5px;
+    padding: 7px 11px;
   }
   .alert {
     top: auto;
@@ -1457,12 +1485,20 @@ body.booted .title-screen .inner {
   .speedo {
     left: calc(12px + var(--safe-l));
     transform: none;
+    flex-direction: column;
+    gap: 0;
+    padding: 5px 12px 6px;
+  }
+  .speedo .v {
+    font-size: 20px;
+    line-height: 1.1;
   }
   /* the pilot's readout sits bottom left, clear of the helicopter in the middle of the screen */
   .alt {
     top: auto;
     right: auto;
-    bottom: calc(16px + var(--safe-b));
+    /* above the chip row, left of the climb/descend lever */
+    bottom: calc(72px + var(--safe-b));
     left: calc(12px + var(--safe-l));
     transform: none;
     text-align: left;

@@ -185,7 +185,9 @@ export class Hud {
     const c = this.compass.style;
     const d = this.wpDist.style;
     const t = this.toastEl.style;
-    c.left = c.width = c.top = d.left = d.top = t.top = '';
+    const ra = this.radioEl.style;
+    const al = this.altEl.style;
+    c.left = c.width = c.top = d.left = d.top = t.top = ra.top = al.top = al.transform = '';
     if (this.root.classList.contains('hidden') || window.innerWidth < window.innerHeight) {
       this.compassW = this.compass.clientWidth;
       return;
@@ -209,6 +211,11 @@ export class Hud {
       bottom = Math.max(task.bottom, below + 64);
     }
     t.top = `${Math.round(bottom + 8)}px`;
+    // the pilot's readout: on the right, under the instruments and the compass
+    al.top = `${Math.round(gap >= 150 ? cond.bottom + 10 : bottom + 6)}px`;
+    al.transform = 'none';
+    // a short landscape screen: the radio sits under the task card, away from both thumbs
+    if (window.innerHeight <= 460) ra.top = `${Math.round(task.bottom + 8)}px`;
     this.compassW = this.compass.clientWidth;
   }
 
