@@ -1,45 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2c3137"/>
-      <stop offset="0.42" stop-color="#6e5a48"/>
-      <stop offset="0.7" stop-color="#e2b06f"/>
-      <stop offset="0.82" stop-color="#f6d488"/>
-    </linearGradient>
-    <radialGradient id="sun" cx="0.8" cy="0.66" r="0.42">
-      <stop offset="0" stop-color="#fff1c9" stop-opacity="0.95"/>
-      <stop offset="0.25" stop-color="#f6d488" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#f6d488" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="slope" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2c3137"/>
-      <stop offset="1" stop-color="#16181b"/>
-    </linearGradient>
-    <linearGradient id="stone" x1="0" y1="0" x2="0.4" y2="1">
-      <stop offset="0" stop-color="#f3ecdf"/>
-      <stop offset="0.6" stop-color="#bdb5a7"/>
-      <stop offset="1" stop-color="#8a8276"/>
-    </linearGradient>
-  </defs>
-  <rect width="1024" height="1024" fill="url(#sky)"/>
-  <rect width="1024" height="1024" fill="url(#sun)"/>
-  <!-- far ridges -->
-  <path d="M0 640 L120 560 L210 610 L330 500 L450 590 L560 520 L700 610 L820 560 L1024 650 L1024 1024 L0 1024Z" fill="#59616a" opacity="0.55"/>
-  <path d="M0 720 L150 650 L280 700 L420 640 L560 720 L700 680 L860 740 L1024 700 L1024 1024 L0 1024Z" fill="#3b4148" opacity="0.8"/>
-  <!-- the slope, falling away to the right -->
-  <path d="M0 520 L240 560 Q520 620 700 760 Q860 880 1024 930 L1024 1024 L0 1024Z" fill="url(#slope)"/>
-  <path d="M0 520 L240 560 Q520 620 700 760 Q860 880 1024 930" fill="none" stroke="#e2b06f" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
-  <!-- the boulder: faceted granite, poised at the lip -->
-  <g transform="translate(176 196) scale(4.2)">
-    <path d="M14 92 L9 70 L15 46 L31 26 L52 15 L72 19 L87 34 L93 56 L90 78 L84 92 Z" fill="url(#stone)" stroke="#0f1012" stroke-width="3.2" stroke-linejoin="round"/>
-    <path d="M31 26 L52 15 L72 19 L44 48 Z" fill="#fffaf0" opacity="0.55"/>
-    <path d="M44 48 L64 62 L93 56 L90 78 L84 92 L58 92 L64 62Z" fill="#0f1012" opacity="0.22"/>
-    <path d="M31 26 L44 48 L15 46 M44 48 L72 19 M44 48 L64 62 L93 56 M64 62 L58 92 M44 48 L30 92" fill="none" stroke="#0f1012" stroke-opacity="0.5" stroke-width="2.2" stroke-linejoin="round"/>
-  </g>
-  <!-- loose chips already on their way -->
-  <g fill="#bdb5a7" stroke="#0f1012" stroke-width="5" stroke-linejoin="round">
-    <path d="M600 640 l34 -12 l18 26 l-28 22 l-30 -12z"/>
-    <path d="M720 728 l22 -6 l12 18 l-18 14 l-20 -8z"/>
-    <path d="M818 806 l14 -4 l8 12 l-12 9 l-12 -6z"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>ROCKSLIDE: Kessel Patrol</title>
+  <g id="Layer_1" data-name="Layer 1">
+    <rect id="field" x="0" y="0" width="1024" height="1024" fill="#141c24"/>
+    <circle id="patch" cx="512" cy="512" r="400" fill="#1d2731" stroke="#f1ece1" stroke-width="26" stroke-miterlimit="10"/>
+    <circle id="pole_ring" data-name="pole ring" cx="512" cy="512" r="362" fill="none" stroke="#ff7a1a" stroke-width="9" stroke-miterlimit="10"/>
+    <circle id="star_0" data-name="star 0" cx="330" cy="300" r="7" fill="#f1ece1"/>
+    <circle id="star_1" data-name="star 1" cx="650" cy="250" r="9" fill="#f1ece1"/>
+    <circle id="star_2" data-name="star 2" cx="735" cy="360" r="6" fill="#f1ece1"/>
+    <circle id="star_3" data-name="star 3" cx="420" cy="225" r="5" fill="#f1ece1"/>
+    <polygon id="peak" points="168,602 392,352 452,410 566,262 858,602" fill="#f4f6f8"/>
+    <polygon id="north_face" data-name="north face" points="566,262 858,602 668,602 612,444 640,380" fill="#c9d8ea"/>
+    <polygon id="couloir" points="392,352 452,410 420,470 380,430 330,520 300,455" fill="#9fc3de"/>
+    <path id="patrol_band" data-name="patrol band" d="M121.8 600 L902.2 600 C889.023 658.377 862.915 713.053 825.8 760 L198.2 760 C161.085 713.053 134.977 658.377 121.8 600 Z" fill="#d8382a"/>
+    <polygon id="cross" points="490,618 534,618 534,658 574,658 574,702 534,702 534,742 490,742 490,702 450,702 450,658 490,658" fill="#f1ece1"/>
   </g>
 </svg>

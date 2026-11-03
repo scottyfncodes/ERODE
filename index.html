@@ -25,14 +25,14 @@
     <meta property="og:title" content="ROCKSLIDE: Mountain Patrol" />
     <meta property="og:description" content="An alpine mountain patrol adventure: a snowmobile, a helicopter, skis, a husky called Koda and a valley to look after." />
     <meta property="og:url" content="https://rockslide-game.vercel.app/" />
-    <meta property="og:image" content="https://rockslide-game.vercel.app/og-image.png" />
+    <meta property="og:image" content="https://rockslide-game.vercel.app/og-image.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="ROCKSLIDE wordmark over a mountain scene." />
+    <meta property="og:image:alt" content="The Kessel Patrol emblem and the ROCKSLIDE wordmark over the patrol station in the Kessel valley." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="ROCKSLIDE: Mountain Patrol" />
     <meta name="twitter:description" content="Your valley, your station, your husky. Keep the mountain safe." />
-    <meta name="twitter:image" content="https://rockslide-game.vercel.app/og-image.png" />
+    <meta name="twitter:image" content="https://rockslide-game.vercel.app/og-image.jpg" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -40,10 +40,12 @@
   </head>
   <body>
     <canvas id="view" aria-label="The mountain"></canvas>
+    <div id="grade" aria-hidden="true"></div>
     <div id="ui"></div>
 
     <div id="loading" class="screen">
       <div class="loading-inner">
+        <img class="emblem" src="/icons/icon.svg" alt="" width="96" height="96" />
         <div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div>
         <div class="subbrand">Mountain Patrol</div>
         <div class="loading-bar"><div class="loading-fill"></div></div>
