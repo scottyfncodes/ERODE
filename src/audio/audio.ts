@@ -28,6 +28,12 @@ export class AudioEngine {
   private birdTimer = 4;
   private crackleTimer = 0;
   private lastStep = 0;
+  private turbine!: OscillatorNode;
+  private turbineGain!: GainNode;
+  private echo!: GainNode;
+  private bellTimer = 6;
+  private duck = 1;
+  private hidden = false;
 
   get ready() {
     return !!this.ctx;
@@ -36,7 +42,9 @@ export class AudioEngine {
   /** Must be called from a user gesture (iOS). */
   unlock() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      // iOS leaves the context 'suspended' or 'interrupted' after a call, the lock screen or an
+      // app switch, and only a touch may wake it
+      if (this.ctx.state !== 'running' && !this.hidden) void this.ctx.resume();
       return;
     }
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -109,6 +117,19 @@ export class AudioEngine {
     this.rotorGain.gain.value = 0;
     this.loopNoise().connect(this.rotorFilter).connect(chop).connect(this.rotorGain).connect(this.sfx);
 
+    // the turbine: a thin whine over the rotor that rises as it spools up
+    this.turbine = ctx.createOscillator();
+    this.turbine.type = 'triangle';
+    this.turbine.frequency.value = 600;
+    const tf = ctx.createBiquadFilter();
+    tf.type = 'bandpass';
+    tf.frequency.value = 2000;
+    tf.Q.value = 3;
+    this.turbineGain = ctx.createGain();
+    this.turbineGain.gain.value = 0;
+    this.turbine.connect(tf).connect(this.turbineGain).connect(this.sfx);
+    this.turbine.start();
+
     // snow hiss under skis and runners
     const hf = ctx.createBiquadFilter();
     hf.type = 'bandpass';
@@ -152,6 +173,18 @@ export class AudioEngine {
       f.connect(g).connect(this.music);
       this.pads.push({ osc: oscs, gain: g });
     }
+    // a long, dark echo for the music: the valley answering
+    this.echo = ctx.createGain();
+    this.echo.gain.value = 0.5;
+    const dl = ctx.createDelay(1.5);
+    dl.delayTime.value = 0.62;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.38;
+    const ef = ctx.createBiquadFilter();
+    ef.type = 'lowpass';
+    ef.frequency.value = 1800;
+    this.echo.connect(dl).connect(ef).connect(fb).connect(dl);
+    ef.connect(this.music);
     this.nextChord(true);
   }
 
@@ -267,6 +300,7 @@ export class AudioEngine {
   /** The radio: a squelch before someone speaks. */
   radio() {
     if (!this.on) return;
+    this.duck = 0.45;
     this.burst({ dur: 0.12, gain: 0.12, type: 'bandpass', freq: 2400, q: 2 });
     this.tone(1800, 0.04, 0.08, 'square', 0.1);
   }
@@ -287,6 +321,41 @@ export class AudioEngine {
   sparkle() {
     if (!this.on) return;
     [1318.5, 1567.98, 2093].forEach((f, i) => this.tone(f, 0.07, 0.4, 'sine', i * 0.06));
+  }
+
+  /** Something you cannot do (yet): a soft low double knock, never a buzzer. */
+  deny() {
+    if (!this.on) return;
+    this.tone(196, 0.09, 0.12, 'triangle');
+    this.tone(165, 0.08, 0.16, 'triangle', 0.09);
+  }
+
+  /** A held job finished: a solid, satisfying clunk. */
+  done() {
+    if (!this.on) return;
+    this.tone(220, 0.14, 0.18, 'triangle', 0, 0.7);
+    this.burst({ dur: 0.08, gain: 0.12, type: 'bandpass', freq: 1600, q: 1.2 });
+    this.tone(880, 0.06, 0.3, 'sine', 0.06);
+  }
+
+  /** A call taken: two rising notes under the radio squelch. */
+  accept() {
+    if (!this.on) return;
+    this.tone(392, 0.08, 0.35, 'triangle');
+    this.tone(587.33, 0.08, 0.5, 'triangle', 0.12);
+  }
+
+  /** Promoted: the reward arpeggio, then a held chord. */
+  promote() {
+    if (!this.on) return;
+    [587.33, 739.99, 880, 1174.66].forEach((f, i) => this.tone(f, 0.1, 0.7, 'triangle', 0.9 + i * 0.09));
+    [293.66, 440, 587.33, 739.99].forEach((f) => this.tone(f, 0.06, 2.4, 'sine', 1.3));
+  }
+
+  /** A panel opening: a dry flick of paper. */
+  paper() {
+    if (!this.on) return;
+    this.burst({ dur: 0.07, gain: 0.06, type: 'bandpass', freq: 4200, freqEnd: 2400, q: 0.9 });
   }
 
   /** Hold-to-act work noise: sawing, digging, fixing. */
@@ -328,9 +397,15 @@ export class AudioEngine {
    * Continuous sound for this frame. `engine`: sled 0..1 throttle, `speed` m/s; `rotor` 0..1;
    * `hiss` 0..1 (snow under you); `rumble` 0..1 (avalanche); `fire` 0..1 (by the hearth).
    */
-  update(dt: number, o: { engine: number; speed: number; rotor: number; hiss: number; wind: number; rumble: number; fire: number; outdoors: number }) {
+  update(dt: number, o: { engine: number; speed: number; rotor: number; hiss: number; wind: number; rumble: number; fire: number; outdoors: number; day?: number; talking?: boolean }) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    const day = o.day ?? 1;
+    // the music dips under a voice on the radio and comes back after; quieter and lower at night
+    this.duck += ((o.talking ? 0.5 : 1) - this.duck) * Math.min(1, dt * (o.talking ? 6 : 0.8));
+    if (this.musicOn) this.music.gain.setTargetAtTime(0.45 * this.duck * (0.7 + 0.3 * day), t, 0.25);
+    this.turbineGain.gain.setTargetAtTime(o.rotor * o.rotor * 0.018, t, 0.3);
+    this.turbine.frequency.setTargetAtTime(600 + o.rotor * 1500, t, 0.6);
     this.engGain.gain.setTargetAtTime(o.engine > 0 ? 0.05 + o.engine * 0.07 : 0, t, 0.08);
     const rpm = 42 + o.speed * 5 + o.engine * 30;
     this.engOsc.frequency.setTargetAtTime(rpm, t, 0.1);
@@ -355,8 +430,23 @@ export class AudioEngine {
       this.chordTimer = 9;
       this.nextChord();
     }
+    // now and then a few notes over the pads, from the chord in play (daytime, outdoors, calm)
+    this.bellTimer -= dt;
+    if (this.bellTimer < 0) {
+      this.bellTimer = 5 + Math.random() * 9;
+      if (this.musicOn && day > 0.3 && o.rumble < 0.1) {
+        const scale = [587.33, 659.25, 739.99, 880, 987.77, 1174.66];
+        let k = Math.floor(Math.random() * scale.length);
+        const n = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < n; i++) {
+          k = Math.max(0, Math.min(scale.length - 1, k + (Math.random() < 0.5 ? -1 : 1)));
+          this.bell(scale[k] * (day < 0.6 ? 0.5 : 1), i * (0.38 + Math.random() * 0.2));
+        }
+      }
+    }
     this.birdTimer -= dt;
-    if (this.birdTimer < 0 && o.outdoors > 0.5 && o.wind < 0.5) {
+    // birds sing in daylight only
+    if (this.birdTimer < 0 && o.outdoors > 0.5 && o.wind < 0.5 && day > 0.5) {
       this.birdTimer = 8 + Math.random() * 14;
       if (this.soundOn) {
         const base = 2800 + Math.random() * 1200;
@@ -365,11 +455,39 @@ export class AudioEngine {
     }
   }
 
+  /** A soft glockenspiel note into the music bus and its echo. */
+  private bell(freq: number, delay: number) {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + delay;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    const o2 = ctx.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.value = freq * 3.01;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.18;
+    o.connect(g);
+    o2.connect(g2).connect(g);
+    g.connect(this.music);
+    g.connect(this.echo);
+    o.start(t);
+    o2.start(t);
+    o.stop(t + 1.9);
+    o2.stop(t + 1.9);
+  }
+
   suspend() {
+    this.hidden = true;
     void this.ctx?.suspend();
   }
 
   resume() {
+    this.hidden = false;
     void this.ctx?.resume();
   }
 }

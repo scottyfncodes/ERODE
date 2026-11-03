@@ -20,6 +20,8 @@ export interface MapMarks {
 /** Modal screens: the mission board, the outfitters, the map, the pause menu, debriefs. */
 export class Panels {
   private wrap: HTMLElement | null = null;
+  /** which panel is up: the keys that open one also close it */
+  kind = '';
   onClose: (() => void) | null = null;
 
   constructor(private parent: HTMLElement, private topoUrl: string) {}
@@ -32,15 +34,19 @@ export class Panels {
     if (!this.wrap) return;
     this.wrap.remove();
     this.wrap = null;
+    this.kind = '';
     const f = this.onClose;
     this.onClose = null;
     f?.();
   }
 
-  private shell(title: string, extra = ''): { body: HTMLElement; panel: HTMLElement; header: HTMLElement } {
+  private shell(title: string, extra = '', kind = ''): { body: HTMLElement; panel: HTMLElement; header: HTMLElement } {
+    const again = !!this.wrap;
     if (this.wrap) this.wrap.remove();
+    this.kind = kind;
     const wrap = document.createElement('div');
-    wrap.className = 'panel-wrap';
+    // re-drawn in place (a tab, a purchase) it stays put; opened fresh it rises in
+    wrap.className = again ? 'panel-wrap' : 'panel-wrap enter';
     wrap.innerHTML = `<div class="panel"><header><h2>${title}</h2>${extra}<button class="x" aria-label="Close">✕</button></header><div class="body"></div></div>`;
     this.parent.appendChild(wrap);
     this.wrap = wrap;
@@ -120,7 +126,9 @@ export class Panels {
     for (const m of story) {
       if (ids.includes(m.id)) continue;
       const d = done(p, m.id);
-      list += `<div class="mrow ${d ? 'done' : 'locked'}"><div><div class="nm">${d ? m.title : 'Later'}</div><div class="fm">${FAMILY_LABEL[m.family]}</div></div><div class="tag">${d ? 'Done' : 'Locked'}</div></div>`;
+      // what is coming, and what opens it: something to aim for rather than a row of 'Later'
+      const after = m.requires.filter((r) => !done(p, r)).map((r) => mission(r).title);
+      list += `<div class="mrow ${d ? 'done' : 'locked'}"><div><div class="nm">${m.title}</div><div class="fm">${FAMILY_LABEL[m.family]}${d ? '' : ` · after ${after.join(' and ')}`}</div></div><div class="tag">${d ? 'Done' : 'Locked'}</div></div>`;
     }
     list += '</div>';
     let detail = '';
@@ -177,7 +185,7 @@ export class Panels {
   }
 
   map(p: Profile, marks: MapMarks) {
-    const { body, panel } = this.shell('Valley map');
+    const { body, panel } = this.shell('Valley map', '', 'map');
     panel.style.width = 'min(640px, 100%)';
     body.innerHTML = this.mapCard(marks, []);
     void p;

@@ -103,7 +103,7 @@ export class Rig {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap; // three r18x folds PCFSoft into PCF (and warns when asked for it)
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.25, 2600);
     this.fog = new THREE.Fog(0xcfe0ee, 300, 1700);
     this.scene.fog = this.fog;
@@ -150,8 +150,9 @@ export class Rig {
     this.renderer.setPixelRatio(this.quality.pixelRatio * this.scale);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
-    // narrow portrait screens get a wider lens so you still see around you
-    this.camera.fov = w < h ? 68 : 55;
+    // a phone held upright keeps at least a 40° view across, so you still see around you
+    const aspect = w / h;
+    this.camera.fov = aspect >= 1 ? 55 : THREE.MathUtils.clamp((2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(20)) / aspect) * 180) / Math.PI, 55, 76);
     this.camera.updateProjectionMatrix();
   }
 

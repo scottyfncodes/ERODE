@@ -5,6 +5,22 @@
 
 export type Btn = 'action' | 'alt' | 'up' | 'down' | 'boost';
 
+/** Below this share of the stick's throw nothing moves: a resting thumb never creeps. */
+export const STICK_DEAD = 0.14;
+
+/**
+ * Shape a raw stick vector (each axis -1..1, length up to 1): a radial deadzone, then a gentle
+ * curve so small throws are fine control (walking, a slow line on the sled) and a full throw is
+ * still full speed. The direction is kept exactly.
+ */
+export function shape(x: number, y: number): { x: number; y: number } {
+  const m = Math.hypot(x, y);
+  if (m <= STICK_DEAD) return { x: 0, y: 0 };
+  const t = Math.min(1, (m - STICK_DEAD) / (1 - STICK_DEAD));
+  const k = (t * (0.45 + 0.55 * t)) / m;
+  return { x: x * k, y: y * k };
+}
+
 export class Input {
   /** stick: x right, y forward, magnitude 0..1 */
   readonly move = { x: 0, y: 0 };
@@ -87,7 +103,7 @@ export class Input {
         dy = (dy / d) * this.radius;
         this.stickEl.style.transform = `translate(${this.stickOrigin.x - 70}px, ${this.stickOrigin.y - 70}px)`;
       }
-      this.stickVec = { x: dx / this.radius, y: -dy / this.radius };
+      this.stickVec = shape(dx / this.radius, -dy / this.radius);
       this.knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
     } else if (e.pointerId === this.lookId || (e.pointerType === 'mouse' && this.mouseDown)) {
       this.lookAcc.x += e.clientX - this.lookLast.x;

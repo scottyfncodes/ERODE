@@ -13,6 +13,7 @@ function progress(f: number, text: string) {
 
 function fail(title: string, detail: string, retry = true) {
   loading.classList.remove('gone');
+  loading.style.display = '';
   loading.innerHTML = `<div class="error-box"><div class="wordmark sm">ROCKSLIDE</div><h2>${title}</h2><p>${detail}</p>${
     retry ? '<button class="btn red" type="button" onclick="location.reload()">Try again</button>' : ''
   }</div>`;
@@ -46,7 +47,13 @@ async function boot() {
   progress(1, 'Ready');
   game.start();
   (window as unknown as { patrol: unknown }).patrol = game.debug();
-  setTimeout(() => loading.classList.add('gone'), 250);
+  // two frames of the valley first (shaders compile on the first), then the loading card fades
+  // and the title rises in after it, so the two never show their emblems at once
+  await nextFrame();
+  await nextFrame();
+  loading.classList.add('gone');
+  document.body.classList.add('booted');
+  setTimeout(() => (loading.style.display = 'none'), 700);
 }
 
 window.addEventListener('error', (e) => console.error('ROCKSLIDE error', e.message));
