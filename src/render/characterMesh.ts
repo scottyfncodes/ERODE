@@ -119,7 +119,7 @@ const CIVVY_SCARVES = [PAL.mint, PAL.powder, PAL.lavender, PAL.blush, PAL.mustar
 
 /**
  * The patroller, and everyone else in the valley: a jointed, faceted figure (pelvis, two-piece
- * spine, neck, shoulders, elbows, hips, knees, ankles) in a double-breasted alpine tunic and a
+ * spine, neck, shoulders, elbows, hips, knees, ankles) in a patrol shell jacket, pack and a
  * knitted scarf. Feet are placed by a two-bone solver and stay planted while the body passes over
  * them; every joint moves through a damped spring, so poses blend instead of snapping, and the
  * loose things (scarf tails, pom-pom, pack) ride on wobbly springs of their own. Forward is -z.
@@ -204,26 +204,29 @@ export class PatrollerMesh {
     const trousers = facet(PAL.trousers);
     const boot = facet(PAL.boot);
     const sole = facet(0x2a1d1a);
-    const sock = facet(PAL.sock);
-    const mitt = facet(PAL.mitt);
-    const brass = facet(PAL.brass);
+    const gaiter = facet(0x2c2840);
+    const glove = facet(0x33303c);
+    const strapMat = facet(0x2b2f38);
     const dark = facet(PAL.dark);
     const skin = facet(SKIN);
     const hair = facet(PAL.hair);
-    const scarf = facet(civilian ? CIVVY_SCARVES[Math.floor(Math.random() * CIVVY_SCARVES.length)] : PAL.mustard);
+    const scarf = facet(civilian ? CIVVY_SCARVES[Math.floor(Math.random() * CIVVY_SCARVES.length)] : PAL.green);
 
     this.group.add(this.body);
     this.body.add(this.pelvis);
     this.pelvis.position.y = LEG - 0.03;
 
-    // ---- legs: thigh, shin, a chunky laced boot with a fluffy turned-down sock
+    // ---- legs: thigh, shin, a cargo pocket, a chunky boot under a gaiter
     const side = (x: number): Side => {
       const s: Side = { hip: new THREE.Group(), knee: new THREE.Group(), ankle: new THREE.Group(), shoulder: new THREE.Group(), elbow: new THREE.Group(), s: springs() };
       s.hip.position.set(x, 0, 0);
       s.hip.add(limb(0.11, 0.088, THIGH + 0.04, trousers));
+      const pocket = gem(0.06, gaiter, Math.sign(x) * 0.095, -0.24, 0, 0);
+      pocket.scale.set(0.45, 1.2, 0.9);
+      s.hip.add(pocket);
       s.knee.position.y = -THIGH;
       s.knee.add(limb(0.086, 0.072, SHIN, trousers));
-      s.knee.add(cyl(0.1, 0.094, 0.075, 7, sock, 0, -SHIN + 0.21, 0));
+      s.knee.add(cyl(0.097, 0.094, 0.07, 7, gaiter, 0, -SHIN + 0.2, 0));
       s.knee.add(cyl(0.09, 0.08, 0.2, 7, boot, 0, -SHIN + 0.09, 0));
       s.ankle.position.y = -SHIN;
       const foot = gem(0.088, boot, 0, -ANKLE + 0.05, -0.075, 0);
@@ -239,16 +242,14 @@ export class PatrollerMesh {
     this.L = side(-0.11);
     this.R = side(0.11);
 
-    // ---- the tunic: hips and a flared skirt on the pelvis, chest above a two-piece spine
+    // ---- a hip-length patrol shell over insulated trousers: charcoal shoulders, a zip, the cross
     const seat = cyl(0.2, 0.215, 0.2, 8, trousers, 0, 0.02, 0);
     seat.scale.z = 0.78;
-    const skirt = cyl(0.225, 0.295, 0.22, 8, this.jacket, 0, -0.03, 0);
-    skirt.scale.z = 0.8;
-    const belt = cyl(0.235, 0.235, 0.06, 8, dark, 0, 0.1, 0);
-    belt.scale.z = 0.8;
-    const buckle = gem(0.04, brass, 0, 0.1, -0.19, 0);
-    buckle.scale.set(1, 0.8, 0.4);
-    this.pelvis.add(seat, skirt, belt, buckle);
+    const hem = cyl(0.225, 0.242, 0.17, 8, this.jacket, 0, 0.0, 0);
+    hem.scale.z = 0.8;
+    const hemBand = cyl(0.245, 0.245, 0.035, 8, this.trim, 0, -0.08, 0);
+    hemBand.scale.z = 0.8;
+    this.pelvis.add(seat, hem, hemBand);
     this.pelvis.add(this.spine);
     this.spine.position.y = 0.12;
     const waist = cyl(0.205, 0.225, 0.2, 8, this.jacket, 0, 0.08, 0);
@@ -256,21 +257,30 @@ export class PatrollerMesh {
     this.spine.add(waist);
     this.spine.add(this.chest);
     this.chest.position.y = 0.18;
-    const torso = cyl(0.265, 0.205, 0.38, 8, this.jacket, 0, 0.17, 0);
+    const torso = cyl(0.26, 0.205, 0.38, 8, this.jacket, 0, 0.17, 0);
     torso.scale.z = 0.76;
-    const shoulders = gem(0.265, this.jacket, 0, 0.33, 0, 1);
-    shoulders.scale.set(1, 0.36, 0.76);
-    // double-breasted: two rows of brass buttons and a cream placket
-    const placket = box(0.13, 0.36, 0.01, this.trim, 0, 0.17, -0.186);
-    placket.rotation.x = 0.1;
-    for (let i = 0; i < 3; i++)
-      for (const bx of [-0.045, 0.045]) this.chest.add(gem(0.019, brass, bx, 0.28 - i * 0.09, -0.194 + i * 0.006, 0));
-    const collar = cyl(0.12, 0.15, 0.08, 8, this.trim, 0, 0.4, 0);
+    // the shoulder yoke in the jacket's second colour
+    const shoulders = gem(0.27, this.trim, 0, 0.33, 0, 1);
+    shoulders.scale.set(1, 0.36, 0.78);
+    const zip = box(0.022, 0.4, 0.012, this.trim, 0, 0.16, -0.19);
+    zip.rotation.x = 0.1;
+    // the patrol cross on the chest
+    const patch = box(0.085, 0.085, 0.012, PAL.white, -0.11, 0.24, -0.185);
+    patch.rotation.x = 0.1;
+    const pv = box(0.022, 0.06, 0.014, PAL.red, -0.11, 0.24, -0.19);
+    const ph = box(0.06, 0.022, 0.014, PAL.red, -0.11, 0.24, -0.19);
+    pv.rotation.x = ph.rotation.x = 0.1;
+    // a stand-up collar and the hood rolled behind it
+    const collar = cyl(0.13, 0.155, 0.1, 8, this.jacket, 0, 0.41, 0);
+    const hood = gem(0.12, this.jacket, 0, 0.43, 0.13, 0);
+    hood.scale.set(1.3, 0.6, 0.8);
+    this.chest.add(torso, shoulders, zip, hood);
+    if (!civilian) this.chest.add(patch, pv, ph);
     // a thick knitted scarf wound twice round the neck
     const wrap = cyl(0.135, 0.165, 0.075, 8, scarf, 0, 0.425, 0.005);
     const wrap2 = cyl(0.125, 0.145, 0.06, 8, scarf, 0, 0.475, 0.01);
     wrap2.rotation.z = 0.12;
-    this.chest.add(torso, shoulders, placket, collar, wrap, wrap2);
+    this.chest.add(collar, wrap, wrap2);
     // ...and its two tails, which stream out behind
     for (const [x, off, len] of [
       [-0.03, 0, 0.2],
@@ -287,12 +297,14 @@ export class PatrollerMesh {
       this.tails.push({ a, b, ja: new Jiggle(70, 4.5), jb: new Jiggle(60, 3.5), off });
     }
     if (!civilian) {
-      // epaulettes, the pack with the patrol cross, skis A-framed on it
-      for (const ex of [-0.19, 0.19]) {
-        const ep = gem(0.075, this.trim, ex, 0.4, 0, 0);
-        ep.scale.set(1, 0.3, 1.1);
-        this.chest.add(ep);
+      // pack straps over the shoulders, a radio clipped to one, the pack with the patrol cross
+      for (const sx of [-1, 1]) {
+        const strap = box(0.055, 0.3, 0.02, strapMat, sx * 0.13, 0.2, -0.19);
+        strap.rotation.x = 0.1;
+        const over = box(0.055, 0.02, 0.36, strapMat, sx * 0.13, 0.38, 0.0);
+        this.chest.add(strap, over);
       }
+      this.chest.add(box(0.06, 0.1, 0.04, strapMat, 0.13, 0.26, -0.215), cyl(0.007, 0.007, 0.1, 4, strapMat, 0.145, 0.35, -0.215));
       const packMain = gem(0.215, facet(PAL.pack), 0, 0.15, 0.25, 1);
       packMain.scale.set(0.86, 1.02, 0.42);
       const flap = gem(0.2, facet(PAL.packDark), 0, 0.3, 0.255, 1);
@@ -317,7 +329,7 @@ export class PatrollerMesh {
       this.chest.add(this.pack);
     }
 
-    // ---- arms: upper arm, forearm with a cuff, a big mitten with a thumb
+    // ---- arms: upper arm, forearm with a cuff, a big glove with a thumb
     for (const [s, x] of [
       [this.L, -0.27],
       [this.R, 0.27],
@@ -327,9 +339,9 @@ export class PatrollerMesh {
       s.elbow.position.y = -0.29;
       s.elbow.add(limb(0.068, 0.058, 0.26, this.jacket));
       s.elbow.add(cyl(0.07, 0.07, 0.05, 7, this.trim, 0, -0.24, 0));
-      const hand = gem(0.078, mitt, 0, -0.315, -0.01, 1);
+      const hand = gem(0.074, glove, 0, -0.31, -0.01, 1);
       hand.scale.set(0.88, 1.12, 1);
-      const thumb = gem(0.034, mitt, -Math.sign(x) * 0.055, -0.29, -0.045, 0);
+      const thumb = gem(0.032, glove, -Math.sign(x) * 0.055, -0.29, -0.045, 0);
       s.elbow.add(hand, thumb);
       s.shoulder.add(s.elbow);
       this.chest.add(s.shoulder);
@@ -403,7 +415,7 @@ export class PatrollerMesh {
     }
     beanie.visible = true;
 
-    // ---- skis on the boots, poles in the mitts
+    // ---- skis on the boots, poles in the gloves
     for (const s of [this.L, this.R]) {
       const g = new THREE.Group();
       g.position.set(0, -ANKLE - 0.01, -0.07);
@@ -468,11 +480,15 @@ export class PatrollerMesh {
     dt = Math.min(dt, 0.1);
     this.t += dt;
     const t = this.t;
+    const moving = (p: Pose) => p === 'walk' || p === 'run' || p === 'carry';
     if (pose !== this.lastPose) {
-      // a change of pose: everything eases across for a moment, with a little bounce
-      this.blend = 0.35;
+      // a change of pose: everything eases across for a moment. Walk, run and carry are one gait
+      // (it blends with speed), so going between them must not soften the legs and let feet skate.
+      if (!(moving(pose) && moving(this.lastPose))) {
+        this.blend = 0.35;
+        this.jg.squash.kick(-0.35);
+      }
       this.lastPose = pose;
-      this.jg.squash.kick(-0.6);
       this.fidget = 'none';
     }
     this.blend = Math.max(0, this.blend - dt);
@@ -537,30 +553,37 @@ export class PatrollerMesh {
       pitchL = this.fL.pitch * k;
       pitchR = this.fR.pitch * k;
       ik = true;
-      // weight over the planted foot, the free hip dropping, hips and shoulders counter-turning
-      const span = Math.max(0.1, cycleLength(v) * 0.6);
-      const diff = clamp((fwdL - fwdR) / span, -1, 1);
-      sway = -Math.cos(TAU * (ph - 0.3)) * (0.034 - r * 0.014) * k;
-      roll = sway * 1.8;
-      pyaw = -diff * (0.17 + r * 0.06) * k;
-      chestYaw = -pyaw * 1.7;
-      // lean into speed, into acceleration and up a hill; a run drives forward from the chest
-      spine = -(0.07 + r * 0.3) * k - accel * 0.018 - slope * 0.4;
-      chest = -0.04 * k - r * 0.06 + Math.sin(TAU * ph * 2) * 0.035 * r;
-      // the head stays level and leads into turns
-      headX = -(spine + chest) * 0.85 + Math.sin(TAU * ph * 2 + 0.6) * 0.03 * k;
-      headY = clamp(turn * 0.22, -0.45, 0.45);
-      headZ = -roll * 0.6;
-      // arms follow the opposite foot; a run pumps them hard and bent
-      const swingA = (0.85 + r * 0.45) * k;
-      for (const [a, f, s] of [
-        [arm.L, fwdR, -1],
-        [arm.R, fwdL, 1],
+      // Everything above the legs runs on smooth curves of the gait phase, a beat behind the feet:
+      // driving it straight off the foot positions (linear in stance, a snap in swing) is what
+      // made the old walk look like a wind-up toy.
+      // the cycle: left heel strikes at 0, right at 0.5
+      const c = Math.cos(TAU * ph);
+      const lag = Math.cos(TAU * (ph - 0.06));
+      // weight over the planted foot; the hip drops a touch on the swinging side
+      sway = -Math.cos(TAU * (ph - 0.3)) * (0.022 - r * 0.01) * k;
+      roll = sway * 1.2;
+      // the pelvis turns with the forward leg; the shoulders counter-turn, less than the hips
+      pyaw = -c * (0.09 + r * 0.05) * k;
+      chestYaw = -pyaw * 1.25;
+      // a little forward lean walking, more running; into acceleration and up a hill
+      spine = -(0.04 + r * 0.22) * k - accel * 0.012 - slope * 0.35;
+      chest = -0.02 * k - r * 0.05 + Math.cos(TAU * ph * 2) * (0.012 + 0.025 * r) * k;
+      // the head stays level (it counters the bob) and leads into turns
+      headX = -(spine + chest) * 0.9 - Math.cos(TAU * ph * 2) * 0.015 * k;
+      headY = clamp(turn * 0.2, -0.4, 0.4) - chestYaw * 0.5;
+      headZ = -roll * 0.5;
+      // arms swing from the shoulder with the opposite leg: a relaxed pendulum walking, a bent
+      // pump running. The forearm trails the upper arm and bends more as it comes forward.
+      const fwdSwing = (0.32 + r * 0.45) * k;
+      const backSwing = (0.22 + r * 0.4) * k;
+      for (const [a, sgn, s] of [
+        [arm.L, 1, -1],
+        [arm.R, -1, 1],
       ] as const) {
-        const sw = (f / Math.max(0.1, span / 2)) * swingA * 0.5;
-        a.arm = sw + r * 0.2;
-        a.roll = s * (0.14 + r * 0.1);
-        a.elbow = 0.3 + Math.max(0, sw) * 0.75 + r * 1.2;
+        const w = -sgn * lag; // +1 = this arm fully forward
+        a.arm = (w > 0 ? w * fwdSwing : w * backSwing) + 0.04 + r * 0.25;
+        a.roll = s * (0.1 + r * 0.06);
+        a.elbow = 0.22 + Math.max(0, w) * (0.28 + r * 0.4) + r * 1.15;
       }
       if (pose === 'carry') {
         // Pepper held to the chest
@@ -571,9 +594,9 @@ export class PatrollerMesh {
       // bank into turns
       bank = -turn * Math.min(1, v / 3) * (0.08 + r * 0.1);
       blow = Math.min(1, v / 6);
-      // every footfall (the hips bottoming out) jolts the soft things
+      // a running footfall (the hips bottoming out) jolts the soft things; a walk is too gentle to
       const tvy = (y - this.lastTy) / Math.max(dt, 1e-3);
-      if (this.lastTvy < 0 && tvy >= 0) this.jg.squash.kick(-0.25 - r * 0.6);
+      if (r > 0.3 && this.lastTvy < 0 && tvy >= 0) this.jg.squash.kick(-0.3 * r);
       this.lastTy = y;
       this.lastTvy = tvy;
     } else if (pose === 'ski') {
