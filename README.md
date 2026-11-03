@@ -45,7 +45,7 @@ The day runs 06:00 to 22:00 in about twenty minutes; weather blends between clea
 | **Helicopter** | SKYTRACE's rescue helicopter. The stick moves you over the ground (relative to the camera), Climb and Descend on the right, and the nose follows where you go so the scanner looks ahead. Settle gently to land. |
 | **Skis** | Gravity does the work: tuck down the fall line, carve with the stick, pull back to snowplough. On the flat you pole along; with climbing skins you can walk uphill. |
 
-Touch: a floating stick wherever your left thumb lands, drag anywhere on the right to look, one big contextual action button (hold it for work like repairs, charges and first aid), and a few chips: Map, Koda, Skis on, Get off. Keyboard: WASD, Shift to run, E to act, Q skis, X get off, G Koda, R and C climb and descend, J and L turn the camera, M map, Esc pause.
+Touch: a floating stick wherever your left thumb lands, drag anywhere on the right to look, one big contextual action button (hold it for work like repairs, charges and first aid), and a few chips: Map, Koda, Skis on, Get off. The stick has a small deadzone and a gentle curve (a short push is a careful walk or a slow line on the sled; a full push is full speed), and every touch target is at least 44 px. The camera aims a little past you, so you sit in the lower third and see where you are going; on a phone held upright it pulls back and keeps at least a 40° view across. Keyboard: WASD, Shift to run, E to act, Q skis, X get off, G Koda, R and C climb and descend, J and L turn the camera, M map (M or Esc closes it), Esc pause (and closes any panel).
 
 ## Koda
 
@@ -118,6 +118,9 @@ npm run check        # typecheck, tests, build
 node scripts/play.mjs http://localhost:5173/ out/patrol [portrait]   # screenshot tour in a real browser
 node scripts/showcase.mjs http://localhost:4173/ out/show [portrait]  # fixed-camera views, for before/after comparisons
 node scripts/perf.mjs http://localhost:4173/ low|high                 # draw calls, triangles, frame time per view
+node scripts/verify.mjs http://localhost:4173/                        # release check: five iPhone sizes, HUD overlaps, touch targets, kit, flows
 ```
+
+`scripts/verify.mjs` runs on the production build (`npm run build && npm run preview`). At iPhone 15, SE and 15 Pro Max sizes, upright and on their side, it fails on any console warning, a kit model that did not load, HUD cards that overlap or leave the screen (on foot, on the sled, in the helicopter), a HUD button under 44 px, a page that can scroll, or a start-over / continue that leaves state behind.
 
 `window.patrol` in the browser is a debug handle (teleport, accept missions, set the time) used by the tour script.

@@ -51,7 +51,16 @@ python3 2_forge_library.py      # ForgeCraft: route + library versions + hand-of
 python3 3_emblem.py             # VectorCraft emblem (SVG/PNG/PDF)
 python3 4_share_card.py         # DesignCraft share card
 python3 5_art_bible.py          # DesignCraft art bible pages
+python3 6_verify_shipped.py     # MeshCraft: inspect + engine-check the GLBs that ship, compare with the rebuild
+python3 7_polish_sheets.py      # PhotoCraft: before/after sheets (docs/polish/) from captures of two builds
 ```
+
+`6_verify_shipped.py` checks what the game actually loads (`public/models/`), not just the
+sources: every model through MeshCraft's `inspect_file` and `engine_check` (three.js in headless
+Chromium, every clip played on its own). The lantern is checked as a hanging asset
+(`contract.ground: false`, its `lantern`, `lantern_body` and `lantern_light` nodes and its
+`swing` clip), because the game hangs it from a post arm by its hook. The game's own three.js
+version is covered by `scripts/verify.mjs`.
 
 Then copy the hand-off GLBs (`library_export`, hash-verified) into `public/models/`, the
 PhotoCraft-resampled icons into `public/icons/`, and update `MANIFEST.json`
