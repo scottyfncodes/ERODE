@@ -40,7 +40,7 @@ function shapeBounds(root: THREE.Object3D): THREE.Box3 {
 
 describe('the patrol models (GITCRAFT MeshCraft)', () => {
   it('ships every model, each loading in the game three.js within a phone budget', async () => {
-    const budget = { rs_sled: 2500, rs_heli: 3500, rs_spruce_a: 77, rs_spruce_b: 77 };
+    const budget = { rs_sled: 2500, rs_heli: 3500, rs_spruce_a: 77, rs_spruce_b: 77 /* the procedural tree was 76 */, rs_patroller: 3400, rs_koda: 1800 /* every hat and gear piece included */ };
     for (const id of PATROL_MODEL_IDS) {
       const scene = await load(id);
       expect(tris(scene), `${id} triangles`).toBeGreaterThan(0);

@@ -113,12 +113,28 @@
    "sha256": "fc1b942e7e9242f856d2d6dd861444bd4ea4d326ffa768308640720a9cee778e"
   },
   {
+   "path": "../public/models/rs_koda.glb",
+   "bytes": 269384,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_koda: Koda, skinned on a 21-bone skeleton of the code's own joints; 1284 tris drawn (code-built 1324), eyes/tongue/harness/bandana as toggled meshes; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched in tests/people.test.ts",
+   "sha256": "ac8e327d4918bf184bbe6edd7736c5d028f27f7cb014699d0ed79f3cae49e280"
+  },
+  {
    "path": "../public/models/rs_lantern.glb",
    "bytes": 36848,
    "tools": "MeshCraft (lantern template)",
    "status": "shipped",
    "notes": "rs_lantern: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
    "sha256": "85ec0d5bf0db1e3450a02c46f08f77aa883e99c1a862420b9821aeb2545c183b"
+  },
+  {
+   "path": "../public/models/rs_patroller.glb",
+   "bytes": 466132,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_patroller: the patroller (and villagers), skinned on a 25-bone skeleton of the code's own joints (same names, pivots, zero rest pose); 2606 tris drawn with the beanie and gear (code-built 2558), hats/skis/poles/gear as toggled meshes; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched to the code-built figure in tests/people.test.ts",
+   "sha256": "27a803627c2f3ff36070dc41e681905f7811099d4a6a03098112c95452bbbf55"
   },
   {
    "path": "../public/models/rs_sled.glb",
@@ -130,19 +146,19 @@
   },
   {
    "path": "../public/models/rs_spruce_a.glb",
-   "bytes": 8536,
+   "bytes": 9928,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_spruce_a: Kessel spruce (62 tris), replaces the procedural conifer in the instanced forest; art/3d/scripts/patrol_models.py; validated and engine-checked",
-   "sha256": "8d4f63d33c16ae7e7caa34e53def836b8aec9e797fb427a480a74c378b48f00f"
+   "notes": "rs_spruce_a: Kessel spruce with snow caps on its tiers (75 tris; the procedural tree was 76), replaces the procedural conifer in the instanced forest; art/3d/scripts/patrol_models.py; validated and engine-checked",
+   "sha256": "c72631d7b0b17a2e0e28a66e307a5aeec3b90926b2c4d4a7483f54fac8e3136c"
   },
   {
    "path": "../public/models/rs_spruce_b.glb",
-   "bytes": 8328,
+   "bytes": 9720,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_spruce_b: Kessel spruce, slimmer variant (60 tris); art/3d/scripts/patrol_models.py; validated and engine-checked",
-   "sha256": "d765ac6920151857fde6a8921d8f90986e18f44741c8e5b3d20a19e2a40325cc"
+   "notes": "rs_spruce_b: Kessel spruce, slimmer variant with snow caps (73 tris); art/3d/scripts/patrol_models.py; validated and engine-checked",
+   "sha256": "69dcf96d10061c4e4cb02e2a025b3f8954b3271dda1932da387cd2cff106f6a7"
   },
   {
    "path": "../public/models/rs_stump.glb",
@@ -161,6 +177,6 @@
    "sha256": "f2c222aad1fbb293f2060e75e69267afa0d53dce2c5366395ebda9fef13331db"
   }
  ],
- "files": 20,
+ "files": 22,
  "updated": "2026-11-03"
 }

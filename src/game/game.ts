@@ -120,7 +120,7 @@ export class Game {
   private fps = 60;
   private kitLoaded: string[] = [];
   /** which code-built meshes the MeshCraft models replaced (QA) */
-  private modelled = { sled: false, heli: false, forest: false };
+  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false };
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
 
@@ -143,7 +143,10 @@ export class Game {
     const forest = new ForestView(this.trees, models);
     scene.add(forest.group);
     // the patrol's vehicles from MeshCraft; the code-built ones stay if a model did not load
-    this.modelled = { sled: this.sledMesh.useModel(models.rs_sled), heli: this.heliMesh.useModel(models.rs_heli), forest: forest.modelled };
+    this.modelled = { ...this.modelled, sled: this.sledMesh.useModel(models.rs_sled), heli: this.heliMesh.useModel(models.rs_heli), forest: forest.modelled };
+    // the patroller and Koda: skinned models on skeletons of the code's own joints
+    this.modelled.patroller = this.player.useModel(models.rs_patroller);
+    this.modelled.koda = this.dogMesh.useModel(models.rs_koda);
     this.kitLoaded = Object.keys(kit).sort();
     this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z), this.rig.quality.tier === 'high');
     scene.add(this.kitView.group);
@@ -153,6 +156,7 @@ export class Game {
     this.markers = new Markers(this.terrain);
     this.avView = new AvalancheView();
     this.props = new MissionProps(this.terrain);
+    this.modelled.villagers = this.props.usePeople(models.rs_patroller);
     this.particles = new Particles(this.rig.quality.tier === 'low' ? 1600 : 2600);
     this.snowfall = new Snowfall(this.rig.quality.snowflakes);
     this.tracks = new Tracks(this.terrain, this.rig.quality.tier === 'low' ? 1100 : 1800);

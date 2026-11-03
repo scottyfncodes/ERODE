@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type { DogAnim } from '../actors/husky';
 import { Jiggle } from './characterMesh';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { box, facet, facetPaint, gem, repaint } from './kit';
+import { dressModel, retire } from './patrolModels';
 
 const GREY = 0x5f6873;
 const DARK = 0x3a4048;
@@ -10,8 +12,8 @@ const TAU = Math.PI * 2;
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 
 interface Leg {
-  upper: THREE.Group;
-  lower: THREE.Group;
+  upper: THREE.Object3D;
+  lower: THREE.Object3D;
   front: boolean;
   side: number;
 }
@@ -31,26 +33,34 @@ function seg(r0: number, r1: number, len: number, m: THREE.Material): THREE.Mesh
  */
 export class HuskyMesh {
   readonly group = new THREE.Group();
-  private body = new THREE.Group();
-  private front = new THREE.Group();
-  private rear = new THREE.Group();
-  private head = new THREE.Group();
-  private tail: THREE.Group[] = [];
+  private body: THREE.Object3D = new THREE.Group();
+  private front: THREE.Object3D = new THREE.Group();
+  private rear: THREE.Object3D = new THREE.Group();
+  private head: THREE.Object3D = new THREE.Group();
+  private tail: THREE.Object3D[] = [];
   private legs: Leg[] = [];
-  private earL = new THREE.Group();
-  private earR = new THREE.Group();
-  private jaw = new THREE.Group();
-  private tongue: THREE.Mesh;
-  private chestMesh: THREE.Mesh;
+  private earL: THREE.Object3D = new THREE.Group();
+  private earR: THREE.Object3D = new THREE.Group();
+  private jaw: THREE.Object3D = new THREE.Group();
+  /** the tongue's joint (it lolls) and the mesh shown when panting: one object in the code-built Koda */
+  private tongue: THREE.Object3D;
+  private tongueShow: THREE.Object3D;
+  private chestMesh: THREE.Object3D;
+  /** the chest's own proportions; breathing scales it from these (the model's chest bone is 1, 1, 1) */
+  private chestBase = new THREE.Vector3(1, 1.05, 0.95);
   private collar: THREE.MeshLambertMaterial;
-  private harness = new THREE.Group();
+  private harness: THREE.Object3D = new THREE.Group();
   private harnessMain: THREE.MeshLambertMaterial;
   private harnessSecond: THREE.MeshLambertMaterial;
-  private pack = new THREE.Group();
-  private bandana: THREE.Mesh;
+  private pack: THREE.Object3D = new THREE.Group();
+  private bandana: THREE.Object3D;
   private bandanaMat: THREE.MeshLambertMaterial;
-  private eyesOpen: THREE.Mesh[] = [];
-  private eyesShut: THREE.Mesh[] = [];
+  private eyesOpen: THREE.Object3D[] = [];
+  private eyesShut: THREE.Object3D[] = [];
+  /** the game's material for each palette role the MeshCraft model is painted with */
+  private roles: Record<string, THREE.Material> = {};
+  /** true once the MeshCraft model (public/models/rs_koda.glb) is in */
+  modelled = false;
   private zzz: THREE.Group;
   private t = Math.random() * 10;
   private wag = 0;
@@ -132,6 +142,7 @@ export class HuskyMesh {
     this.tongue = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.015, 0.13).translate(0, 0, -0.065), facet(0xe86a7a));
     this.tongue.position.set(0, 0.012, -0.08);
     this.tongue.visible = false;
+    this.tongueShow = this.tongue;
     this.jaw.add(jawMesh, this.tongue);
     for (const s of [-1, 1]) {
       const eye = gem(0.036, facet(0x8fd0f0), s * 0.085, 0.06, -0.165, 0);
@@ -143,7 +154,7 @@ export class HuskyMesh {
       this.head.add(eye, pupil, shut);
     }
     // ears: right stands tall, left flops over (always has)
-    const ear = (g: THREE.Group, s: number) => {
+    const ear = (g: THREE.Object3D, s: number) => {
       const e = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.19, 4), grey);
       e.position.y = 0.09;
       const inner = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.13, 4), facet(0xe8b4a8));
@@ -191,6 +202,21 @@ export class HuskyMesh {
     this.harness.visible = false;
     this.body.add(this.harness);
     this.bandanaMat = facetPaint(0xd8382a);
+    this.roles = {
+      grey,
+      white,
+      dark,
+      noseBlack: facet(0x15171a),
+      iris: facet(0x8fd0f0),
+      pupil: facet(0x101418),
+      earInner: facet(0xe8b4a8),
+      tongue: facet(0xe86a7a),
+      tag: facet(0xf2c230),
+      collar: this.collar,
+      harnessMain: this.harnessMain,
+      harnessSecond: this.harnessSecond,
+      bandana: this.bandanaMat,
+    };
     this.bandana = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.2, 3), this.bandanaMat);
     this.bandana.rotation.set(Math.PI + 0.4, 0, 0);
     this.bandana.position.set(0, 0.02, -0.5);
@@ -208,14 +234,90 @@ export class HuskyMesh {
     });
   }
 
+  /**
+   * Swap the code-built Koda for the MeshCraft model (public/models/rs_koda.glb): a skinned mesh on a
+   * skeleton whose bones are Koda's joints (same names, pivots and zero rest pose), so the animation
+   * below drives the bones exactly as it drove the groups. Eyes open and shut, the tongue, harness,
+   * saddlebags and bandana are separate meshes the same toggles show and hide. All or nothing: if the
+   * model is unusable nothing changes and false is returned.
+   */
+  useModel(source: THREE.Object3D | undefined): boolean {
+    if (!source) return false;
+    const root = cloneSkinned(source);
+    const legNames = ['FL', 'FR', 'RL', 'RR'];
+    const bones = ['body', 'front', 'rear', 'chest', 'head', 'jaw', 'tongue', 'ear_L', 'ear_R', 'tail_0', 'tail_1', 'tail_2', 'tail_3'];
+    for (const l of legNames) bones.push(`leg_${l}_upper`, `leg_${l}_lower`);
+    const parts = ['koda_body', 'koda_eyes_open', 'koda_eyes_shut', 'koda_tongue', 'koda_harness', 'koda_harness_pack', 'koda_bandana'];
+    const n = dressModel(root, [...bones, ...parts], this.roles);
+    if (!n) return false;
+    root.traverse((o) => (o.frustumCulled = !(o as THREE.SkinnedMesh).isSkinnedMesh));
+    // every joint picks up where the code-built one is now (the ears' set, the current pose)
+    const pairs: [THREE.Object3D, THREE.Object3D][] = [
+      [this.body, n.body],
+      [this.front, n.front],
+      [this.rear, n.rear],
+      [this.head, n.head],
+      [this.jaw, n.jaw],
+      [this.tongue, n.tongue],
+      [this.earL, n.ear_L],
+      [this.earR, n.ear_R],
+      ...this.tail.map((t, i) => [t, n[`tail_${i}`]] as [THREE.Object3D, THREE.Object3D]),
+      ...this.legs.flatMap((l, i) => [
+        [l.upper, n[`leg_${legNames[i]}_upper`]],
+        [l.lower, n[`leg_${legNames[i]}_lower`]],
+      ] as [THREE.Object3D, THREE.Object3D][]),
+    ];
+    for (const [a, b] of pairs) {
+      b.position.copy(a.position);
+      b.rotation.copy(a.rotation);
+      b.scale.copy(a.scale);
+    }
+    // the chest's offset too (its scale differs: the model has the chest's proportions in its geometry)
+    n.chest.position.copy(this.chestMesh.position);
+    const vis = { harness: this.harness.visible, pack: this.pack.visible, bandana: this.bandana.visible, tongue: this.tongueShow.visible, eyes: this.eyesOpen[0]?.visible ?? true };
+    retire([this.body]);
+    this.group.add(root);
+    this.body = n.body;
+    this.front = n.front;
+    this.rear = n.rear;
+    this.head = n.head;
+    this.jaw = n.jaw;
+    this.earL = n.ear_L;
+    this.earR = n.ear_R;
+    this.tail = [n.tail_0, n.tail_1, n.tail_2, n.tail_3];
+    this.legs.forEach((l, i) => {
+      l.upper = n[`leg_${legNames[i]}_upper`];
+      l.lower = n[`leg_${legNames[i]}_lower`];
+    });
+    this.chestMesh = n.chest;
+    this.chestBase.set(1, 1, 1);
+    this.tongue = n.tongue;
+    this.tongueShow = n.koda_tongue;
+    this.eyesOpen = [n.koda_eyes_open];
+    this.eyesShut = [n.koda_eyes_shut];
+    this.harness = n.koda_harness;
+    this.pack = n.koda_harness_pack;
+    this.bandana = n.koda_bandana;
+    this.harness.visible = vis.harness;
+    // the saddlebags hang off the harness in the code; here they are their own mesh
+    this.pack.visible = vis.harness && vis.pack;
+    this.bandana.visible = vis.bandana;
+    this.tongueShow.visible = vis.tongue;
+    this.eyesOpen[0].visible = vis.eyes;
+    this.eyesShut[0].visible = !vis.eyes;
+    this.modelled = true;
+    return true;
+  }
+
   setGear(collar: number, harness: { main: number; second: number; pack: boolean } | null, bandana: number | null) {
     repaint(this.collar, collar);
     this.harness.visible = !!harness;
     if (harness) {
       repaint(this.harnessMain, harness.main);
       repaint(this.harnessSecond, harness.second);
-      this.pack.visible = harness.pack;
     }
+    // (inside the harness in the code-built Koda, its own mesh in the model's)
+    this.pack.visible = !!harness && harness.pack;
     this.bandana.visible = bandana !== null;
     if (bandana !== null) repaint(this.bandanaMat, bandana);
   }
@@ -421,7 +523,7 @@ export class HuskyMesh {
     });
     // breathing: the chest swells, faster when panting
     const br = 1 + Math.sin(t * (2 + breathe * 2)) * 0.025 * breathe;
-    this.chestMesh.scale.set(br, 1.05 * br, 0.95);
+    this.chestMesh.scale.set(br * this.chestBase.x, br * this.chestBase.y, this.chestBase.z);
     // the tail wags in a wave down its length
     this.wag += dt * wagSpeed;
     this.tail.forEach((g, i) => {
@@ -429,7 +531,7 @@ export class HuskyMesh {
       g.rotation.z = Math.sin(this.wag - i * 0.7) * wagAmp * (0.6 + i * 0.35);
     });
     this.jaw.rotation.x = L(this.jaw.rotation.x, mouth * 0.4);
-    this.tongue.visible = mouth > 0.4;
+    this.tongueShow.visible = mouth > 0.4;
     this.tongue.rotation.x = 0.25 + Math.sin(t * 9) * 0.12 * mouth;
     for (const e of this.eyesOpen) e.visible = eyes;
     for (const e of this.eyesShut) e.visible = !eyes;
