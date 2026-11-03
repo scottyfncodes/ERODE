@@ -52,6 +52,25 @@ export const paint = (color: number) => new THREE.MeshLambertMaterial({ color: s
 /** Recolour a `paint` material through the same grade. */
 export const repaint = (m: THREE.MeshLambertMaterial, color: number) => m.color.setHex(storybook(color));
 
+/**
+ * Faceted: the same storybook colour, flat shaded, so a figure reads as cut polygons like the
+ * terrain it walks on instead of smooth plastic. Cached per colour; `facetPaint` is recolourable.
+ */
+const facetCache = new Map<number, THREE.MeshLambertMaterial>();
+export function facet(color: number): THREE.MeshLambertMaterial {
+  let m = facetCache.get(color);
+  if (!m) facetCache.set(color, (m = new THREE.MeshLambertMaterial({ color: storybook(color), flatShading: true })));
+  return m;
+}
+export const facetPaint = (color: number) => new THREE.MeshLambertMaterial({ color: storybook(color), flatShading: true });
+
+/** A cut gem: an icosahedron (detail 0 or 1), the faceted building block of the people and Koda. */
+export function gem(r: number, m: THREE.Material | number, x = 0, y = 0, z = 0, detail = 1): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(r, detail), typeof m === 'number' ? facet(m) : m);
+  mesh.position.set(x, y, z);
+  return mesh;
+}
+
 export const glow = (color: number) => new THREE.MeshBasicMaterial({ color });
 
 /**

@@ -1653,3 +1653,124 @@ body.booted .title-screen .inner {
     animation: none;
   }
 }
+
+/* ---------------- compact HUD ----------------
+   Only what you need on screen, nothing boxed for its own sake: free patrol shows no card at all
+   (the compass and its waypoint say where the mission table is), the instruments are one slim
+   strip, the compass is a thin tape, and the side buttons are small icon tiles. */
+.task.free {
+  display: none;
+}
+.task {
+  padding: 7px 11px 8px;
+}
+.task .fam {
+  font-size: 9.5px;
+}
+.task .title {
+  font-size: 14.5px;
+  margin-top: 2px;
+}
+.task .obj {
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+.task .pips {
+  margin-top: 6px;
+}
+.cond {
+  align-items: center;
+}
+.cond .strip {
+  display: flex;
+  align-items: stretch;
+  height: 44px;
+  padding: 0 2px;
+}
+.cond .box,
+.cond .box.wx {
+  min-width: 0;
+  padding: 0 9px;
+  margin: 0;
+}
+.cond .box + .box {
+  border-left: 1px solid rgba(246, 236, 220, 0.18);
+}
+.cond .big {
+  font-size: 14px;
+}
+.cond .small {
+  font-size: 9.5px;
+  margin-top: 1px;
+}
+.cond .danger {
+  gap: 6px;
+}
+.cond .danger .lvl {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+}
+.cond .danger .label {
+  font-size: 9px;
+}
+.compass {
+  height: 26px;
+}
+.compass .tick {
+  top: 3px;
+  height: 5px;
+}
+.compass .tick.big {
+  height: 8px;
+}
+.compass .card {
+  top: 11px;
+  font-size: 10px;
+}
+.compass .center {
+  height: 5px;
+}
+.compass .wp {
+  top: 1px;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+}
+.wp-dist {
+  top: calc(38px + var(--safe-t));
+  font-size: 11px;
+  padding: 1px 7px;
+}
+.side {
+  align-items: stretch;
+  gap: 6px;
+}
+.side .chip {
+  flex-direction: column;
+  justify-content: center;
+  height: 50px;
+  min-width: 58px;
+  padding: 4px 6px 3px;
+  gap: 3px;
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+}
+.side .chip svg {
+  width: 19px;
+  height: 19px;
+}
+@media (max-width: 520px) {
+  .cond .strip {
+    flex: 1;
+    justify-content: space-between;
+  }
+  .hud > .stack {
+    top: calc(60px + var(--safe-t));
+    gap: 4px;
+  }
+  .compass {
+    width: min(240px, 64vw);
+    height: 26px;
+  }
+}

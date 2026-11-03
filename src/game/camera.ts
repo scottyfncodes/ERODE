@@ -9,7 +9,7 @@ export type CamMode = 'foot' | 'sled' | 'skis' | 'heli' | 'indoor' | 'watch';
  * `portrait`: how much further back the camera sits on a tall, narrow phone screen.
  */
 const PROFILE: Record<CamMode, { dist: number; pitch: number; lift: number; follow: number; ahead: number; portrait: number }> = {
-  foot: { dist: 6.2, pitch: 0.3, lift: 1.5, follow: 0.6, ahead: 0.32, portrait: 0.3 },
+  foot: { dist: 5.6, pitch: 0.3, lift: 1.5, follow: 0.6, ahead: 0.32, portrait: 0.3 },
   sled: { dist: 8.6, pitch: 0.26, lift: 1.6, follow: 3.2, ahead: 0.5, portrait: 0.32 },
   skis: { dist: 7.2, pitch: 0.3, lift: 1.4, follow: 2.6, ahead: 0.5, portrait: 0.3 },
   heli: { dist: 19, pitch: 0.36, lift: 2.5, follow: 1.4, ahead: 0.4, portrait: 0.4 },
