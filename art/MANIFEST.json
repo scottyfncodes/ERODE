@@ -114,11 +114,11 @@
   },
   {
    "path": "../public/models/rs_koda.glb",
-   "bytes": 269384,
+   "bytes": 83288,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_koda: Koda, skinned on a 21-bone skeleton of the code's own joints; 1284 tris drawn (code-built 1324), eyes/tongue/harness/bandana as toggled meshes; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched in tests/people.test.ts",
-   "sha256": "ac8e327d4918bf184bbe6edd7736c5d028f27f7cb014699d0ed79f3cae49e280"
+   "notes": "rs_koda: Koda, skinned on a 21-bone skeleton of the code's own joints; 1284 tris drawn (code-built 1324), welded vertices (980 in all); eyes/tongue/harness/bandana as toggled meshes; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched in tests/people.test.ts",
+   "sha256": "344cae392919e11fa6179960cfedd9efeff711902515eb982de3b312cc2034eb"
   },
   {
    "path": "../public/models/rs_lantern.glb",
@@ -130,11 +130,11 @@
   },
   {
    "path": "../public/models/rs_patroller.glb",
-   "bytes": 466132,
+   "bytes": 164320,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_patroller: the patroller (and villagers), skinned on a 25-bone skeleton of the code's own joints (same names, pivots, zero rest pose); 2606 tris drawn with the beanie and gear (code-built 2558), hats/skis/poles/gear as toggled meshes; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched to the code-built figure in tests/people.test.ts",
-   "sha256": "27a803627c2f3ff36070dc41e681905f7811099d4a6a03098112c95452bbbf55"
+   "notes": "rs_patroller: the patroller (and villagers), skinned on a 25-bone skeleton of the code's own joints (same names, pivots, zero rest pose); 2606 tris drawn with the beanie and gear (code-built 2558), welded vertices (1839 in all) for cheap skinning; hats/skis/poles/gear as toggled meshes; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched to the code-built figure in tests/people.test.ts",
+   "sha256": "7c4b5a29482cb0a6b8e586d0003ade6e533795f802d4943415b05c2bb146f525"
   },
   {
    "path": "../public/models/rs_sled.glb",

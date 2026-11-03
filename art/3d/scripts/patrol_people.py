@@ -133,8 +133,12 @@ def build(rig, name):
         o = K.join(parts, obj)
         o.data.transform(o.matrix_world); o.matrix_world = Matrix()
         o.data.transform(TO_BLENDER)
-        K.shade(o)  # flat: cut facets, like the game's facet() materials
-        K.bake_vertex_colors(o, rig.mats, jitter=0.02, seed=len(obj))
+        # Shared vertices: the game shades these with its facet() materials (flatShading: the facets
+        # come from screen-space derivatives, not vertex normals), so the file can share each vertex
+        # between its faces instead of splitting it per face. Smooth normals and one colour per role
+        # (no per-face jitter) let the exporter weld them: a third of the vertices to skin.
+        K.shade(o, smooth_angle=180)
+        K.bake_vertex_colors(o, rig.mats, jitter=0.0)
         K.skin_rigid(o, arm, {})
         o["gitcraft_asset"] = asset
         out.append(o)
