@@ -240,12 +240,12 @@ def spruce(seed, points, slender):
             a = phase + math.tau * i / n
             if i % 2 == 0:  # a bough tip: out and drooping
                 rr = r * (0.95 + rng.random() * 0.1); yy = y - 0.05 * (1 - f * 0.4)
-                c = lerp(DARK, MID, 0.25 + f * 0.3)
+                c = lerp(lerp(DARK, MID, 0.25 + f * 0.3), SNOW, 0.12)  # a dusting on the tips
             else:           # a notch: in and up, holding snow
                 rr = r * 0.6; yy = y + h * 0.18
-                c = lerp(lerp(MID, TIP, f), SNOW, 0.45)
+                c = lerp(lerp(MID, TIP, f), SNOW, 0.8)
             rim.append(bm.verts.new((math.cos(a) * rr, yy, math.sin(a) * rr))); rc.append(c)
-        ac = lerp(lerp(MID, TIP, 0.6), SNOW, 0.8 if t < tiers - 1 else 0.92)
+        ac = lerp(lerp(MID, TIP, 0.6), SNOW, 0.95)
         for i in range(n):
             j = (i + 1) % n
             bm.faces.new((apex, rim[j], rim[i]))
@@ -258,14 +258,14 @@ def spruce(seed, points, slender):
             cr = []
             for k in range(3):
                 a = phase + math.tau * (2 * k * points[t] // 3 + 1) / n
-                reach = 0.85
+                reach = 1.0
                 # the tier's face at this reach (apex to notch), lifted a hair so it never z-fights
                 yy = top + (y + h * 0.18 - top) * reach + 0.015
                 rr = r * 0.6 * reach  # along the line from the crown point to the notch
                 cr.append(bm.verts.new((math.cos(a) * rr, yy, math.sin(a) * rr)))
             for k in range(3):
                 bm.faces.new((capex, cr[(k + 1) % 3], cr[k]))
-                cols.append((SNOW, lerp(SNOW, SHADE, 0.35), lerp(SNOW, SHADE, 0.35)))
+                cols.append((SNOW, lerp(SNOW, SHADE, 0.2), lerp(SNOW, SHADE, 0.2)))
     # winding: outward and up, so the normals read like the game's
     me = bpy.data.meshes.new("spruce_crown"); bm.to_mesh(me); bm.free()
     crown = K.link(bpy.data.objects.new("spruce_crown", me)); K.assign(crown, mats["spruce"])
