@@ -12,18 +12,48 @@ Everything here can be regenerated; nothing in this folder is loaded by the game
 | `MANIFEST.json` | Every shipped asset: path, SHA-256, bytes, the tools that made it |
 | `kessel-art-bible.pdf` | Emblem, art direction, palette and the kit contact sheet (DesignCraft layout, PDFCraft assembly) |
 
-## Art direction
+## Art direction: the storybook valley
 
-A miniature alpine world: chunky faceted primitives and flat palette colour, lit like a
-clear winter morning (warm sun, blue shade, snow that holds the light).
+A painted Swiss valley, framed square on: a miniature alpine world of chunky faceted primitives,
+coloured like a pastel postcard and composed with a love of symmetry.
 
-- **Rock** is granite in the same tone as the ground rock, weathered into upright tors;
-  snow sits only on ledges (faces looking up), with lichen and rust as accents.
-- **Patrol equipment** is red with a white cross (akja, rescue caches, the emblem), so
-  anything that can help you reads at a glance. **Pole orange** marks the way.
-- **The interface** is slate instrument housing over paper maps (`src/ui/style.css`).
-- **Air:** clouds drift across a sky that warms along the horizon on the sun's side; a
-  browser-composited lens grade closes in at night and in storms.
+- **Palette** (`rockslide-palette.json`, mirrored in `src/render/kit.ts` `PAL`): powder-blue
+  sky over a blush horizon, apricot and lavender at the golden hours, plum nights. Cream snow
+  with lavender shade, teal spruce, warm mauve granite. The patrol station is painted timber,
+  raspberry with cream trim under burgundy roofs; Hollin is a pastel row (blush, mustard, mint,
+  powder blue, lavender) with a powder-blue chapel under a mustard onion dome.
+- **The grade:** every material passes through `storybook()` once, when it is made: darks
+  lift to plum and chocolate (never black), loud colours settle to a painted pastel. So even a
+  one-off colour sits in the palette. A browser-composited plum vignette and fine film grain
+  finish the print.
+- **Composition:** the title is a symmetrical, one-point view of the lodge front, with the
+  patroller and Koda either side of the door and a slow push in and out. Taking a call shows a
+  centred chapter card ("Chapter Two · Eyes on Kessel Bowl"), coloured by the mission's family.
+- **Type:** Jost (a free Futura-style geometric) in tracked capitals for titles, signs and
+  labels; Courier Prime for the radio, like a telegram.
+- **Patrol equipment** stays tomato red with a cream cross, so anything that can help you
+  reads at a glance; pole orange still marks the way.
+- **The interface** is burgundy and aubergine card stock with an inset cream rule.
+
+## The people
+
+`src/render/characterMesh.ts` and `src/render/gait.ts`: a jointed figure (pelvis, two-piece
+spine, neck, shoulders, elbows, hips, knees, ankles) in a double-breasted alpine tunic with
+brass buttons, epaulettes and the patrol pack. Movement is procedural and physical:
+
+- feet placed by a two-bone leg solver, so the planted foot stays put while the body passes
+  over it (tested: about 4% slip walking, 12% at a full run);
+- a speed-continuous gait: strides lengthen and the duty factor drops as a walk becomes a run,
+  with heel strike, toe-off, an inverted-pendulum bob walking and a spring running;
+- hips sway over the planted foot and counter-turn against the shoulders; arms swing with the
+  opposite foot and bend as they come forward; the body banks into turns and leans into speed,
+  acceleration and slopes;
+- every joint moves through a critically damped spring, so walking, running, riding, skiing,
+  kneeling, petting and carrying blend into each other instead of snapping;
+- standing still: breathing, a slow weight shift, the odd glance round, blinking.
+
+Pieces that move together are merged per joint and material, so the figure costs about the
+same draw calls as the old one.
 
 ## The Kessel kit (3D)
 

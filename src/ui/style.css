@@ -65,7 +65,7 @@ canvas#view {
   z-index: 1;
   /* the storybook print: a warm plum vignette, powder-blue top, peach bottom */
   background:
-    radial-gradient(125% 100% at 50% 48%, transparent 56%, rgba(74, 35, 48, 0.32) 100%),
+    radial-gradient(125% 100% at 50% 48%, transparent 60%, rgba(74, 35, 48, 0.22) 100%),
     linear-gradient(180deg, rgba(150, 180, 220, 0.1) 0%, transparent 40%, transparent 66%, rgba(255, 180, 150, 0.1) 100%);
   mix-blend-mode: multiply;
   transition: opacity 0.8s ease;
@@ -1439,7 +1439,18 @@ body.booted .title-screen .inner {
   /* the pilot's readout, compact, under the compass (top set by the HUD layout) */
   .alt {
     transform: none;
-    padding: 5px 9px;
+    padding: 5px 10px;
+    /* three readings side by side, label over value */
+    display: grid;
+    grid-template-rows: auto auto;
+    grid-auto-flow: column;
+    column-gap: 12px;
+  }
+  .alt .label {
+    margin-top: 0 !important;
+  }
+  .alt.hidden {
+    display: none;
   }
   .alt .label {
     font-size: 9px;

@@ -7,8 +7,9 @@ Portrait sheets: before on the top row, after on the bottom. Landscape: before l
 import os, sys
 import gcx as g  # noqa
 
-SRC = os.path.join(g.PROD, "polish")
-OUT = "/home/user/ROCKSLIDE/docs/polish"
+# usage: python3 7_polish_sheets.py [captures-subfolder] [docs-subfolder]  (default: polish polish)
+SRC = os.path.join(g.PROD, sys.argv[1] if len(sys.argv) > 1 else "polish")
+OUT = f"/home/user/ROCKSLIDE/docs/{sys.argv[2] if len(sys.argv) > 2 else 'polish'}"
 os.makedirs(OUT, exist_ok=True)
 VIEWS = ["0title", "2yard", "3sled", "4heli"]
 GAP = 12

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ball, box, cyl, mat, paint, PAL, repaint } from './kit';
 import { ANKLE, cycleLength, footAt, legIK, LEG, pelvisBob, runBlend, SHIN, Spring, THIGH, type Foot, type LegAngles } from './gait';
 
@@ -6,6 +7,44 @@ export type Pose = 'idle' | 'walk' | 'run' | 'ride' | 'ski' | 'pilot' | 'work' |
 
 const SKIN = 0xf2c9a8;
 const TAU = Math.PI * 2;
+
+/**
+ * Fewer draw calls: inside each joint, pieces that share a material become one mesh (they move
+ * together anyway). Sub-groups (the next joint, hats, skis) are left alone and merged in turn;
+ * anything marked `userData.keep` (the eyes, which blink) stays its own mesh.
+ */
+function mergeJoints(root: THREE.Object3D) {
+  const groups: THREE.Object3D[] = [];
+  root.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh) groups.push(o);
+  });
+  for (const g of groups) {
+    const byMat = new Map<THREE.Material, THREE.Mesh[]>();
+    for (const c of g.children) {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh || m.userData.keep || Array.isArray(m.material) || m.children.length) continue;
+      const list = byMat.get(m.material as THREE.Material) ?? [];
+      list.push(m);
+      byMat.set(m.material as THREE.Material, list);
+    }
+    for (const [material, list] of byMat) {
+      if (list.length < 2) continue;
+      const geos = list.map((m) => {
+        m.updateMatrix();
+        let geo = m.geometry.clone().applyMatrix4(m.matrix);
+        if (geo.index) geo = geo.toNonIndexed();
+        for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal') geo.deleteAttribute(k);
+        return geo;
+      });
+      const merged = mergeGeometries(geos, false);
+      if (!merged) continue;
+      for (const m of list) g.remove(m);
+      const one = new THREE.Mesh(merged, material);
+      one.castShadow = true;
+      g.add(one);
+    }
+  }
+}
 
 /** A rounded limb segment hanging down from its joint (length `len`, radii top and bottom). */
 function limb(rTop: number, rBot: number, len: number, color: number | THREE.Material): THREE.Mesh {
@@ -264,6 +303,8 @@ export class PatrollerMesh {
     }
     this.R.elbow.add(this.held);
     this.held.position.set(-0.2, -0.3, -0.2);
+    for (const e of this.eyes) e.userData.keep = true;
+    mergeJoints(this.group);
     this.setSkis(false);
     this.group.traverse((o) => {
       const m = o as THREE.Mesh;
