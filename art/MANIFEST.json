@@ -146,19 +146,19 @@
   },
   {
    "path": "../public/models/rs_spruce_a.glb",
-   "bytes": 9212,
+   "bytes": 8908,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_spruce_a: Kessel spruce, snow caps on the four lower tiers and snow on the notches and crown points (68 tris; the procedural tree was 76), replaces the procedural conifer in the instanced forest; art/3d/scripts/patrol_models.py; validated and engine-checked",
-   "sha256": "8a15900957d04be2a8d7c4180d23987c9ff796a494e3d732feaa90fc7c674fdc"
+   "notes": "rs_spruce_a: Kessel spruce, snow caps on the three lower tiers and snow on the notches and crown points (65 tris; the procedural tree was 76), replaces the procedural conifer in the instanced forest; art/3d/scripts/patrol_models.py; validated and engine-checked",
+   "sha256": "904fdb3493789fd98f99dd01a88ddf4bd2ef188bc43362b643c02ff1cb0e4fcb"
   },
   {
    "path": "../public/models/rs_spruce_b.glb",
-   "bytes": 9004,
+   "bytes": 8700,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_spruce_b: Kessel spruce, slimmer variant with snow caps (66 tris); art/3d/scripts/patrol_models.py; validated and engine-checked",
-   "sha256": "14629c9579239b893dc556ef11e2a8191879b3b961f5dd1431b501c94d541f3a"
+   "notes": "rs_spruce_b: Kessel spruce, slimmer variant with snow caps (63 tris); art/3d/scripts/patrol_models.py; validated and engine-checked",
+   "sha256": "73de3cc0872a39376aec23f257349446dfa3ad5c950ab409a9f21d51029a5908"
   },
   {
    "path": "../public/models/rs_stump.glb",

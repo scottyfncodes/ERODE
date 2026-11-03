@@ -219,10 +219,11 @@ def spruce(seed, points, slender):
     conifer paints it. ~10,000 of these stand in the valley, so a tree costs no more than the
     procedural one did.
 
-    Snow caps: the four lower tiers carry a three-sided cap of the game's tree snow lying on their
-    upper faces (the two small top tiers are painted white), so the forest reads as snow-loaded from
-    the helicopter. ~68 triangles with a four-sided trunk: under the procedural tree's 76, and only a
-    few more than the uncapped spruce, since ~10,000 of them stand in the valley."""
+    Snow caps: the three broad lower tiers carry a three-sided cap of the game's tree snow lying on
+    their upper faces (the small upper tiers are painted white, notches and crown points), so the
+    forest reads as snow-loaded from the helicopter. 63-65 triangles with a four-sided trunk: under the
+    procedural tree's 76 and about what the uncapped spruce cost, since ~10,000 of them stand in the
+    valley."""
     tiers = len(points)
     mats = K.Materials(pal, {"spruce": "Spruce", "bark": "Log Dark"}, prefix="RS")
     rng = random.Random(seed)
@@ -251,7 +252,7 @@ def spruce(seed, points, slender):
             j = (i + 1) % n
             bm.faces.new((apex, rim[j], rim[i]))
             cols.append((ac, rc[j], rc[i]))
-        if t < tiers - 2:
+        if t < tiers - 3:
             # the cap: a low three-sided pyramid of snow just proud of the tier's upper face,
             # reaching most of the way to the notches where snow collects
             top = y + h
