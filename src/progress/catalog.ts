@@ -54,12 +54,12 @@ export interface Item {
 
 export const ITEMS: Item[] = [
   // patroller
-  { id: 'jacket-red', slot: 'jacket', name: 'Patrol red', cost: 0, rank: 0, color: 0xd8382a, color2: 0xf3efe6 },
+  { id: 'jacket-red', slot: 'jacket', name: 'Patrol red', cost: 0, rank: 0, color: 0xd8382a, color2: 0x2b2f38 },
   { id: 'jacket-orange', slot: 'jacket', name: 'Signal orange', cost: 120, rank: 0, color: 0xf07a1a, color2: 0x23313d },
-  { id: 'jacket-blue', slot: 'jacket', name: 'Glacier blue', cost: 160, rank: 1, color: 0x2f7fb8, color2: 0xf3efe6 },
+  { id: 'jacket-blue', slot: 'jacket', name: 'Glacier blue', cost: 160, rank: 1, color: 0x2f7fb8, color2: 0x2b2f38 },
   { id: 'jacket-green', slot: 'jacket', name: 'Forest service', cost: 180, rank: 2, color: 0x3c6b4a, color2: 0xe9c46a },
   { id: 'jacket-black', slot: 'jacket', name: 'Night shift', cost: 260, rank: 3, color: 0x262a30, color2: 0xd8382a },
-  { id: 'hat-beanie', slot: 'hat', name: 'Wool beanie', cost: 0, rank: 0, color: 0xd8382a, color2: 0xf3efe6 },
+  { id: 'hat-beanie', slot: 'hat', name: 'Wool beanie', cost: 0, rank: 0, color: 0x2b2f38, color2: 0xe0b042 },
   { id: 'hat-helmet', slot: 'hat', name: 'Patrol helmet', cost: 140, rank: 1, needs: 'equipment', color: 0xf3efe6, color2: 0xd8382a },
   { id: 'hat-trapper', slot: 'hat', name: 'Trapper hat', cost: 160, rank: 1, color: 0x7a5233, color2: 0xe8dcc8 },
   { id: 'hat-bobble', slot: 'hat', name: 'Bobble hat', cost: 90, rank: 0, color: 0x2f7fb8, color2: 0xf3efe6 },

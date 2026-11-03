@@ -235,9 +235,13 @@ export class StationView {
     const table = new THREE.Group();
     const tex = new THREE.CanvasTexture(topo);
     tex.colorSpace = THREE.SRGBColorSpace;
-    const top = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 2), [mat(0x6b4428), mat(0x6b4428), new THREE.MeshLambertMaterial({ map: tex }), mat(0x6b4428), mat(0x6b4428), mat(0x6b4428)]);
-    top.position.y = 0.95;
-    table.add(top);
+    // a wooden top and the map as its own sheet on it: the lodge's furniture is baked into a few
+    // meshes per material, and the baker skips multi-material meshes (that is how the top vanished)
+    table.add(box(3, 0.1, 2, 0x6b4428, 0, 0.95, 0));
+    const map = new THREE.Mesh(new THREE.PlaneGeometry(2.84, 1.84), new THREE.MeshLambertMaterial({ map: tex }));
+    map.rotation.x = -Math.PI / 2;
+    map.position.y = 1.006;
+    table.add(map);
     for (const [x, z] of [
       [-1.35, -0.85],
       [1.35, -0.85],
