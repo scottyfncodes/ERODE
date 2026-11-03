@@ -1,12 +1,41 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { ball, box, cyl, mat, paint, PAL, repaint } from './kit';
+import { ball, box, cyl, facet, facetPaint, gem, PAL, repaint } from './kit';
 import { ANKLE, cycleLength, footAt, legIK, LEG, pelvisBob, runBlend, SHIN, Spring, THIGH, type Foot, type LegAngles } from './gait';
 
 export type Pose = 'idle' | 'walk' | 'run' | 'ride' | 'ski' | 'pilot' | 'work' | 'pet' | 'carry' | 'sleep';
 
 const SKIN = 0xf2c9a8;
 const TAU = Math.PI * 2;
+const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
+const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/**
+ * An underdamped spring for the loose things (scarf tails, the pom-pom, the pack, the body's
+ * squash): it overshoots and wobbles back, which is what makes them read as soft. Sub-stepped so
+ * it stays stable at any frame rate.
+ */
+export class Jiggle {
+  x = 0;
+  v = 0;
+  constructor(
+    private k = 110,
+    private c = 9,
+  ) {}
+  step(target: number, dt: number): number {
+    let left = dt;
+    while (left > 1e-5) {
+      const h = Math.min(left, 1 / 120);
+      this.v += (this.k * (target - this.x) - this.c * this.v) * h;
+      this.x += this.v * h;
+      left -= h;
+    }
+    return this.x;
+  }
+  kick(v: number) {
+    this.v += v;
+  }
+}
 
 /**
  * Fewer draw calls: inside each joint, pieces that share a material become one mesh (they move
@@ -46,11 +75,13 @@ function mergeJoints(root: THREE.Object3D) {
   }
 }
 
-/** A rounded limb segment hanging down from its joint (length `len`, radii top and bottom). */
-function limb(rTop: number, rBot: number, len: number, color: number | THREE.Material): THREE.Mesh {
-  const g = new THREE.CapsuleGeometry((rTop + rBot) / 2, Math.max(0.01, len - (rTop + rBot)), 4, 10);
+/**
+ * A faceted limb segment hanging down from its joint (length `len`, radii top and bottom): a
+ * seven-sided capsule, tapered, flat shaded, so arms and legs read as cut polygons like the slopes.
+ */
+function limb(rTop: number, rBot: number, len: number, m: THREE.Material): THREE.Mesh {
+  const g = new THREE.CapsuleGeometry((rTop + rBot) / 2, Math.max(0.01, len - (rTop + rBot)), 2, 7);
   g.translate(0, -len / 2, 0);
-  // taper: scale each vertex's radius from top to bottom
   const p = g.getAttribute('position') as THREE.BufferAttribute;
   const avg = (rTop + rBot) / 2;
   for (let i = 0; i < p.count; i++) {
@@ -60,7 +91,16 @@ function limb(rTop: number, rBot: number, len: number, color: number | THREE.Mat
     p.setZ(i, p.getZ(i) * k);
   }
   g.computeVertexNormals();
-  return new THREE.Mesh(g, color instanceof THREE.Material ? color : mat(color));
+  return new THREE.Mesh(g, m);
+}
+
+/** A tapered ribbon segment hanging down from its pivot (the scarf's tails). */
+function ribbon(w0: number, w1: number, len: number, m: THREE.Material, y = 0): THREE.Mesh {
+  const g = new THREE.CylinderGeometry(w0, w1, len, 4, 1);
+  g.rotateY(Math.PI / 4);
+  g.scale(1, 1, 0.28);
+  g.translate(0, -len / 2 + y, 0);
+  return new THREE.Mesh(g, m);
 }
 
 interface Side {
@@ -74,11 +114,15 @@ interface Side {
 
 const springs = () => ({ hip: new Spring(), hipRoll: new Spring(), knee: new Spring(), ankle: new Spring(), arm: new Spring(), armRoll: new Spring(), elbow: new Spring() });
 
+type Fidget = 'none' | 'rub' | 'stomp' | 'stretch' | 'look';
+const CIVVY_SCARVES = [PAL.mint, PAL.powder, PAL.lavender, PAL.blush, PAL.mustard];
+
 /**
- * The patroller, and everyone else in the valley: a jointed figure (pelvis, two-piece spine,
- * neck, shoulders, elbows, hips, knees, ankles) in a tailored double-breasted alpine tunic. Feet
- * are placed by a two-bone solver and stay planted while the body passes over them; every joint
- * moves through a damped spring, so poses blend instead of snapping. Forward is -z.
+ * The patroller, and everyone else in the valley: a jointed, faceted figure (pelvis, two-piece
+ * spine, neck, shoulders, elbows, hips, knees, ankles) in a double-breasted alpine tunic and a
+ * knitted scarf. Feet are placed by a two-bone solver and stay planted while the body passes over
+ * them; every joint moves through a damped spring, so poses blend instead of snapping, and the
+ * loose things (scarf tails, pom-pom, pack) ride on wobbly springs of their own. Forward is -z.
  */
 export class PatrollerMesh {
   readonly group = new THREE.Group();
@@ -97,22 +141,33 @@ export class PatrollerMesh {
   private hatSecond: THREE.MeshLambertMaterial;
   private lens: THREE.MeshLambertMaterial;
   private hats: Record<string, THREE.Group> = {};
+  private poms: THREE.Group[] = [];
   private skisOnBack = new THREE.Group();
   private feetSkis: THREE.Group[] = [];
   private poles: THREE.Group[] = [];
   private skiMat: THREE.MeshLambertMaterial;
   private held = new THREE.Group();
+  private pack = new THREE.Group();
+  private tails: { a: THREE.Group; b: THREE.Group; ja: Jiggle; jb: Jiggle; off: number }[] = [];
   private t = 0;
   private phase = 0;
   private lastStride = 0;
   private lastYaw = 0;
   private lastSpeed = 0;
   private lastPose: Pose = 'idle';
+  private lastPy = LEG - 0.03;
+  private lastVy = 0;
+  private lastTy = LEG - 0.03;
+  private lastTvy = 0;
   private blend = 0;
   private eyes: THREE.Object3D[] = [];
   private blinkT = 2;
   private glanceT = 3;
   private glance = 0;
+  private fidget: Fidget = 'none';
+  private fidgetT = 0;
+  private fidgetLen = 0;
+  private fidgetWait = 3 + Math.random() * 3;
   private readonly sp = {
     y: new Spring(LEG - 0.03),
     sway: new Spring(),
@@ -125,42 +180,57 @@ export class PatrollerMesh {
     chestYaw: new Spring(),
     headX: new Spring(),
     headY: new Spring(),
+    headZ: new Spring(),
+  };
+  /** the soft things */
+  private readonly jg = {
+    squash: new Jiggle(160, 11),
+    pack: new Jiggle(140, 8),
+    pomX: new Jiggle(90, 5),
+    pomZ: new Jiggle(90, 5),
+    head: new Jiggle(120, 10),
   };
   private readonly ik: LegAngles = { hip: 0, knee: 0 };
   private readonly fL: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true };
   private readonly fR: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true };
 
   constructor(civilian = false) {
-    this.jacket = paint(PAL.red);
-    this.trim = paint(PAL.white);
-    this.hatMain = paint(PAL.red);
-    this.hatSecond = paint(PAL.white);
-    this.lens = new THREE.MeshLambertMaterial({ color: 0xf2a33a, emissive: 0x3a2000 });
-    this.skiMat = paint(PAL.wood);
-    const trousers = mat(PAL.trousers);
-    const boot = mat(PAL.boot);
-    const sock = mat(PAL.sock);
-    const mitt = mat(PAL.mitt);
-    const brass = mat(PAL.brass);
+    this.jacket = facetPaint(PAL.red);
+    this.trim = facetPaint(PAL.white);
+    this.hatMain = facetPaint(PAL.red);
+    this.hatSecond = facetPaint(PAL.white);
+    this.lens = new THREE.MeshLambertMaterial({ color: 0xf2a33a, emissive: 0x3a2000, flatShading: true });
+    this.skiMat = facetPaint(PAL.wood);
+    const trousers = facet(PAL.trousers);
+    const boot = facet(PAL.boot);
+    const sole = facet(0x2a1d1a);
+    const sock = facet(PAL.sock);
+    const mitt = facet(PAL.mitt);
+    const brass = facet(PAL.brass);
+    const dark = facet(PAL.dark);
+    const skin = facet(SKIN);
+    const hair = facet(PAL.hair);
+    const scarf = facet(civilian ? CIVVY_SCARVES[Math.floor(Math.random() * CIVVY_SCARVES.length)] : PAL.mustard);
 
     this.group.add(this.body);
     this.body.add(this.pelvis);
     this.pelvis.position.y = LEG - 0.03;
 
-    // ---- legs: thigh, shin, a tall laced boot with a turned-down sock
+    // ---- legs: thigh, shin, a chunky laced boot with a fluffy turned-down sock
     const side = (x: number): Side => {
       const s: Side = { hip: new THREE.Group(), knee: new THREE.Group(), ankle: new THREE.Group(), shoulder: new THREE.Group(), elbow: new THREE.Group(), s: springs() };
       s.hip.position.set(x, 0, 0);
-      s.hip.add(limb(0.105, 0.085, THIGH + 0.04, trousers));
+      s.hip.add(limb(0.11, 0.088, THIGH + 0.04, trousers));
       s.knee.position.y = -THIGH;
-      s.knee.add(limb(0.082, 0.07, SHIN, trousers));
-      s.knee.add(cyl(0.085, 0.085, 0.07, 10, sock, 0, -SHIN + 0.2, 0));
-      s.knee.add(cyl(0.078, 0.072, 0.18, 10, boot, 0, -SHIN + 0.08, 0));
+      s.knee.add(limb(0.086, 0.072, SHIN, trousers));
+      s.knee.add(cyl(0.1, 0.094, 0.075, 7, sock, 0, -SHIN + 0.21, 0));
+      s.knee.add(cyl(0.09, 0.08, 0.2, 7, boot, 0, -SHIN + 0.09, 0));
       s.ankle.position.y = -SHIN;
-      const sole = box(0.13, 0.08, 0.3, boot, 0, -ANKLE + 0.04, -0.07);
-      const toe = ball(0.066, boot, 0, -ANKLE + 0.05, -0.2, 8);
-      toe.scale.set(1, 0.75, 1);
-      s.ankle.add(sole, toe, box(0.14, 0.02, 0.31, mat(0x2a1d1a), 0, -ANKLE + 0.005, -0.07));
+      const foot = gem(0.088, boot, 0, -ANKLE + 0.05, -0.075, 0);
+      foot.scale.set(0.92, 0.62, 1.85);
+      const tread = gem(0.09, sole, 0, -ANKLE + 0.022, -0.075, 0);
+      tread.scale.set(0.96, 0.3, 1.9);
+      s.ankle.add(foot, tread);
       s.knee.add(s.ankle);
       s.hip.add(s.knee);
       this.pelvis.add(s.hip);
@@ -169,113 +239,163 @@ export class PatrollerMesh {
     this.L = side(-0.11);
     this.R = side(0.11);
 
-    // ---- the tunic: hips and skirt on the pelvis, chest above a two-piece spine
-    const seat = cyl(0.2, 0.215, 0.2, 14, trousers, 0, 0.02, 0);
+    // ---- the tunic: hips and a flared skirt on the pelvis, chest above a two-piece spine
+    const seat = cyl(0.2, 0.215, 0.2, 8, trousers, 0, 0.02, 0);
     seat.scale.z = 0.78;
-    const skirt = cyl(0.225, 0.27, 0.2, 14, this.jacket, 0, -0.02, 0);
+    const skirt = cyl(0.225, 0.295, 0.22, 8, this.jacket, 0, -0.03, 0);
     skirt.scale.z = 0.8;
-    const belt = cyl(0.232, 0.232, 0.06, 14, mat(PAL.dark), 0, 0.1, 0);
+    const belt = cyl(0.235, 0.235, 0.06, 8, dark, 0, 0.1, 0);
     belt.scale.z = 0.8;
-    const buckle = box(0.07, 0.06, 0.02, brass, 0, 0.1, -0.188);
+    const buckle = gem(0.04, brass, 0, 0.1, -0.19, 0);
+    buckle.scale.set(1, 0.8, 0.4);
     this.pelvis.add(seat, skirt, belt, buckle);
     this.pelvis.add(this.spine);
     this.spine.position.y = 0.12;
-    const waist = cyl(0.2, 0.22, 0.2, 14, this.jacket, 0, 0.08, 0);
+    const waist = cyl(0.205, 0.225, 0.2, 8, this.jacket, 0, 0.08, 0);
     waist.scale.z = 0.78;
     this.spine.add(waist);
     this.spine.add(this.chest);
     this.chest.position.y = 0.18;
-    const torso = cyl(0.25, 0.205, 0.38, 14, this.jacket, 0, 0.17, 0);
+    const torso = cyl(0.265, 0.205, 0.38, 8, this.jacket, 0, 0.17, 0);
     torso.scale.z = 0.76;
-    const shoulders = ball(0.25, this.jacket, 0, 0.34, 0, 14);
-    shoulders.scale.set(1, 0.34, 0.76);
-    // double-breasted: two rows of brass buttons, a cream collar and a placket
-    const placket = box(0.13, 0.36, 0.01, this.trim, 0, 0.17, -0.183);
+    const shoulders = gem(0.265, this.jacket, 0, 0.33, 0, 1);
+    shoulders.scale.set(1, 0.36, 0.76);
+    // double-breasted: two rows of brass buttons and a cream placket
+    const placket = box(0.13, 0.36, 0.01, this.trim, 0, 0.17, -0.186);
     placket.rotation.x = 0.1;
     for (let i = 0; i < 3; i++)
-      for (const bx of [-0.045, 0.045]) this.chest.add(ball(0.016, brass, bx, 0.28 - i * 0.09, -0.19 + i * 0.006, 6));
-    const collar = cyl(0.12, 0.15, 0.08, 12, this.trim, 0, 0.4, 0);
-    this.chest.add(torso, shoulders, placket, collar);
+      for (const bx of [-0.045, 0.045]) this.chest.add(gem(0.019, brass, bx, 0.28 - i * 0.09, -0.194 + i * 0.006, 0));
+    const collar = cyl(0.12, 0.15, 0.08, 8, this.trim, 0, 0.4, 0);
+    // a thick knitted scarf wound twice round the neck
+    const wrap = cyl(0.135, 0.165, 0.075, 8, scarf, 0, 0.425, 0.005);
+    const wrap2 = cyl(0.125, 0.145, 0.06, 8, scarf, 0, 0.475, 0.01);
+    wrap2.rotation.z = 0.12;
+    this.chest.add(torso, shoulders, placket, collar, wrap, wrap2);
+    // ...and its two tails, which stream out behind
+    for (const [x, off, len] of [
+      [-0.03, 0, 0.2],
+      [0.035, 1.7, 0.17],
+    ] as const) {
+      const a = new THREE.Group();
+      a.position.set(x, 0.46, 0.13);
+      a.add(ribbon(0.04, 0.036, len, scarf));
+      const b = new THREE.Group();
+      b.position.y = -len;
+      b.add(ribbon(0.036, 0.032, len * 0.85, scarf), ribbon(0.034, 0.042, 0.035, this.trim, -len * 0.85));
+      a.add(b);
+      this.chest.add(a);
+      this.tails.push({ a, b, ja: new Jiggle(70, 4.5), jb: new Jiggle(60, 3.5), off });
+    }
     if (!civilian) {
       // epaulettes, the pack with the patrol cross, skis A-framed on it
-      for (const ex of [-0.19, 0.19]) this.chest.add(box(0.11, 0.025, 0.14, this.trim, ex, 0.4, 0));
-      const pack = box(0.36, 0.42, 0.17, mat(PAL.pack), 0, 0.17, 0.25);
-      const flap = box(0.37, 0.12, 0.18, mat(PAL.packDark), 0, 0.33, 0.25);
-      const crossBg = box(0.22, 0.22, 0.012, this.trim, 0, 0.15, 0.338);
-      const crossV = box(0.06, 0.17, 0.014, this.jacket, 0, 0.15, 0.342);
-      const crossH = box(0.17, 0.06, 0.014, this.jacket, 0, 0.15, 0.342);
-      this.chest.add(pack, flap, crossBg, crossV, crossH);
+      for (const ex of [-0.19, 0.19]) {
+        const ep = gem(0.075, this.trim, ex, 0.4, 0, 0);
+        ep.scale.set(1, 0.3, 1.1);
+        this.chest.add(ep);
+      }
+      const packMain = gem(0.215, facet(PAL.pack), 0, 0.15, 0.25, 1);
+      packMain.scale.set(0.86, 1.02, 0.42);
+      const flap = gem(0.2, facet(PAL.packDark), 0, 0.3, 0.255, 1);
+      flap.scale.set(0.92, 0.38, 0.46);
+      const crossBg = cyl(0.115, 0.115, 0.012, 8, this.trim, 0, 0.13, 0.348);
+      crossBg.rotation.x = Math.PI / 2;
+      const crossV = box(0.055, 0.15, 0.014, this.jacket, 0, 0.13, 0.356);
+      const crossH = box(0.15, 0.055, 0.014, this.jacket, 0, 0.13, 0.356);
       for (const s of [-1, 1]) {
-        const sk = box(0.07, 1.5, 0.03, this.skiMat, s * 0.09, 0.42, 0.36);
-        sk.rotation.z = s * -0.05;
+        const pocket = gem(0.07, facet(PAL.packDark), s * 0.19, 0.06, 0.25, 0);
+        pocket.scale.set(0.6, 1.1, 1);
+        this.pack.add(pocket);
+      }
+      this.pack.add(packMain, flap, crossBg, crossV, crossH);
+      for (const s of [-1, 1]) {
+        // A-framed: the tips meet behind the head instead of splaying out like antlers
+        const sk = box(0.065, 1.3, 0.03, this.skiMat, s * 0.1, 0.26, 0.37);
+        sk.rotation.z = s * 0.065;
         this.skisOnBack.add(sk);
       }
-      this.chest.add(this.skisOnBack);
+      this.pack.add(this.skisOnBack);
+      this.chest.add(this.pack);
     }
 
-    // ---- arms: upper arm, forearm with a cuff, a mitten
+    // ---- arms: upper arm, forearm with a cuff, a big mitten with a thumb
     for (const [s, x] of [
-      [this.L, -0.26],
-      [this.R, 0.26],
+      [this.L, -0.27],
+      [this.R, 0.27],
     ] as const) {
       s.shoulder.position.set(x, 0.31, 0);
-      s.shoulder.add(limb(0.078, 0.066, 0.3, this.jacket));
+      s.shoulder.add(limb(0.08, 0.066, 0.3, this.jacket));
       s.elbow.position.y = -0.29;
-      s.elbow.add(limb(0.066, 0.058, 0.26, this.jacket));
-      s.elbow.add(cyl(0.064, 0.064, 0.05, 10, this.trim, 0, -0.24, 0));
-      const hand = ball(0.07, mitt, 0, -0.31, -0.01, 8);
-      hand.scale.set(0.9, 1.1, 1);
-      s.elbow.add(hand);
+      s.elbow.add(limb(0.068, 0.058, 0.26, this.jacket));
+      s.elbow.add(cyl(0.07, 0.07, 0.05, 7, this.trim, 0, -0.24, 0));
+      const hand = gem(0.078, mitt, 0, -0.315, -0.01, 1);
+      hand.scale.set(0.88, 1.12, 1);
+      const thumb = gem(0.034, mitt, -Math.sign(x) * 0.055, -0.29, -0.045, 0);
+      s.elbow.add(hand, thumb);
       s.shoulder.add(s.elbow);
       this.chest.add(s.shoulder);
     }
 
-    // ---- neck and head: a neat, deadpan face
+    // ---- neck and head: a big, friendly, faceted head
     this.neck.position.y = 0.4;
     this.chest.add(this.neck);
-    this.neck.add(cyl(0.065, 0.07, 0.12, 10, SKIN, 0, 0.05, 0));
+    this.neck.add(cyl(0.065, 0.07, 0.12, 7, skin, 0, 0.05, 0));
     this.head.position.y = 0.13;
     this.neck.add(this.head);
-    const face = ball(0.165, SKIN, 0, 0.12, 0, 16);
-    face.scale.set(0.95, 1.08, 1);
-    const hair = ball(0.168, PAL.hair, 0, 0.15, 0.025, 16);
-    hair.scale.set(1, 1.02, 1);
-    const nose = ball(0.032, 0xe3a283, 0, 0.1, -0.165, 8);
-    nose.scale.set(0.9, 1.2, 1);
-    const eyeL = ball(0.019, 0x1d1d1d, -0.058, 0.145, -0.148, 6);
-    const eyeR = ball(0.019, 0x1d1d1d, 0.058, 0.145, -0.148, 6);
+    const face = gem(0.185, skin, 0, 0.13, 0, 1);
+    face.scale.set(0.95, 1.06, 1);
+    const hairCap = gem(0.19, hair, 0, 0.165, 0.035, 1);
+    const nose = gem(0.037, facet(0xe3a283), 0, 0.105, -0.185, 0);
+    nose.scale.set(0.9, 1.1, 1.15);
+    const eyeL = gem(0.022, facet(0x1d1d1d), -0.064, 0.15, -0.165, 0);
+    const eyeR = gem(0.022, facet(0x1d1d1d), 0.064, 0.15, -0.165, 0);
     this.eyes = [eyeL, eyeR];
-    const browL = box(0.06, 0.012, 0.01, PAL.hair, -0.058, 0.185, -0.152);
-    const browR = box(0.06, 0.012, 0.01, PAL.hair, 0.058, 0.185, -0.152);
-    const cheekL = ball(0.028, 0xeea295, -0.095, 0.085, -0.13, 6);
-    const cheekR = ball(0.028, 0xeea295, 0.095, 0.085, -0.13, 6);
-    const earL = ball(0.035, SKIN, -0.16, 0.12, 0, 6);
-    const earR = ball(0.035, SKIN, 0.16, 0.12, 0, 6);
-    this.head.add(hair, face, nose, eyeL, eyeR, browL, browR, cheekL, cheekR, earL, earR);
+    const browL = box(0.065, 0.014, 0.012, hair, -0.064, 0.193, -0.168);
+    const browR = box(0.065, 0.014, 0.012, hair, 0.064, 0.193, -0.168);
+    browL.rotation.z = -0.12;
+    browR.rotation.z = 0.12;
+    const cheekL = gem(0.03, facet(0xeea295), -0.1, 0.09, -0.145, 0);
+    const cheekR = gem(0.03, facet(0xeea295), 0.1, 0.09, -0.145, 0);
+    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.008, 3, 6, Math.PI), facet(0x8e3f4c));
+    smile.rotation.z = Math.PI;
+    smile.position.set(0, 0.07, -0.172);
+    const earL = gem(0.04, skin, -0.178, 0.125, 0, 0);
+    const earR = gem(0.04, skin, 0.178, 0.125, 0, 0);
+    this.head.add(hairCap, face, nose, eyeL, eyeR, browL, browR, cheekL, cheekR, smile, earL, earR);
     // goggles pushed up on the brow
-    const strap = cyl(0.172, 0.172, 0.04, 16, mat(PAL.dark), 0, 0.22, 0);
-    const frame = box(0.24, 0.085, 0.05, mat(PAL.dark), 0, 0.225, -0.15);
-    const goggle = box(0.215, 0.065, 0.06, this.lens, 0, 0.225, -0.155);
+    const strap = cyl(0.19, 0.19, 0.04, 9, dark, 0, 0.225, 0.01);
+    const frame = box(0.25, 0.085, 0.05, dark, 0, 0.232, -0.165);
+    const goggle = box(0.225, 0.065, 0.06, this.lens, 0, 0.232, -0.17);
     this.head.add(strap, frame, goggle);
-    // hats (the same four, cut for the new head)
-    const H = 0.178;
+    // hats: a pom-pom on its own spring where there is one
+    const H = 0.195;
+    const pom = (r: number, y: number) => {
+      const g = new THREE.Group();
+      g.position.set(0, y, 0.01);
+      g.add(gem(r, this.hatSecond, 0, r * 0.75, 0, 1));
+      this.poms.push(g);
+      return g;
+    };
     const beanie = new THREE.Group();
-    const dome = ball(H, this.hatMain, 0, 0.2, 0.01, 14);
+    const dome = ball(H, this.hatMain, 0, 0.21, 0.01, 9);
     dome.scale.set(1, 0.92, 1);
-    beanie.add(dome, cyl(H + 0.006, H + 0.01, 0.075, 14, this.hatSecond, 0, 0.2, 0.01));
+    beanie.add(dome, cyl(H + 0.008, H + 0.012, 0.08, 9, this.hatSecond, 0, 0.205, 0.01), pom(0.05, 0.21 + H * 0.88));
     const helmet = new THREE.Group();
-    const shell = ball(H + 0.02, this.hatMain, 0, 0.19, 0.01, 16);
+    const shell = ball(H + 0.02, this.hatMain, 0, 0.195, 0.01, 10);
     shell.scale.set(1, 0.95, 1.06);
-    helmet.add(shell, box(0.05, 0.04, 0.26, this.hatSecond, 0, 0.375, 0.01), box(0.08, 0.08, 0.015, this.hatSecond, 0, 0.24, 0.205));
+    helmet.add(shell, box(0.05, 0.04, 0.27, this.hatSecond, 0, 0.39, 0.01), box(0.08, 0.08, 0.015, this.hatSecond, 0, 0.245, 0.215));
     const trapper = new THREE.Group();
-    const cap = ball(H + 0.006, this.hatMain, 0, 0.2, 0.01, 14);
+    const cap = ball(H + 0.006, this.hatMain, 0, 0.205, 0.01, 9);
     cap.scale.set(1, 0.9, 1);
-    trapper.add(cap, cyl(H + 0.012, H + 0.012, 0.075, 14, this.hatSecond, 0, 0.19, 0.01));
-    trapper.add(box(0.05, 0.17, 0.13, this.hatSecond, -0.175, 0.1, 0.01), box(0.05, 0.17, 0.13, this.hatSecond, 0.175, 0.1, 0.01));
+    trapper.add(cap, cyl(H + 0.014, H + 0.014, 0.08, 9, this.hatSecond, 0, 0.195, 0.01));
+    for (const s of [-1, 1]) {
+      const flap = gem(0.09, this.hatSecond, s * 0.185, 0.1, 0.01, 0);
+      flap.scale.set(0.42, 1, 0.8);
+      trapper.add(flap);
+    }
     const bobble = new THREE.Group();
-    const bd = ball(H, this.hatMain, 0, 0.22, 0.01, 14);
-    bd.scale.set(1, 1.12, 1);
-    bobble.add(bd, cyl(H + 0.006, H + 0.01, 0.065, 14, this.hatSecond, 0, 0.19, 0.01), ball(0.08, this.hatSecond, 0, 0.43, 0.01, 10));
+    const bd = ball(H, this.hatMain, 0, 0.225, 0.01, 9);
+    bd.scale.set(1, 1.14, 1);
+    bobble.add(bd, cyl(H + 0.008, H + 0.012, 0.07, 9, this.hatSecond, 0, 0.195, 0.01), pom(0.085, 0.225 + H * 1.08));
     this.hats = { 'hat-beanie': beanie, 'hat-helmet': helmet, 'hat-trapper': trapper, 'hat-bobble': bobble };
     for (const h of Object.values(this.hats)) {
       h.visible = false;
@@ -290,12 +410,12 @@ export class PatrollerMesh {
       const ski = box(0.085, 0.03, 1.65, this.skiMat, 0, 0, -0.05);
       const tip = box(0.085, 0.03, 0.2, this.skiMat, 0, 0.035, -0.95);
       tip.rotation.x = 0.45;
-      g.add(ski, tip, box(0.1, 0.04, 0.16, mat(PAL.dark), 0, 0.03, 0.03));
+      g.add(ski, tip, box(0.1, 0.04, 0.16, dark, 0, 0.03, 0.03));
       g.visible = false;
       s.ankle.add(g);
       this.feetSkis.push(g);
       const p = new THREE.Group();
-      p.add(cyl(0.012, 0.012, 1.2, 5, mat(PAL.metal), 0, -0.85, -0.04), cyl(0.05, 0.05, 0.015, 8, mat(PAL.dark), 0, -1.38, -0.04));
+      p.add(cyl(0.012, 0.012, 1.2, 5, facet(PAL.metal), 0, -0.85, -0.04), cyl(0.05, 0.05, 0.015, 6, dark, 0, -1.38, -0.04));
       p.position.y = -0.31;
       p.visible = false;
       s.elbow.add(p);
@@ -349,9 +469,11 @@ export class PatrollerMesh {
     this.t += dt;
     const t = this.t;
     if (pose !== this.lastPose) {
-      // a change of pose: everything eases across for a moment
+      // a change of pose: everything eases across for a moment, with a little bounce
       this.blend = 0.35;
       this.lastPose = pose;
+      this.jg.squash.kick(-0.6);
+      this.fidget = 'none';
     }
     this.blend = Math.max(0, this.blend - dt);
     const slow = this.blend > 0;
@@ -361,8 +483,8 @@ export class PatrollerMesh {
     while (dyaw > Math.PI) dyaw -= TAU;
     while (dyaw < -Math.PI) dyaw += TAU;
     this.lastYaw = yaw;
-    const turn = Math.max(-3, Math.min(3, dyaw / Math.max(dt, 1e-3)));
-    const accel = Math.max(-12, Math.min(12, (speed - this.lastSpeed) / Math.max(dt, 1e-3)));
+    const turn = clamp(dyaw / Math.max(dt, 1e-3), -3, 3);
+    const accel = clamp((speed - this.lastSpeed) / Math.max(dt, 1e-3), -12, 12);
     this.lastSpeed = speed;
     // the step cycle runs on distance, so planted feet never skate
     let ds = stride - this.lastStride;
@@ -381,8 +503,9 @@ export class PatrollerMesh {
     let chestYaw = 0;
     let headX = 0;
     let headY = 0;
+    let headZ = 0;
     const leg = { L: { hip: 0, hipRoll: 0, knee: 0, ankle: 0 }, R: { hip: 0, hipRoll: 0, knee: 0, ankle: 0 } };
-    const arm = { L: { arm: 0.05, roll: -0.12, elbow: 0.2 }, R: { arm: 0.05, roll: 0.12, elbow: 0.2 } };
+    const arm = { L: { arm: 0.05, roll: -0.14, elbow: 0.25 }, R: { arm: 0.05, roll: 0.14, elbow: 0.25 } };
     let ik = false;
     let fwdL = 0;
     let fwdR = 0;
@@ -390,6 +513,8 @@ export class PatrollerMesh {
     let liftR = 0;
     let pitchL = 0;
     let pitchR = 0;
+    // how hard the wind of moving catches the scarf, 0..1
+    let blow = 0;
 
     const locomotion = pose === 'walk' || pose === 'run' || pose === 'carry';
     if (locomotion) {
@@ -412,28 +537,30 @@ export class PatrollerMesh {
       pitchL = this.fL.pitch * k;
       pitchR = this.fR.pitch * k;
       ik = true;
-      // weight over the planted foot, the free hip dropping a little, hips and shoulders counter-turning
-      // normalised by the stance's full sweep, so the hips turn smoothly through the crossing
+      // weight over the planted foot, the free hip dropping, hips and shoulders counter-turning
       const span = Math.max(0.1, cycleLength(v) * 0.6);
-      const diff = Math.max(-1, Math.min(1, (fwdL - fwdR) / span));
-      sway = -Math.cos(TAU * (ph - 0.3)) * (0.028 - r * 0.012) * k;
-      roll = sway * 1.4;
-      pyaw = -diff * (0.13 + r * 0.05) * k;
-      chestYaw = -pyaw * 1.5;
-      // lean into speed, into acceleration and up a hill
-      spine = -(0.05 + r * 0.2) * k - accel * 0.012 - slope * 0.35;
-      chest = -0.03 * k + Math.sin(TAU * ph * 2) * 0.02 * r;
-      headX = -(spine + chest) * 0.85;
-      // arms follow the opposite foot; a run pumps them bent
-      const swingA = (0.55 + r * 0.25) * k;
+      const diff = clamp((fwdL - fwdR) / span, -1, 1);
+      sway = -Math.cos(TAU * (ph - 0.3)) * (0.034 - r * 0.014) * k;
+      roll = sway * 1.8;
+      pyaw = -diff * (0.17 + r * 0.06) * k;
+      chestYaw = -pyaw * 1.7;
+      // lean into speed, into acceleration and up a hill; a run drives forward from the chest
+      spine = -(0.07 + r * 0.3) * k - accel * 0.018 - slope * 0.4;
+      chest = -0.04 * k - r * 0.06 + Math.sin(TAU * ph * 2) * 0.035 * r;
+      // the head stays level and leads into turns
+      headX = -(spine + chest) * 0.85 + Math.sin(TAU * ph * 2 + 0.6) * 0.03 * k;
+      headY = clamp(turn * 0.22, -0.45, 0.45);
+      headZ = -roll * 0.6;
+      // arms follow the opposite foot; a run pumps them hard and bent
+      const swingA = (0.85 + r * 0.45) * k;
       for (const [a, f, s] of [
         [arm.L, fwdR, -1],
         [arm.R, fwdL, 1],
       ] as const) {
         const sw = (f / Math.max(0.1, span / 2)) * swingA * 0.5;
-        a.arm = sw + r * 0.15;
-        a.roll = s * (0.1 + r * 0.06);
-        a.elbow = 0.25 + Math.max(0, sw) * 0.55 + r * 1.05;
+        a.arm = sw + r * 0.2;
+        a.roll = s * (0.14 + r * 0.1);
+        a.elbow = 0.3 + Math.max(0, sw) * 0.75 + r * 1.2;
       }
       if (pose === 'carry') {
         // Pepper held to the chest
@@ -442,42 +569,76 @@ export class PatrollerMesh {
         chestYaw *= 0.3;
       }
       // bank into turns
-      bank = -turn * Math.min(1, v / 3) * (0.06 + r * 0.06);
+      bank = -turn * Math.min(1, v / 3) * (0.08 + r * 0.1);
+      blow = Math.min(1, v / 6);
+      // every footfall (the hips bottoming out) jolts the soft things
+      const tvy = (y - this.lastTy) / Math.max(dt, 1e-3);
+      if (this.lastTvy < 0 && tvy >= 0) this.jg.squash.kick(-0.25 - r * 0.6);
+      this.lastTy = y;
+      this.lastTvy = tvy;
     } else if (pose === 'ski') {
       const crouch = Math.min(1, speed / 14);
-      y = LEG - 0.12 - crouch * 0.16;
+      y = LEG - 0.12 - crouch * 0.18;
       ik = true;
-      fwdL = 0.06;
-      fwdR = -0.06;
-      // skis stay flat on the snow
+      // carving: the feet stagger with the turn and the hips angulate over them
+      fwdL = 0.06 + lean * 0.06;
+      fwdR = -0.06 - lean * 0.06;
       pitchL = pitchR = 0;
-      spine = -0.32 - crouch * 0.2;
+      spine = -0.34 - crouch * 0.24;
       chest = -0.05;
       headX = -(spine + chest) * 0.9;
-      spineRoll = -lean * 0.3;
-      bank = -lean * 0.12;
-      arm.L = { arm: 0.5, roll: -0.35, elbow: 0.5 };
-      arm.R = { arm: 0.5, roll: 0.35, elbow: 0.5 };
+      headY = lean * 0.2;
+      spineRoll = -lean * 0.42;
+      pyaw = lean * 0.22;
+      chestYaw = -lean * 0.3;
+      sway = lean * 0.05;
+      bank = -lean * 0.2;
+      arm.L = { arm: 0.6, roll: -0.45 + lean * 0.15, elbow: 0.55 };
+      arm.R = { arm: 0.6, roll: 0.45 + lean * 0.15, elbow: 0.55 };
+      blow = Math.min(1, speed / 9);
       if (speed < 3 && speed > 0.3) {
-        // poling along
+        // poling along: a real push, the body dipping into each plant
         this.phase = (this.phase + ds / 2.2) % 1;
         const s = Math.sin(TAU * this.phase);
-        arm.L.arm = 0.35 + s * 0.6;
-        arm.R.arm = 0.35 - s * 0.6;
-        spine += Math.abs(s) * -0.08;
+        arm.L.arm = 0.45 + s * 0.8;
+        arm.R.arm = 0.45 - s * 0.8;
+        arm.L.elbow = 0.5 + Math.max(0, s) * 0.5;
+        arm.R.elbow = 0.5 + Math.max(0, -s) * 0.5;
+        spine += Math.abs(s) * -0.14;
+      } else if (speed >= 3) {
+        // a little pole flick on the inside of the turn, in time with the carve
+        const flick = Math.max(0, Math.sin(t * 2.4)) * 0.25;
+        if (lean > 0.2) arm.R.arm += flick;
+        else if (lean < -0.2) arm.L.arm += flick;
       }
     } else if (pose === 'ride' || pose === 'pilot') {
       y = pose === 'ride' ? 0.62 : 0.5;
-      leg.L = { hip: 1.45, hipRoll: -0.08, knee: -1.5, ankle: 0.05 };
-      leg.R = { hip: 1.45, hipRoll: 0.08, knee: -1.5, ankle: 0.05 };
-      spine = pose === 'ride' ? -0.25 - Math.min(0.15, speed * 0.01) : -0.05;
-      spineRoll = -lean * 0.3;
-      headX = -spine * 0.8;
-      headY = -lean * 0.25;
-      arm.L = { arm: 1.05, roll: -0.25, elbow: 0.45 };
-      arm.R = { arm: 1.05, roll: 0.25, elbow: 0.45 };
-      // a jolt of the body over the bumps at speed
-      y += Math.sin(t * 17) * Math.min(0.012, speed * 0.0008);
+      leg.L = { hip: 1.45, hipRoll: -0.1, knee: -1.5, ankle: 0.05 };
+      leg.R = { hip: 1.45, hipRoll: 0.1, knee: -1.5, ankle: 0.05 };
+      if (pose === 'ride') {
+        // the rider works the sled: hangs off the inside of a turn, tucks at speed
+        spine = -0.3 - Math.min(0.2, speed * 0.012);
+        spineRoll = -lean * 0.55;
+        bank = -lean * 0.12;
+        sway = lean * 0.07;
+        headX = -spine * 0.8;
+        headY = -lean * 0.3;
+        headZ = lean * 0.15;
+        arm.L = { arm: 1.1, roll: -0.3, elbow: 0.5 + Math.max(0, lean) * 0.4 };
+        arm.R = { arm: 1.1, roll: 0.3, elbow: 0.5 + Math.max(0, -lean) * 0.4 };
+        blow = Math.min(1, speed / 12);
+        // the body soaks up the bumps at speed
+        const bump = Math.sin(t * 17) * Math.sin(t * 5.3);
+        y += bump * Math.min(0.02, speed * 0.0012);
+        if (speed > 4 && Math.random() < dt * 1.5) this.jg.squash.kick(-0.4);
+      } else {
+        spine = -0.05;
+        spineRoll = -lean * 0.3;
+        headX = -spine * 0.8;
+        headY = -lean * 0.25 + Math.sin(t * 0.5) * 0.25;
+        arm.L = { arm: 1.05, roll: -0.25, elbow: 0.45 };
+        arm.R = { arm: 1.05, roll: 0.25, elbow: 0.45 };
+      }
     } else if (pose === 'work' || pose === 'pet') {
       // down on one knee
       y = 0.56;
@@ -487,41 +648,95 @@ export class PatrollerMesh {
       chest = -0.1;
       headX = 0.05;
       if (pose === 'work') {
+        // put the shoulders into it
         const k = Math.sin(t * 9);
-        arm.L = { arm: 1.1 + k * 0.25, roll: -0.05, elbow: 0.6 - k * 0.2 };
-        arm.R = { arm: 1.1 - k * 0.25, roll: 0.05, elbow: 0.6 + k * 0.2 };
-        chestYaw = k * 0.06;
+        arm.L = { arm: 1.15 + k * 0.35, roll: -0.05, elbow: 0.6 - k * 0.3 };
+        arm.R = { arm: 1.15 - k * 0.35, roll: 0.05, elbow: 0.6 + k * 0.3 };
+        chestYaw = k * 0.12;
+        spine += Math.abs(k) * -0.06;
+        headY = k * 0.06;
       } else {
         const k = Math.sin(t * 6);
         arm.L = { arm: 0.25, roll: -0.2, elbow: 0.4 };
-        arm.R = { arm: 0.85 + k * 0.2, roll: 0.1, elbow: 0.55 - k * 0.25 };
+        arm.R = { arm: 0.85 + k * 0.25, roll: 0.1, elbow: 0.55 - k * 0.3 };
         headX = 0.15;
         headY = -0.2;
+        // a fond tilt of the head
+        headZ = 0.18 + Math.sin(t * 1.3) * 0.05;
       }
     } else if (pose === 'sleep') {
       y = 0.3;
       spine = -1.4;
       headX = 0.3;
     } else {
-      // standing: breathing, a slow weight shift, now and then a look around
+      // standing: breathing, a slow weight shift, and the fidgets of someone out in the cold
       ik = true;
       const w = Math.sin(t * 0.55);
-      sway = w * 0.022;
-      roll = w * 0.03;
-      fwdL = 0.05;
-      fwdR = -0.03;
-      y = LEG - 0.035 - Math.abs(w) * 0.006 + Math.sin(t * 1.7) * 0.004;
-      chest = Math.sin(t * 1.7) * 0.012;
-      spineRoll = -w * 0.03;
-      arm.L = { arm: 0.04 + Math.sin(t * 1.7 + 1) * 0.015, roll: -0.1, elbow: 0.18 };
-      arm.R = { arm: 0.04 + Math.sin(t * 1.7 + 1.4) * 0.015, roll: 0.1, elbow: 0.2 };
+      sway = w * 0.026;
+      roll = w * 0.035;
+      fwdL = 0.06;
+      fwdR = -0.04;
+      y = LEG - 0.035 - Math.abs(w) * 0.008 + Math.sin(t * 1.7) * 0.005;
+      chest = Math.sin(t * 1.7) * 0.016;
+      spineRoll = -w * 0.035;
+      headZ = w * 0.04;
+      arm.L = { arm: 0.04 + Math.sin(t * 1.7 + 1) * 0.02, roll: -0.12, elbow: 0.22 };
+      arm.R = { arm: 0.04 + Math.sin(t * 1.7 + 1.4) * 0.02, roll: 0.12, elbow: 0.24 };
       this.glanceT -= dt;
       if (this.glanceT < 0) {
         this.glanceT = 2.5 + Math.random() * 4;
-        this.glance = Math.random() < 0.35 ? 0 : (Math.random() - 0.5) * 1.2;
+        this.glance = Math.random() < 0.35 ? 0 : (Math.random() - 0.5) * 1.3;
       }
       headY = this.glance;
-      headX = Math.sin(t * 0.4) * 0.04;
+      headX = Math.sin(t * 0.4) * 0.05;
+      // now and then: rub the mitts together, stamp the cold out of the feet, stretch, look round
+      if (this.fidget === 'none') {
+        this.fidgetWait -= dt;
+        if (this.fidgetWait < 0) {
+          const all: Fidget[] = ['rub', 'stomp', 'stretch', 'look'];
+          this.fidget = all[Math.floor(Math.random() * all.length)];
+          this.fidgetT = 0;
+          this.fidgetLen = this.fidget === 'stomp' ? 1.7 : this.fidget === 'look' ? 2.6 : 2.3;
+        }
+      } else {
+        this.fidgetT += dt;
+        const f = this.fidgetT;
+        const e = clamp(Math.min(f / 0.35, (this.fidgetLen - f) / 0.35), 0, 1);
+        if (f >= this.fidgetLen) {
+          this.fidget = 'none';
+          this.fidgetWait = 4 + Math.random() * 5;
+        } else if (this.fidget === 'rub') {
+          const k = Math.sin(f * 16);
+          arm.L = { arm: mix(arm.L.arm, 0.9, e), roll: mix(arm.L.roll, 0.5, e), elbow: mix(arm.L.elbow, 1.75 + k * 0.12, e) };
+          arm.R = { arm: mix(arm.R.arm, 0.9, e), roll: mix(arm.R.roll, -0.5, e), elbow: mix(arm.R.elbow, 1.75 - k * 0.12, e) };
+          headX += 0.18 * e;
+          headY *= 1 - e;
+          spine -= 0.06 * e;
+          // a shiver
+          sway += Math.sin(f * 30) * 0.006 * e;
+        } else if (this.fidget === 'stomp') {
+          const p = f / this.fidgetLen;
+          const up = Math.max(0, Math.sin(p * TAU * 2));
+          if (p < 0.5) liftL = up * 0.13;
+          else liftR = up * 0.13;
+          arm.L.roll -= 0.15 * e;
+          arm.R.roll += 0.15 * e;
+          headX += 0.12 * e;
+        } else if (this.fidget === 'stretch') {
+          arm.L = { arm: mix(arm.L.arm, 2.7, e), roll: mix(arm.L.roll, -0.25, e), elbow: mix(arm.L.elbow, 0.35, e) };
+          arm.R = { arm: mix(arm.R.arm, 2.7, e), roll: mix(arm.R.roll, 0.25, e), elbow: mix(arm.R.elbow, 0.35, e) };
+          spine += 0.14 * e;
+          chest += 0.08 * e;
+          headX -= 0.3 * e;
+          headY *= 1 - e;
+        } else {
+          // a proper look round, the shoulders following the head
+          const s = Math.sin((f / this.fidgetLen) * TAU);
+          headY = s * 1.0 * e;
+          chestYaw = s * 0.28 * e;
+          headX -= 0.06 * e;
+        }
+      }
     }
 
     // ---- springs: quick when walking (so the feet stay true), soft when changing pose
@@ -536,9 +751,42 @@ export class PatrollerMesh {
     this.spine.rotation.x = S.spine.step(spine, dt, slow ? 0.3 : 0.14);
     this.spine.rotation.z = S.spineRoll.step(spineRoll, dt, 0.18);
     this.chest.rotation.x = S.chest.step(chest, dt, 0.12);
-    this.chest.rotation.y = S.chestYaw.step(chestYaw, dt, 0.08);
-    this.head.rotation.x = S.headX.step(headX, dt, 0.18);
-    this.head.rotation.y = S.headY.step(headY, dt, 0.35);
+    this.chest.rotation.y = S.chestYaw.step(chestYaw, dt, 0.1);
+    // the head lags the body a beat (follow-through) and nods with every jolt
+    const nod = this.jg.head.step(0, dt);
+    this.head.rotation.x = S.headX.step(headX, dt, 0.18) + nod;
+    this.head.rotation.y = S.headY.step(headY, dt, 0.3);
+    this.head.rotation.z = S.headZ.step(headZ, dt, 0.25);
+
+    // ---- the soft things: squash on a landing, the pack bouncing, the pom-pom and scarf flying
+    const vy = (py - this.lastPy) / Math.max(dt, 1e-3);
+    const ay = clamp((vy - this.lastVy) / Math.max(dt, 1e-3), -40, 40);
+    this.lastPy = py;
+    this.lastVy = vy;
+    const sq = clamp(this.jg.squash.step(0, dt), -0.07, 0.07);
+    this.spine.scale.set(1 - sq * 0.5, 1 + sq, 1 - sq * 0.5);
+    this.jg.head.kick(clamp(-ay * 0.0012, -0.08, 0.08));
+    this.jg.pack.kick(clamp(-ay * 0.0009, -0.06, 0.06));
+    this.pack.position.y = clamp(this.jg.pack.step(0, dt), -0.03, 0.03);
+    this.pack.rotation.x = this.pack.position.y * 2.5;
+    this.jg.pomX.kick(clamp(ay * 0.006 + accel * 0.02, -0.5, 0.5));
+    this.jg.pomZ.kick(clamp(-turn * 0.06 * dt * 60, -0.4, 0.4));
+    const pomX = clamp(this.jg.pomX.step(blow * 0.7, dt), -1.1, 1.1);
+    const pomZ = clamp(this.jg.pomZ.step(0, dt), -0.9, 0.9);
+    for (const p of this.poms) {
+      p.rotation.x = pomX;
+      p.rotation.z = pomZ;
+    }
+    // the scarf: hangs over the pack at rest, streams out behind and flutters as you go faster
+    for (const tl of this.tails) {
+      const flutter = Math.sin(t * (9 + blow * 8) + tl.off) * (0.05 + blow * 0.22);
+      const flutter2 = Math.sin(t * (11 + blow * 9) + tl.off + 1.2) * (0.08 + blow * 0.35);
+      tl.ja.kick(clamp(ay * 0.004, -0.4, 0.4));
+      tl.jb.kick(clamp(ay * 0.006, -0.5, 0.5));
+      tl.a.rotation.x = tl.ja.step(-1.15 - blow * 0.45 + flutter + accel * 0.03, dt);
+      tl.b.rotation.x = tl.jb.step(mix(0.75, 0.1, blow) + flutter2, dt);
+      tl.a.rotation.z = Math.sin(t * 3 + tl.off) * 0.08 * (0.3 + blow) - turn * 0.05;
+    }
 
     if (ik) {
       // feet from where they should be on the ground, under the pelvis as it actually is

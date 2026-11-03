@@ -78,11 +78,11 @@ export class Hud {
     this.compass.append(this.tape, el('div', 'center'), this.wp);
     this.wpDist = el('div', 'wp-dist housing');
     const cond = el('div', 'cond');
-    const tbox = el('div', 'box housing wx');
+    const tbox = el('div', 'box wx');
     this.time = el('div', 'big');
     this.wx = el('div', 'small');
     tbox.append(this.time, this.wx);
-    const dbox = el('div', 'box housing');
+    const dbox = el('div', 'box');
     const drow = el('div', 'danger');
     this.dangerLvl = el('div', 'lvl d3', '3');
     this.dangerTxt = el('div', 'small');
@@ -90,12 +90,15 @@ export class Hud {
     dcol.append(el('div', 'label', 'Avalanche'), this.dangerTxt);
     drow.append(this.dangerLvl, dcol);
     dbox.append(drow);
-    const fbox = el('div', 'box housing');
+    const fbox = el('div', 'box');
     this.fundsEl = el('div', 'big', '0');
     fbox.append(this.fundsEl, el('div', 'small', 'funds'));
     this.pause = el('button', 'iconbtn', ICON.pause) as HTMLButtonElement;
     this.pause.setAttribute('aria-label', 'Pause');
-    cond.append(tbox, dbox, fbox, this.pause);
+    // one slim strip of instruments rather than three separate cards
+    const strip = el('div', 'strip housing');
+    strip.append(tbox, dbox, fbox);
+    cond.append(strip, this.pause);
 
     const actions = el('div', 'actions');
     const side = el('div', 'side');
@@ -194,12 +197,14 @@ export class Hud {
     }
     const task = this.task.getBoundingClientRect();
     const cond = this.cond.getBoundingClientRect();
-    const gap = cond.left - task.right - 20;
+    const gap = cond.left - (task.width ? task.right : 0) - 20;
     let bottom = Math.max(task.bottom, cond.bottom);
     if (gap >= 150) {
-      const mid = `${Math.round((cond.left + task.right) / 2)}px`;
-      c.left = d.left = mid;
-      c.width = `${Math.min(300, gap)}px`;
+      // no task card (free patrol): the compass sits in the middle of the screen if it fits there
+      const w = Math.min(300, gap);
+      const x = task.width ? (cond.left + task.right) / 2 : Math.min(window.innerWidth / 2, cond.left - w / 2 - 16);
+      c.left = d.left = `${Math.round(x)}px`;
+      c.width = `${w}px`;
     } else {
       // under the instruments, lined up with their right edge
       const w = Math.min(280, cond.width);
@@ -215,7 +220,8 @@ export class Hud {
     al.top = `${Math.round(gap >= 150 ? cond.bottom + 10 : bottom + 6)}px`;
     al.transform = 'none';
     // a short landscape screen: the radio sits under the task card, away from both thumbs
-    if (window.innerHeight <= 460) ra.top = `${Math.round(task.bottom + 8)}px`;
+    // (with no task card it sits under the compass and its waypoint instead)
+    if (window.innerHeight <= 460) ra.top = `${Math.round(task.width ? task.bottom + 8 : Math.max(this.compass.getBoundingClientRect().bottom, this.wpDist.getBoundingClientRect().bottom) + 8)}px`;
     this.compassW = this.compass.clientWidth;
   }
 
