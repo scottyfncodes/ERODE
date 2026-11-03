@@ -203,10 +203,11 @@ export class Rig {
     this.night = 1 - day;
     const lerpC = (a: number, b: number, t: number) => new THREE.Color(a).lerp(new THREE.Color(b), t);
     // clear-sky colours across the day
-    const zen = lerpC(0x0b1626, 0x3a78c0, day).lerp(new THREE.Color(0x5a6f9e), golden * 0.4);
-    const hor = lerpC(0x1c2b44, 0xcfe3f2, day).lerp(new THREE.Color(0xf7c99a), golden * 0.7);
+    // storybook sky: powder blue over a blush horizon; apricot and lavender at the golden hours; plum at night
+    const zen = lerpC(0x1d1f3d, 0x69aee6, day).lerp(new THREE.Color(0x8d84bd), golden * 0.55);
+    const hor = lerpC(0x3a3157, 0xf2e8e2, day).lerp(new THREE.Color(0xf7b38c), golden * 0.75);
     // cloud flattens it toward grey
-    const grey = lerpC(0x1a2230, 0xb9c4cf, day);
+    const grey = lerpC(0x2a2438, 0xd6d0d4, day);
     zen.lerp(grey, cloud * 0.85);
     hor.lerp(grey.clone().multiplyScalar(1.05), cloud * 0.8);
     (this.skyU.uZenith.value as THREE.Color).copy(zen);
@@ -217,12 +218,13 @@ export class Rig {
     // the sun (or the moon at night)
     if (day > 0.05) this.sunDir.set(Math.cos(c.sunEl) * Math.sin(c.sunAz), Math.max(0.08, Math.sin(c.sunEl)), Math.cos(c.sunEl) * Math.cos(c.sunAz)).normalize();
     else this.sunDir.set(-0.3, 0.75, -0.5).normalize();
-    const sunCol = lerpC(0x8aa4d8, 0xfff1dc, day).lerp(new THREE.Color(0xffb46e), golden * 0.6);
+    const sunCol = lerpC(0x9a9ad8, 0xffeed6, day).lerp(new THREE.Color(0xffa978), golden * 0.65);
     this.sun.color.copy(sunCol);
     (this.skyU.uSunColor.value as THREE.Color).copy(sunCol);
     this.sun.intensity = (day > 0.05 ? 3.0 * day : 0.5) * (1 - cloud * 0.7) + 0.05;
-    this.hemi.color.copy(lerpC(0x2a3b5c, 0xbcd6ff, day));
-    this.hemi.groundColor.copy(lerpC(0x1d2638, 0xe8edf3, day));
+    // shade reads lavender, the snow bounces a warm blush back up
+    this.hemi.color.copy(lerpC(0x3a3560, 0xd6def4, day));
+    this.hemi.groundColor.copy(lerpC(0x2a2236, 0xf6ebe4, day));
     this.hemi.intensity = 0.55 + day * 0.5 + cloud * 0.45;
     // fog: visibility falls in snow and storms; indoors it pulls in a little
     const near = THREE.MathUtils.lerp(320, 25, c.fog);

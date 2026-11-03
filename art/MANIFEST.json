@@ -42,83 +42,83 @@
   },
   {
    "path": "../public/models/rs_akja.glb",
-   "bytes": 39588,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "rescue toboggan (akja)",
-   "sha256": "f17835fa0aae16059d17dda99f47dfab5f747eee63ed3f53aed47f494c8cf63f"
+   "bytes": 39584,
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_akja: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "24eed8a3280c1883eeb22f2d690a18a46d0583582de52bc9cf33d2236d37cd83"
   },
   {
    "path": "../public/models/rs_boulder_a.glb",
-   "bytes": 14472,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "snow-capped boulder",
-   "sha256": "246ab0962e06f3648f887b040930e6cf050bbd4c4c975a6ff0bbed6ffb87c03a"
+   "bytes": 14448,
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_boulder_a: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "139faf642edf6f31743bf10ac8da0465402f90c9e6fbeca12065cf2c8848a50f"
   },
   {
    "path": "../public/models/rs_boulder_b.glb",
-   "bytes": 16512,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "small snow-capped boulder",
-   "sha256": "836a74d896495c851082b7ea56752a770bf748243c3976f193e5260b3ec37acf"
+   "bytes": 16488,
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_boulder_b: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "6bc9712851f3ace7d3bb631e56826e64fa67e7ff7445e6e79017fdcd6c51c436"
   },
   {
    "path": "../public/models/rs_cache.glb",
-   "bytes": 48936,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "patrol rescue cache",
-   "sha256": "2cc0f2e3af6508e9cc25ec4902d8777ed67a24becea5d6be656d7934d2d0d863"
+   "bytes": 48952,
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_cache: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "0dcb28bc9dee97370327bc2d006ab93075e46289e51564fb17ac0d306072e274"
   },
   {
    "path": "../public/models/rs_crag_a.glb",
-   "bytes": 17512,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "granite tor, three blocks",
-   "sha256": "d81e707b04a8a25464211b415a9342489295cbc70f352c720461ae3e82df7c98"
+   "bytes": 17488,
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_crag_a: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "87f16f800a3dd830e5ed04212719a6d360fe6a90792cebf865f1ef6e369edea3"
   },
   {
    "path": "../public/models/rs_crag_b.glb",
-   "bytes": 15404,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "tall granite tor",
-   "sha256": "e87eb5d606e43e1a7ab17da2a76edcb147c643a6d88adb34433b82213fe0ef63"
+   "bytes": 15376,
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_crag_b: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "53fe5983e9fb793793f214cf38b93dd1349f32603cc0823654911554a72c24fa"
   },
   {
    "path": "../public/models/rs_crag_c.glb",
-   "bytes": 19536,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "broken granite tor",
-   "sha256": "430836f7746662ee4c2d552fe3d03b1b623f44ad93a54dec8eac82e837faab36"
+   "bytes": 19512,
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_crag_c: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "7de52ab9c5293baaacd7f59f32a217f0c462eebeb2247643e8e91ac616e588d4"
   },
   {
    "path": "../public/models/rs_deadfall.glb",
    "bytes": 31796,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "fallen trunk with snow",
-   "sha256": "6a52a5551e386179fed17a46c60d20bb357488728bd45eed57ec56346027460a"
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_deadfall: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "44f20cd5155bfb15d327133586fdedaa57fb4deb3a72bf93703de3814560020d"
   },
   {
    "path": "../public/models/rs_lantern.glb",
-   "bytes": 36820,
-   "tools": "MeshCraft run_pipeline (lantern template)",
-   "status": "game-ready",
-   "notes": "hanging lantern (MeshCraft lantern template, swing clip)",
-   "sha256": "29ba1aaa02bf089116cb8a98d5412b454fd2f07bf9be5f02d5aba0250ab449c7"
+   "bytes": 36848,
+   "tools": "MeshCraft (lantern template)",
+   "status": "shipped",
+   "notes": "rs_lantern: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "85ec0d5bf0db1e3450a02c46f08f77aa883e99c1a862420b9821aeb2545c183b"
   },
   {
    "path": "../public/models/rs_stump.glb",
    "bytes": 24620,
-   "tools": "MeshCraft run_script (Blender 5.2.3) -> ForgeCraft process_mesh -> 3D library",
-   "status": "game-ready",
-   "notes": "snowy spruce stump",
-   "sha256": "f6b4d30cb98209e6e885eb208ed91e4be3ea6c74925f5d2063e47532e50cff91"
+   "tools": "MeshCraft + ForgeCraft",
+   "status": "shipped",
+   "notes": "rs_stump: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
+   "sha256": "1fb4fb8e5c7cb9224ded226994ea9bea16b164ad77301b53653cbdeffec75a18"
   },
   {
    "path": "../public/og-image.jpg",
@@ -130,5 +130,5 @@
   }
  ],
  "files": 16,
- "updated": "2026-11-02"
+ "updated": "2026-11-03"
 }

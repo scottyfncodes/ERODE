@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mulberry32 } from '../sim/noise';
 import { BOWL, LAKE, LIFT, pad, VILLAGE } from '../world/places';
 import { routeSamples, type Terrain } from '../world/terrain';
-import { bakeInPlace, ball, bake, box, cyl, gable, glow, logWall, mat, PAL, shade, snowRoof, windowPane } from './kit';
+import { bakeInPlace, ball, bake, box, cyl, gable, glow, logWall, mat, PAL, snowRoof, windowPane } from './kit';
 import { sign } from './stationView';
 
 /**
@@ -57,7 +57,9 @@ export class WorldView {
     let top = h1;
     if (floors > 1) {
       g.add(box(w, 2.4, d, wall, 0, h1 + 1.2, 0));
-      for (let i = 0; i < Math.round(w / 0.5); i++) g.add(box(0.06, 2.4, d + 0.04, shade(wall, 0.85), -w / 2 + 0.25 + i * 0.5, h1 + 1.2, 0));
+      // a cream band and corner boards: painted timber, picked out
+      g.add(box(w + 0.08, 0.18, d + 0.08, PAL.white, 0, h1 + 0.05, 0));
+      for (const cx of [-w / 2, w / 2]) for (const cz of [-d / 2, d / 2]) g.add(box(0.16, 2.4, 0.16, PAL.white, cx, h1 + 1.2, cz));
       top = h1 + 2.4;
     }
     // windows with shutters
@@ -67,7 +69,7 @@ export class WorldView {
         win.position.set(x, floors > 1 ? h1 + 1.3 : 1.5, (s * d) / 2 + s * 0.06);
         if (s < 0) win.rotation.y = Math.PI;
         g.add(win);
-        for (const sx of [-0.62, 0.62]) g.add(box(0.4, 1.0, 0.06, PAL.green, x + sx, win.position.y, (s * d) / 2 + s * 0.1));
+        for (const sx of [-0.62, 0.62]) g.add(box(0.4, 1.0, 0.06, wall === PAL.mint ? PAL.burgundy : PAL.green, x + sx, win.position.y, (s * d) / 2 + s * 0.1));
       }
     }
     if (balcony && floors > 1) {
@@ -89,8 +91,9 @@ export class WorldView {
   }
 
   private buildVillage() {
-    const roofs = [0x5b3a2a, 0x3b4a58, 0x6b2f2a, 0x4a4f55];
-    const walls = [0x8a603a, 0xa8744a, 0x7a4f2e, 0x9a6a40];
+    // Hollin as a painted row: pastel facades with cream trim, burgundy and slate roofs
+    const roofs = [PAL.burgundy, 0x5a4f6e, 0x8e3f4c, 0x4f5f70];
+    const walls = [PAL.blush, PAL.mustard, PAL.mint, PAL.powder, PAL.lavender];
     const rng = mulberry32(31);
     const parts = new THREE.Group();
     for (const v of VILLAGE) {
@@ -98,8 +101,8 @@ export class WorldView {
       let b: THREE.Group;
       switch (v.kind) {
         case 'lodge': {
-          b = this.chalet(9, 7, 0x7a4f2e, 0x6b2f2a, 2, true);
-          const s = sign('THE KETTLE', 3.4, 0.7, { bg: '#5e3a22', fg: '#f2c230' });
+          b = this.chalet(9, 7, 0xd98b8f, PAL.burgundy, 2, true);
+          const s = sign('THE KETTLE', 3.4, 0.7, { bg: '#7b2f3b', fg: '#f6ecdc' });
           s.position.set(0, 2.25, 3.6);
           b.add(s);
           // tables out front with umbrellas folded for winter
@@ -107,30 +110,30 @@ export class WorldView {
           break;
         }
         case 'clinic': {
-          b = this.chalet(7, 6, 0xf0ebe0, 0x3b4a58, 2, false);
-          const s = sign('CLINIC', 2.4, 0.6, { bg: '#f3efe6', fg: '#262a30', accent: '#d8382a' });
+          b = this.chalet(7, 6, PAL.mint, 0x4f5f70, 2, false);
+          const s = sign('CLINIC', 2.4, 0.6, { bg: '#f6ecdc', fg: '#3a2632', accent: '#d4422f' });
           s.position.set(0, 2.3, 3.07);
           b.add(s);
-          b.add(box(1.4, 2.1, 0.1, 0x2f5f9e, 0, 1.05, 3.05));
+          b.add(box(1.4, 2.1, 0.1, 0x6f8fbf, 0, 1.05, 3.05));
           break;
         }
         case 'shop': {
-          b = this.chalet(6, 5, 0xa8744a, 0x5b3a2a, 2, true);
-          const s = sign('BAKER', 2.2, 0.5, { bg: '#2f5f9e', fg: '#f3efe6' });
+          b = this.chalet(6, 5, PAL.mustard, PAL.burgundy, 2, true);
+          const s = sign('BAKER', 2.2, 0.5, { bg: '#e7aaa6', fg: '#7b2f3b' });
           s.position.set(0, 2.3, 2.57);
           b.add(s);
           break;
         }
         case 'chapel': {
           b = new THREE.Group();
-          b.add(box(5, 4.2, 8, 0xf0ebe0, 0, 2.1, 0));
-          const r = snowRoof(5.8, 8.8, 2.4, 0x3b4a58);
+          b.add(box(5, 4.2, 8, PAL.powder, 0, 2.1, 0));
+          const r = snowRoof(5.8, 8.8, 2.4, PAL.burgundy);
           r.rotation.y = Math.PI / 2;
           r.position.y = 4.2;
           b.add(r);
           // the bell tower with its onion dome
-          b.add(box(2.4, 8, 2.4, 0xf0ebe0, 0, 4, -4.6));
-          const dome = ball(1.4, 0x8a5a36, 0, 9.0, -4.6, 12);
+          b.add(box(2.4, 8, 2.4, PAL.white, 0, 4, -4.6));
+          const dome = ball(1.4, PAL.mustard, 0, 9.0, -4.6, 12);
           dome.scale.set(1, 1.15, 1);
           b.add(dome, cyl(0.06, 0.06, 1.6, 4, PAL.yellow, 0, 10.8, -4.6), ball(0.55, PAL.roofSnow, 0, 9.9, -4.6, 8));
           b.add(box(0.9, 1.2, 0.1, 0x262a30, 0, 6.6, -3.35));
@@ -191,7 +194,7 @@ export class WorldView {
     const top = pad('lifttop');
     const yb = this.ground(base.x, base.z);
     // base lodge
-    const lodge = this.chalet(12, 8, 0x8a603a, 0x6b2f2a, 2, true);
+    const lodge = this.chalet(12, 8, PAL.blush, PAL.burgundy, 2, true);
     lodge.position.set(base.x + 18, yb, base.z + 14);
     lodge.rotation.y = -0.3;
     const s = sign('TANNBERG', 4, 0.8, { bg: '#2f5f9e', fg: '#f3efe6' });
@@ -304,7 +307,7 @@ export class WorldView {
     vane.position.y = 6.2;
     g.add(vane);
     // the little hut it reports from
-    const hut = this.chalet(4, 3.5, 0x8a603a, 0x3b4a58, 1, false);
+    const hut = this.chalet(4, 3.5, PAL.mustard, PAL.burgundy, 1, false);
     hut.position.set(st.x + 6, this.ground(st.x + 6, st.z + 4), st.z + 4);
     this.group.add(g, hut);
   }

@@ -5,14 +5,14 @@ import { EQUIP, GARAGE, HANGAR, KENNEL, LODGE, MAST, PAD, SPOTS, WING, type Upgr
 import { bakeInPlace, ball, box, cyl, gable, glow, logWall, mat, PAL, shade, snowRoof, windowPane } from './kit';
 
 /** A painted sign: chunky letters on a board. */
-export function signTexture(text: string, bg = '#2a1d14', fg = '#f3efe6', w = 512, h = 128, accent?: string): THREE.CanvasTexture {
+export function signTexture(text: string, bg = '#7b2f3b', fg = '#f6ecdc', w = 512, h = 128, accent?: string): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   const g = c.getContext('2d')!;
   g.fillStyle = bg;
   g.fillRect(0, 0, w, h);
-  g.strokeStyle = 'rgba(255,255,255,0.12)';
+  g.strokeStyle = 'rgba(255,255,255,0.06)';
   for (let y = 10; y < h; y += 22) {
     g.beginPath();
     g.moveTo(0, y);
@@ -26,8 +26,15 @@ export function signTexture(text: string, bg = '#2a1d14', fg = '#f3efe6', w = 51
     g.fillRect(h * 0.25 + s * 0.35, h * 0.25, s * 0.3, s);
     g.fillRect(h * 0.25, h * 0.25 + s * 0.35, s, s * 0.3);
   }
+  // a thin inset rule, like a painted hotel sign
+  g.strokeStyle = fg;
+  g.globalAlpha = 0.7;
+  g.lineWidth = Math.max(2, h * 0.03);
+  g.strokeRect(h * 0.08, h * 0.08, w - h * 0.16, h - h * 0.16);
+  g.globalAlpha = 1;
   g.fillStyle = fg;
-  g.font = `800 ${Math.round(h * 0.44)}px "Archivo", sans-serif`;
+  g.font = `600 ${Math.round(h * 0.4)}px "Jost", sans-serif`;
+  (g as unknown as { letterSpacing: string }).letterSpacing = `${Math.round(h * 0.06)}px`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(text, accent ? w / 2 + h * 0.3 : w / 2, h / 2 + 2);
@@ -191,7 +198,7 @@ export class StationView {
     porch.add(lantern);
     const bench = box(0.5, 0.45, 1.8, PAL.logDark, hw + 0.5, 0.45, -1.6);
     porch.add(bench);
-    const s = sign('KESSEL PATROL', 4.2, 0.8, { bg: '#5e3a22', fg: '#f3efe6', accent: '#d8382a' });
+    const s = sign('KESSEL PATROL', 4.2, 0.8, { bg: '#f6ecdc', fg: '#7b2f3b', accent: '#d4422f' });
     s.position.set(hw + 0.22, 3.0, 0);
     s.rotation.y = Math.PI / 2;
     porch.add(s);
@@ -317,7 +324,8 @@ export class StationView {
     g.position.set(G.x, y, G.z);
     const hw = G.w / 2;
     const hd = G.d / 2;
-    const plank = 0x8c3b2a;
+    // the garage: painted mint boards
+    const plank = 0x8fbfa8;
     g.add(box(G.w, 0.15, G.d, 0x9c9a94, 0, 0.07, 0));
     const walls: Room['walls'] = [];
     const wall = (w: number, d: number, x: number, z: number, nx: number, nz: number) => {
@@ -343,7 +351,7 @@ export class StationView {
     front.add(box(0.4, 0.7, G.d, shade(plank, 0.7), -hw, G.wallH - 0.35, 0));
     // the door, rolled up
     front.add(box(0.3, 0.5, 5.6, 0xe9e2d0, -hw + 0.2, G.wallH - 0.95, 0));
-    const s = sign('GARAGE', 2.6, 0.55, { bg: '#f3efe6', fg: '#262a30' });
+    const s = sign('GARAGE', 2.6, 0.55, { bg: '#7b2f3b', fg: '#f6ecdc' });
     s.position.set(-hw - 0.22, G.wallH + 0.4, 0);
     s.rotation.y = -Math.PI / 2;
     front.add(s);
@@ -442,7 +450,7 @@ export class StationView {
     // bowl (and a name board when upgraded)
     g.add(cyl(0.22, 0.17, 0.12, 12, 0x2f5f9e, SPOTS.bowl.x - KENNEL.x, 0.06, SPOTS.bowl.z - KENNEL.z));
     if (upgraded) {
-      const nm = sign('KODA', 1.3, 0.35, { bg: '#d8382a', fg: '#f3efe6' });
+      const nm = sign('KODA', 1.3, 0.35, { bg: '#e7aaa6', fg: '#7b2f3b' });
       nm.position.set(0, 1.6 * s, 1.15 * s);
       g.add(nm);
       // the fenced run
@@ -486,7 +494,7 @@ export class StationView {
     snow.scale.copy(roof.scale);
     snow.position.copy(roof.position);
     g.add(roof, snow);
-    const s = sign('HANGAR 1', 4, 0.8, { bg: '#262a30', fg: '#f2c230' });
+    const s = sign('HANGAR 1', 4, 0.8, { bg: '#5a4f6e', fg: '#e0b042' });
     s.position.set(-H.w / 2 + 1.2, H.wallH + 1.6, 0);
     s.rotation.y = -Math.PI / 2;
     g.add(s);
@@ -505,7 +513,7 @@ export class StationView {
     r.position.y = E.wallH;
     g.add(r);
     g.add(box(1.4, 2.2, 0.1, 0x3d2a1c, 0, 1.1, E.d / 2 + 0.05));
-    const s = sign('EQUIPMENT', 3, 0.55, { bg: '#f3efe6', fg: '#262a30' });
+    const s = sign('EQUIPMENT', 3, 0.55, { bg: '#9cc9b3', fg: '#3a2632' });
     s.position.set(0, E.wallH - 0.4, E.d / 2 + 0.08);
     g.add(s);
     // a ski rack outside

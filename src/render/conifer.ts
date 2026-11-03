@@ -23,9 +23,10 @@ export function coniferGeometry(seed: number, tiers = 7, slender = 1, segs = 13,
   const trunk = new CylinderGeometry(0.014, 0.03, 0.42, 7, 1);
   trunk.translate(0, 0.21, 0);
   const parts: BufferGeometry[] = [];
-  const dark = new Color(0.05, 0.1, 0.07);
-  const mid = new Color(0.11, 0.18, 0.1);
-  const tip = new Color(0.2, 0.28, 0.14);
+  // storybook spruce: deep teal, never black
+  const dark = new Color(0.09, 0.2, 0.2);
+  const mid = new Color(0.16, 0.32, 0.29);
+  const tip = new Color(0.3, 0.46, 0.38);
   for (let t = 0; t < tiers; t++) {
     const f = t / (tiers - 1);
     const r = (0.24 - f * 0.19) * (0.88 + rng() * 0.24) * slender;

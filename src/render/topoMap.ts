@@ -112,7 +112,7 @@ export function drawTopo(t: Terrain, size = 640): HTMLCanvasElement {
     g.fillRect(x - 1.5 * k, z - 1.5 * k, 3 * k, 3 * k);
   }
   // peaks
-  g.font = `600 ${11 * k}px "Archivo", sans-serif`;
+  g.font = `600 ${11 * k}px "Jost", sans-serif`;
   g.textAlign = 'center';
   for (const p of PEAKS) {
     const h = elevation(t.height(p.x, p.z));
@@ -125,7 +125,7 @@ export function drawTopo(t: Terrain, size = 640): HTMLCanvasElement {
     g.fillText(p.name, S(p.x), S(p.z) + 15 * k);
     g.font = `500 ${9 * k}px "IBM Plex Mono", monospace`;
     g.fillText(`${h} m`, S(p.x), S(p.z) + 26 * k);
-    g.font = `600 ${11 * k}px "Archivo", sans-serif`;
+    g.font = `600 ${11 * k}px "Jost", sans-serif`;
   }
   // places
   for (const p of PADS) {
@@ -135,10 +135,10 @@ export function drawTopo(t: Terrain, size = 640): HTMLCanvasElement {
     g.arc(S(p.x), S(p.z), (p.id === 'hq' ? 5 : 3.5) * k, 0, Math.PI * 2);
     g.fill();
     g.fillStyle = '#2a2520';
-    g.font = `${p.id === 'hq' || p.id === 'village' ? 700 : 600} ${(p.id === 'village' ? 13 : 10.5) * k}px "Archivo", sans-serif`;
+    g.font = `${p.id === 'hq' || p.id === 'village' ? 700 : 600} ${(p.id === 'village' ? 13 : 10.5) * k}px "Jost", sans-serif`;
     g.fillText(p.name, S(p.x), S(p.z) - 9 * k);
   }
-  g.font = `italic 600 ${10.5 * k}px "Archivo", sans-serif`;
+  g.font = `italic 600 ${10.5 * k}px "Jost", sans-serif`;
   g.fillStyle = '#4c7488';
   g.fillText(LAKE.name, S(LAKE.x), S(LAKE.z) + 3 * k);
   g.fillStyle = '#a83a28';

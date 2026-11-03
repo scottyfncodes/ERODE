@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ball, box, cyl, glow, mat, paint, PAL } from './kit';
+import { ball, box, cyl, glow, mat, paint, PAL, repaint } from './kit';
 
 /**
  * The patrol snowmobile: a rounded cowl, a tall screen, two skis up front, a lugged track
@@ -109,8 +109,8 @@ export class SledMesh {
   }
 
   setPaint(main: number, second: number) {
-    this.main.color.setHex(main);
-    this.second.color.setHex(second);
+    repaint(this.main, main);
+    repaint(this.second, second);
   }
 
   setHeadlight(on: boolean) {

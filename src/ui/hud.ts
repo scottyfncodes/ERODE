@@ -349,6 +349,23 @@ export class Hud {
     this.hintEl.classList.toggle('hidden', !on);
   }
 
+  private chapterEl: HTMLElement | null = null;
+  /**
+   * A title card, square on and centred: the chapter, the mission, who called it in. It fades
+   * in and out over the world and never takes a touch.
+   */
+  chapter(kicker: string, title: string, sub: string, tone: string) {
+    this.chapterEl?.remove();
+    const c = el('div', `chapter tone-${tone}`, `<div class="frame"><div class="k">${kicker}</div><div class="rule"></div><div class="t">${title}</div><div class="rule"></div><div class="s">${sub}</div></div>`);
+    this.root.parentElement!.appendChild(c);
+    this.chapterEl = c;
+    setTimeout(() => c.classList.add('out'), 2600);
+    setTimeout(() => {
+      c.remove();
+      if (this.chapterEl === c) this.chapterEl = null;
+    }, 3300);
+  }
+
   /** someone is on the radio right now */
   get talking() {
     return this.radioT > 0;
@@ -407,6 +424,8 @@ export class Hud {
     this.toastEl.classList.remove('on');
     this.clearAlert();
     this.setScan(null, 0);
+    this.chapterEl?.remove();
+    this.chapterEl = null;
     this.lastTask = '';
     this.fundsShown = -1;
   }
