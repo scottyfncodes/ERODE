@@ -2,6 +2,7 @@ import {
   BackSide,
   Color,
   DoubleSide,
+  MeshLambertMaterial,
   MeshStandardMaterial,
   ShaderMaterial,
   type WebGLProgramParametersWithUniforms,
@@ -276,9 +277,17 @@ export function createEndGrainMaterial(): MeshStandardMaterial {
   return m;
 }
 
-/** Conifer foliage with wind sway (works for instanced and plain meshes). */
-export function createFoliageMaterial(): MeshStandardMaterial {
-  const m = new MeshStandardMaterial({ vertexColors: true, roughness: 0.88, side: DoubleSide });
+/**
+ * Conifer foliage with wind sway (works for instanced and plain meshes). `far`: the far-forest
+ * variant, for trees past the shadowed, close-up range: the same colours, height shading, rim and sway,
+ * without the per-pixel noise (its average brightness instead) and with plain diffuse (Lambert) light,
+ * so a screenful of distant forest seen from the helicopter costs a fraction as much to fill.
+ */
+export function createFoliageMaterial(far = false): MeshStandardMaterial | MeshLambertMaterial {
+  // far trees are fogged and unshadowed: plain diffuse light is all they need
+  const m = far
+    ? new MeshLambertMaterial({ vertexColors: true, side: DoubleSide })
+    : new MeshStandardMaterial({ vertexColors: true, roughness: 0.88, side: DoubleSide });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = shared.time;
     shader.uniforms.uWind = shared.wind;
@@ -300,7 +309,7 @@ export function createFoliageMaterial(): MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <color_fragment>',
       `#include <color_fragment>
-      float nf = eNoise3(vObjF * 3.5);
+      ${far ? 'float nf = 0.5;' : 'float nf = eNoise3(vObjF * 3.5);'}
       diffuseColor.rgb *= 0.72 + 0.45 * nf;
       // darker toward the trunk and the ground: the interior of a conifer is in shade
       diffuseColor.rgb *= 0.7 + 0.3 * smoothstep(0.1, 0.9, vObjF.y);
@@ -318,7 +327,7 @@ export function createFoliageMaterial(): MeshStandardMaterial {
       totalEmissiveRadiance += vec3(0.16, 0.2, 0.1) * rim * 0.35;`,
     );
   };
-  m.customProgramCacheKey = () => 'foliage';
+  m.customProgramCacheKey = () => (far ? 'foliage-far' : 'foliage');
   return m;
 }
 

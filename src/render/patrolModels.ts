@@ -13,7 +13,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
  * grade work as before. If a file is missing or broken it is reported and skipped, and the code-built
  * version it would have replaced stays in place.
  */
-export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_patroller', 'rs_koda'] as const;
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_koda'] as const;
 export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
 export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
 

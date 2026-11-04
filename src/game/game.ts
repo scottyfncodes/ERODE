@@ -126,6 +126,7 @@ export class Game {
   private realDt = 0;
   /** the ?stats performance readout (off unless asked for) */
   private stats: StatsOverlay | null = null;
+  private forest!: ForestView;
 
   constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void, kit: Kit = {}, models: PatrolModels = {}) {
     this.p = loadProfile(this.store) ?? newProfile();
@@ -144,7 +145,7 @@ export class Game {
     this.topo = drawTopo(this.terrain, 640);
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
-    const forest = new ForestView(this.trees, models);
+    const forest = (this.forest = new ForestView(this.trees, models));
     scene.add(forest.group);
     // the patrol's vehicles from MeshCraft; the code-built ones stay if a model did not load
     this.modelled = { ...this.modelled, sled: this.sledMesh.useModel(models.rs_sled), heli: this.heliMesh.useModel(models.rs_heli), forest: forest.modelled };
@@ -496,6 +497,7 @@ export class Game {
     else if (!this.panels.open) this.playFrame(dt);
     else this.idleFrame(dt);
     this.rig.adapt(dt);
+    this.forest.update(this.rig.camera.position);
     this.rig.render();
     this.stats?.frame(frameMs, { renderer: this.rig.renderer, tier: this.rig.quality.tier, scale: this.rig.renderScale });
     this.input.endFrame();
@@ -1526,6 +1528,11 @@ export class Game {
       /** the Kessel kit (QA): how much is placed, in how many draw calls, and the pieces nearest a point */
       /** which code-built meshes the MeshCraft models replaced */
       models: () => ({ ...this.modelled }),
+      /** the forest's level of detail: cells near and far, and a switch for A/B checks */
+      forest: (lod?: boolean) => {
+        if (lod !== undefined) this.forest.setLod(lod);
+        return this.forest.stats();
+      },
       kit: (x?: number, z?: number, kind?: string) => ({
         loaded: this.kitLoaded,
         placed: this.kitView.placed,
