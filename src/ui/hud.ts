@@ -199,6 +199,8 @@ export class Hud {
     const cond = this.cond.getBoundingClientRect();
     const gap = cond.left - (task.width ? task.right : 0) - 20;
     let bottom = Math.max(task.bottom, cond.bottom);
+    // where the compass and its waypoint end, from the layout (they may be hidden while this runs)
+    let navBottom = cond.top + 52;
     if (gap >= 150) {
       // no task card (free patrol): the compass sits in the middle of the screen if it fits there
       const w = Math.min(300, gap);
@@ -212,8 +214,10 @@ export class Hud {
       c.left = d.left = `${Math.round(cond.right - w / 2)}px`;
       c.width = `${w}px`;
       c.top = `${below}px`;
-      d.top = `${below + 42}px`;
-      bottom = Math.max(task.bottom, below + 64);
+      // the thin compass, then its waypoint right under it
+      d.top = `${below + 26}px`;
+      bottom = Math.max(task.bottom, below + 48);
+      navBottom = below + 48;
     }
     t.top = `${Math.round(bottom + 8)}px`;
     // the pilot's readout: on the right, under the instruments and the compass
@@ -221,7 +225,9 @@ export class Hud {
     al.transform = 'none';
     // a short landscape screen: the radio sits under the task card, away from both thumbs
     // (with no task card it sits under the compass and its waypoint instead)
-    if (window.innerHeight <= 460) ra.top = `${Math.round(task.width ? task.bottom + 8 : Math.max(this.compass.getBoundingClientRect().bottom, this.wpDist.getBoundingClientRect().bottom) + 8)}px`;
+    // (the one-line task card can end above the waypoint, so it clears whichever is lowest)
+    if (window.innerHeight <= 460)
+      ra.top = `${Math.round(Math.max(task.width ? task.bottom : 0, navBottom) + 8)}px`;
     this.compassW = this.compass.clientWidth;
   }
 
@@ -341,7 +347,8 @@ export class Hud {
   setAlt(agl: number | null, elev = 0, speed = 0) {
     this.altEl.classList.toggle('hidden', agl === null);
     if (agl === null) return;
-    this.put('alt', this.altEl, `<div class="label">Above ground</div><div class="big">${Math.round(agl)} m</div><div class="label" style="margin-top:6px">Altitude</div><div class="big">${elev} m</div><div class="label" style="margin-top:6px">Ground speed</div><div class="big">${Math.round(speed * 3.6)} km/h</div>`, true);
+    // two short lines: height above the snow (what you fly by), then altitude and ground speed
+    this.put('alt', this.altEl, `<div class="big">${Math.round(agl)} m<span class="u"> above ground</span></div><div class="small">${elev} m · ${Math.round(speed * 3.6)} km/h</div>`, true);
   }
 
   setScan(label: string | null, progress: number) {

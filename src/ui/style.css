@@ -1790,3 +1790,186 @@ body.booted .title-screen .inner {
   white-space: pre;
   pointer-events: none;
 }
+
+/* ---------------- minimal HUD ----------------
+   More of the valley, less card: one slim instrument row (time and temperature, the danger level as
+   its coloured badge, funds), the mission as one line with a hairline of progress under it, and the
+   compass and its waypoint side by side on one thin row. The pause button keeps its 44 px target. */
+.cond .strip {
+  height: 34px;
+}
+.cond .box.wx {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 7px;
+}
+.cond .box.wx .small {
+  font-size: 11px;
+  margin: 0;
+}
+.cond .danger > div:last-child {
+  display: none;
+}
+.cond .danger .lvl {
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+}
+.cond .box:last-child {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 4px;
+}
+.cond .box:last-child .small {
+  margin: 0;
+}
+.cond .box:last-child .small::before {
+  content: '·';
+  margin-right: 3px;
+}
+.cond .iconbtn {
+  background: rgba(74, 35, 48, 0.72);
+  border-color: rgba(246, 236, 220, 0.3);
+}
+.cond .iconbtn svg {
+  width: 16px;
+  height: 16px;
+}
+.task {
+  padding: 6px 10px 0;
+  overflow: hidden;
+}
+.task .fam,
+.task .title {
+  display: none;
+}
+.task .obj {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.25;
+}
+.task .pips {
+  margin: 6px -10px 0;
+  gap: 1px;
+}
+.task .pips b {
+  height: 2px;
+  border-radius: 0;
+}
+.compass {
+  height: 22px;
+}
+.compass .tick {
+  top: 2px;
+  height: 4px;
+}
+.compass .tick.big {
+  height: 6px;
+}
+.compass .card {
+  top: 8px;
+  font-size: 9.5px;
+}
+.compass .wp {
+  top: 0;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+}
+.wp-dist {
+  font-size: 10.5px;
+  padding: 0 7px;
+  line-height: 20px;
+}
+.speedo {
+  padding: 4px 10px 5px;
+}
+@media (max-width: 520px) {
+  /* compass and waypoint share one row under the mission line */
+  .hud > .stack {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 4px 5px;
+    top: calc(56px + var(--safe-t));
+  }
+  .hud .stack > .task,
+  .hud .stack > .toast,
+  .hud .stack > .radio {
+    flex-basis: 100%;
+  }
+  .compass {
+    width: min(190px, 50vw);
+    height: 22px;
+  }
+  .wp-dist {
+    margin-top: 0;
+  }
+  .speedo .v {
+    font-size: 17px;
+  }
+}
+/* the instrument row hugs its contents instead of stretching across the screen */
+.cond {
+  align-items: center;
+}
+.cond .strip {
+  flex: none;
+  align-items: center;
+}
+.cond .box,
+.cond .box.wx,
+.cond .box:last-child {
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+}
+@media (max-width: 520px) {
+  .cond {
+    justify-content: space-between;
+  }
+  .cond .strip {
+    flex: none;
+    justify-content: flex-start;
+  }
+  .cond .box.wx {
+    margin-right: 0;
+  }
+}
+/* radio subtitles: one slim line where they fit */
+.radio {
+  font-size: 12px;
+  padding: 5px 10px;
+  line-height: 1.35;
+}
+@media (max-width: 520px) {
+  .radio {
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+}
+.alt {
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+.alt .big {
+  font-size: 15px;
+}
+.alt .big .u {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.alt .small {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+@media (max-width: 520px) {
+  .alt .big {
+    font-size: 14px;
+  }
+}

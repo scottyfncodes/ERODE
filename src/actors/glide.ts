@@ -31,11 +31,22 @@ export interface GlideProfile {
   powderDrag: number;
   /** collision radius */
   radius: number;
-  /** how well it climbs: fraction of gravity cancelled when pushing uphill (skins, tracks) */
+  /** how well it climbs: fraction of gravity cancelled when pushing uphill (climbing skins) */
   climb: number;
+  /**
+   * how hard the track can bite (sled): the drive is capped at traction x the surface's grip x g cos(slope),
+   * so it climbs what a real sled climbs (about 31 degrees on packed snow, 23 in powder) and bogs and
+   * slides back on anything steeper. 0: no cap (skis push with poles).
+   */
+  traction?: number;
+  /** the powder track's bite in powder, as a multiple (deep lug track) */
+  powderBite?: number;
 }
 
-export const SLED: GlideProfile = { engine: 9.5, top: 24, brake: 12, reverse: 4, turn: 1.9, grip: 5.5, air: 0.0016, push: 0, pushTop: 0, powderDrag: 0.55, radius: 1.1, climb: 0.55 };
+export const SLED: GlideProfile = { engine: 9.5, top: 24, brake: 12, reverse: 4, turn: 1.9, grip: 5.5, air: 0.0016, push: 0, pushTop: 0, powderDrag: 0.55, radius: 1.1, climb: 0, traction: 0.6 };
+
+/** how much of the track's bite each surface gives (packed snow is the reference) */
+export const SURFACE_BITE: Record<Surface, number> = { packed: 1, crust: 0.85, powder: 0.7, ice: 0.2 };
 export const SKIS: GlideProfile = { engine: 0, top: 30, brake: 5, reverse: 0, turn: 2.2, grip: 4.2, air: 0.0022, push: 2.2, pushTop: 4.2, powderDrag: 0.9, radius: 0.5, climb: 0 };
 
 export interface Glider {
@@ -103,6 +114,12 @@ export function stepGlider(g: Glider, p: GlideProfile, steer: number, throttle: 
       if (p.engine > 0) {
         const top = p.top * boost;
         push = throttle * p.engine * boost * Math.max(0, 1 - Math.max(0, fwd) / top);
+        if (p.traction) {
+          // the track can only push as hard as it grips: mu g cos(slope) along the slope, cos(slope)
+          // of that across the ground; steeper than atan(mu) and gravity wins
+          const bite = p.traction * SURFACE_BITE[surf] * (surf === 'powder' ? (p.powderBite ?? 1) : 1);
+          push = Math.min(push, bite * G * n.y * n.y);
+        }
       } else if (fwd < p.pushTop) push = throttle * p.push;
       // climbing aid: tracks or skins cancel part of gravity's pull back down
       const back = -(gx * fx + gz * fz);
@@ -221,7 +238,7 @@ export function stepGlider(g: Glider, p: GlideProfile, steer: number, throttle: 
     // would we leave the ground here? (a crest at speed)
     const vyGround = (gy - g.y) / Math.max(dt, 1e-4);
     const predicted = g.y + g.vy * dt - G * dt * dt;
-    if (gy < predicted - 0.08 && g.vy > vyGround + 2.2 && Math.hypot(g.vx, g.vz) > 7) {
+    if (gy < predicted - 0.08 && g.vy > vyGround + 3 && Math.hypot(g.vx, g.vz) > 8) {
       g.airborne = true;
       g.air = 0;
       g.y = predicted;
