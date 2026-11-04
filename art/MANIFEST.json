@@ -337,6 +337,14 @@
    "sha256": "c21ba187041b5b775dde3629c65cd2ef2a4d66b941f9f8f1cfee89d545d70e6e"
   },
   {
+   "path": "../public/models/rs_villager.glb",
+   "bytes": 148708,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_villager: the villagers' outfit on the patroller's 25-bone skeleton: knitted cardigan with Fair Isle yoke, button band, elbow patches, fur-cuffed boots; goggles as their own mesh; no patrol gear; art/3d/scripts/patrol_people.py (civilian=True); Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "8f1bc568e025125faf0b148a97f0fe1b01b14231df5a65b9bb6a017e5671bba0"
+  },
+  {
    "path": "../public/og-image.jpg",
    "bytes": 140680,
    "tools": "DesignCraft layout, PhotoCraft JPEG",
@@ -345,6 +353,6 @@
    "sha256": "f2c222aad1fbb293f2060e75e69267afa0d53dce2c5366395ebda9fef13331db"
   }
  ],
- "files": 43,
+ "files": 44,
  "updated": "2026-11-04"
 }

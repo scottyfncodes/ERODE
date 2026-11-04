@@ -24,7 +24,7 @@ export const PROP_IDS = ['rs_cat', 'rs_van', 'rs_fallen_tree', 'rs_barrier'] as 
 /** The Tannberg chairlift: towers, end towers and the chair, used only when all three loaded. */
 export const LIFT_IDS = ['rs_lift_tower', 'rs_lift_tower_end', 'rs_chair'] as const;
 
-export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS, ...PROP_IDS, ...LIFT_IDS] as const;
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_villager', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS, ...PROP_IDS, ...LIFT_IDS] as const;
 export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
 export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
 

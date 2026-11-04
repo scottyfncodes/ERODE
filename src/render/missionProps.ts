@@ -106,9 +106,19 @@ export class MissionProps {
   private logs: THREE.InstancedMesh;
   private logBodies: { b: ReturnType<Debris['add']> }[] = [];
 
-  /** The villagers wear the patroller model too (without the patrol's gear). */
-  usePeople(model: THREE.Object3D | undefined): boolean {
-    return [this.greta, this.nils, this.driver].map((p) => p.useModel(model)).every(Boolean);
+  /**
+   * The villagers' model: their own outfit (rs_villager) on the patroller's skeleton, or failing that
+   * the patroller model without the patrol's gear. All three change together or none does.
+   */
+  usePeople(villager: THREE.Object3D | undefined, patroller?: THREE.Object3D): boolean {
+    const people = [this.greta, this.nils, this.driver];
+    for (const model of [villager, patroller]) {
+      if (!model) continue;
+      // try one first, so a broken file leaves everyone code-built
+      if (!people[0].useModel(model)) continue;
+      return people.slice(1).every((p) => p.useModel(model));
+    }
+    return false;
   }
 
   constructor(
