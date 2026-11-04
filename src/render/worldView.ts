@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32 } from '../sim/noise';
 import { BOWL, LAKE, LIFT, pad, VILLAGE } from '../world/places';
 import { routeSamples, type Terrain } from '../world/terrain';
 import { bakeInPlace, ball, bake, box, cyl, gable, glow, logWall, mat, PAL, shade, snowRoof, windowPane } from './kit';
-import { BUILDING_IDS, roleOf, type BuildingId, type PatrolModels } from './patrolModels';
+import { BUILDING_IDS, LIFT_IDS, paintModel, roleOf, type BuildingId, type PatrolModels } from './patrolModels';
 import { sign } from './stationView';
 
 /**
@@ -27,6 +28,14 @@ export class WorldView {
   private bm: Record<BuildingId, THREE.Object3D> | null;
   /** true when the valley's buildings are the MeshCraft models */
   readonly modelled: boolean;
+  /** the MeshCraft chairlift (towers, end towers, the chair), when all three loaded */
+  private lift: { tower: THREE.Object3D; end: THREE.Object3D; chair: THREE.Object3D } | null;
+  /** true when the chairlift is the MeshCraft one */
+  get liftModelled() {
+    return !!this.lift;
+  }
+  /** the chairs as one instanced mesh per material (the model's chairs): the cable moves them all */
+  private chairInst: THREE.InstancedMesh[] = [];
 
   constructor(
     private terrain: Terrain,
@@ -34,6 +43,7 @@ export class WorldView {
   ) {
     this.bm = BUILDING_IDS.every((id) => models[id]) ? (Object.fromEntries(BUILDING_IDS.map((id) => [id, models[id]!])) as unknown as Record<BuildingId, THREE.Object3D>) : null;
     this.modelled = !!this.bm;
+    this.lift = LIFT_IDS.every((id) => models[id]) ? { tower: models.rs_lift_tower!, end: models.rs_lift_tower_end!, chair: models.rs_chair! } : null;
     this.windows = new THREE.MeshLambertMaterial({ color: PAL.window, emissive: 0xffa040, emissiveIntensity: 0.2 });
     this.streetLights = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
     // each place is built, then merged into a handful of meshes of its own (so it still culls)
@@ -340,9 +350,12 @@ export class WorldView {
       const p = a.clone().lerp(b, i / n);
       const y = this.ground(p.x, p.z);
       const hgt = i === 0 || i === n ? 6 : 10;
-      const tw = new THREE.Group();
-      tw.add(box(0.5, hgt, 0.5, 0x6e7a85, 0, hgt / 2, 0), box(3.2, 0.3, 0.4, 0x6e7a85, 0, hgt, 0));
-      if (i === 0 || i === n) tw.add(new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.15, 6, 16), mat(0x262a30)).rotateX(Math.PI / 2).translateZ(-hgt));
+      const end = i === 0 || i === n;
+      const tw = this.lift ? paintModel(end ? this.lift.end : this.lift.tower, {}, (hex) => mat(hex)) : new THREE.Group();
+      if (!this.lift) {
+        tw.add(box(0.5, hgt, 0.5, 0x6e7a85, 0, hgt / 2, 0), box(3.2, 0.3, 0.4, 0x6e7a85, 0, hgt, 0));
+        if (end) tw.add(new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.15, 6, 16), mat(0x262a30)).rotateX(Math.PI / 2).translateZ(-hgt));
+      }
       tw.position.set(p.x, y, p.z);
       tw.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
       this.group.add(tw);
@@ -358,6 +371,30 @@ export class WorldView {
     this.liftLine = { a: towers[0], b: towers[n], len: towers[0].distanceTo(towers[n]), dir };
     const chairMat = mat(0x2f5f9e);
     const chairs = 22;
+    if (this.lift) {
+      // the MeshCraft chair, drawn as one instanced mesh per material: every chair in a few draw
+      // calls. Each chair's place still comes from the cable (update()), through a stand-in object.
+      const chair = paintModel(this.lift.chair, {}, (hex) => mat(hex));
+      chair.updateMatrixWorld(true);
+      const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+      chair.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const list = byMat.get(m.material as THREE.Material) ?? [];
+        list.push(m.geometry.clone().applyMatrix4(m.matrixWorld));
+        byMat.set(m.material as THREE.Material, list);
+      });
+      for (const [material, geos] of byMat) {
+        const geo = geos.length === 1 ? geos[0] : mergeGeometries(geos.map((g) => (g.index ? g.toNonIndexed() : g)), false)!;
+        const inst = new THREE.InstancedMesh(geo, material, chairs);
+        inst.castShadow = true;
+        // the chairs travel the whole line: cull them as a lot, not by their first places
+        inst.frustumCulled = false;
+        this.chairInst.push(inst);
+        this.group.add(inst);
+      }
+      for (let i = 0; i < chairs; i++) this.chairs.push({ m: new THREE.Object3D(), s: i / chairs });
+    } else
     for (let i = 0; i < chairs; i++) {
       const c = new THREE.Group();
       c.add(cyl(0.03, 0.03, 1.6, 4, 0x262a30, 0, -0.8, 0), box(1.2, 0.1, 0.5, chairMat, 0, -1.6, 0), box(1.2, 0.6, 0.08, chairMat, 0, -1.3, 0.25));
@@ -587,6 +624,13 @@ export class WorldView {
         p.y -= Math.sin(f * Math.PI * 10) ** 2 * 0.8;
         c.m.position.copy(p);
         c.m.rotation.y = Math.atan2(L.dir.x, L.dir.z) + (up ? 0 : Math.PI);
+      }
+      if (this.chairInst.length) {
+        this.chairs.forEach((c, i) => {
+          c.m.updateMatrix();
+          for (const inst of this.chairInst) inst.setMatrixAt(i, c.m.matrix);
+        });
+        for (const inst of this.chairInst) inst.instanceMatrix.needsUpdate = true;
       }
     }
   }

@@ -101,6 +101,14 @@ the roof as nodes, so the dollhouse cut-away still hides them when you are insid
 signs, lights, the beacon, the flag and the kennel fence stay code-built, and so do the lodge and its
 wing. All or nothing, like the valley (`tests/yard.test.ts`).
 
+**The mission props and the chairlift** (same script): `rs_cat` (Pepper, on the ground and in your
+arms), `rs_van` (with its drift), `rs_fallen_tree` (the road still saws it into code-built logs) and
+`rs_barrier`, whose `arm` node is mounted on the game's own pivot, so the barrier still swings up and
+down as before. Each prop falls back on its own. The Tannberg lift uses `rs_lift_tower`,
+`rs_lift_tower_end` (with the bullwheel) and `rs_chair`, all three or none; the 22 chairs are drawn
+as one instanced mesh per material and still ride the cable the code works out each frame
+(`tests/props.test.ts`).
+
 **The patroller and Koda** (`3d/scripts/patrol_people.py`) are skinned meshes on skeletons of the
 code's own joints: the same names, at the same pivots, with zero rest rotation (every bone points
 straight up with roll 0, so each glTF joint node's rotation is identity, the frame of the code's
