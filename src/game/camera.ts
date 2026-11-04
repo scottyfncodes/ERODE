@@ -83,8 +83,11 @@ export class FollowCamera {
       this.recover -= dt;
       if (this.idle > 0.3) this.pitch += (p.pitch - this.pitch) * Math.min(1, dt * 3.5);
     }
-    const wantDist = p.dist * (1 + p.portrait * this.portrait) * (this.mode === 'sled' ? 1 + Math.min(0.25, speed / 120) : 1);
-    this.dist += (wantDist - this.dist) * Math.min(1, dt * 3);
+    // vehicles and a running patroller pull the camera back a little: more ground ahead at speed
+    const pull = this.mode === 'sled' ? Math.min(0.25, speed / 120) : this.mode === 'foot' ? Math.min(0.14, Math.max(0, speed - 2.2) * 0.04) : 0;
+    const wantDist = p.dist * (1 + p.portrait * this.portrait) * (1 + pull);
+    // out gently as you speed up, back in a little quicker when you stop
+    this.dist += (wantDist - this.dist) * Math.min(1, dt * (this.mode !== 'foot' ? 3 : wantDist > this.dist ? 1.6 : 2.6));
     // target: smoothed, a little ahead of fast vehicles
     const lead = this.mode === 'sled' || this.mode === 'skis' ? Math.min(3, speed * 0.12) : 0;
     this.tmp.set(pos.x - Math.sin(heading) * lead, pos.y + p.lift, pos.z - Math.cos(heading) * lead);
