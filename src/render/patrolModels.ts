@@ -13,7 +13,11 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
  * grade work as before. If a file is missing or broken it is reported and skipped, and the code-built
  * version it would have replaced stays in place.
  */
-export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_patroller', 'rs_koda'] as const;
+/** The valley's buildings (art/3d/scripts/valley_buildings.py): used only when every one loaded. */
+export const BUILDING_IDS = ['rs_chalet', 'rs_chalet_wide', 'rs_chalet_small', 'rs_chapel', 'rs_cabin', 'rs_boathouse', 'rs_barrier_hut'] as const;
+export type BuildingId = (typeof BUILDING_IDS)[number];
+
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_koda', ...BUILDING_IDS] as const;
 export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
 export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
 

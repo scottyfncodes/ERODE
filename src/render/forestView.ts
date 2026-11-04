@@ -63,12 +63,41 @@ export function modelConifer(scene: THREE.Object3D | undefined): { trunk: THREE.
   return { crown: softenFoliage(bake(crownMesh, true)), trunk: bake(trunkMesh, false) };
 }
 
+/** Trees are drawn in square cells this many metres across (culling and level of detail work per cell). */
+const CELL = 250;
+/** Cells nearer the camera than this (horizontally, metres) get the full tree; the rest the far stand-in. */
+const NEAR = 150;
+/** ...and switch back only once this much further away, so a cell on the boundary does not flicker. */
+const HYSTERESIS = 25;
+
+interface Cell {
+  /** the cell's bounds on the ground */
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  near: THREE.Object3D[];
+  far: THREE.Object3D[];
+  isNear: boolean;
+}
+
 export class ForestView {
   readonly group = new THREE.Group();
 
   /** true when the trees are the MeshCraft spruce */
   readonly modelled: boolean;
+  /** true when the far forest uses the MeshCraft stand-ins (else the near crowns, cheaply shaded) */
+  readonly farModelled: boolean;
+  private cells: Cell[] = [];
+  private lod = true;
 
+  /**
+   * The forest in 250 m cells. Close to the camera a cell draws the full spruce: crown and trunk, the
+   * foliage shader with its per-pixel noise, casting and receiving shadows. Further out (where the shadow
+   * map, 55 to 110 m round the player, never reaches, and fog softens everything) it draws the MeshCraft
+   * far stand-in instead: four tiers, no trunk, a cheaper material, no shadows. Same trees, same places,
+   * same sizes. Call update() each frame with the camera position.
+   */
   constructor(trees: readonly Tree[], models: PatrolModels = {}) {
     // the MeshCraft spruce when both variants loaded; otherwise the procedural conifer, so the
     // forest never mixes the two looks
@@ -76,29 +105,38 @@ export class ForestView {
     const b = modelConifer(models.rs_spruce_b);
     this.modelled = !!(a && b);
     const variants = a && b ? [a, b] : [snowyConifer(11), snowyConifer(47)];
+    // far stand-ins only alongside the MeshCraft spruce (they share its look); otherwise the near
+    // crowns, which still save the trunk, the noise and the shadows
+    const fa = this.modelled ? modelConifer(models.rs_spruce_a_far) : null;
+    const fb = this.modelled ? modelConifer(models.rs_spruce_b_far) : null;
+    this.farModelled = !!(fa && fb);
+    const farCrowns = fa && fb ? [fa.crown, fb.crown] : variants.map((v) => v.crown);
     const foliage = createFoliageMaterial();
+    const foliageFar = createFoliageMaterial(true);
     const bark = createBarkMaterial(new THREE.Color(0.42, 0.27, 0.25));
-    const cells = 5;
-    const size = 2000 / cells;
+    const cells = Math.ceil(2000 / CELL);
     const buckets = new Map<string, Tree[]>();
     for (const t of trees) {
-      const i = Math.min(cells - 1, Math.floor((t.x + 1000) / size));
-      const j = Math.min(cells - 1, Math.floor((t.z + 1000) / size));
+      const i = Math.min(cells - 1, Math.max(0, Math.floor((t.x + 1000) / CELL)));
+      const j = Math.min(cells - 1, Math.max(0, Math.floor((t.z + 1000) / CELL)));
       const v = Math.abs(Math.floor(t.rot * 100)) % variants.length;
       const key = `${i},${j},${v}`;
       const list = buckets.get(key) ?? [];
       list.push(t);
       buckets.set(key, list);
     }
+    const byCell = new Map<string, Cell>();
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
     for (const [key, list] of buckets) {
-      const v = variants[Number(key.split(',')[2])];
+      const [i, j, vi] = key.split(',').map(Number);
+      const v = variants[vi];
       const crown = new THREE.InstancedMesh(v.crown, foliage, list.length);
       const trunk = new THREE.InstancedMesh(v.trunk, bark, list.length);
+      const far = new THREE.InstancedMesh(farCrowns[vi], foliageFar, list.length);
       list.forEach((t, k) => {
         q.setFromAxisAngle(up, t.rot);
         // bushier near the bottom of the valley, slimmer up high
@@ -108,13 +146,52 @@ export class ForestView {
         m.compose(p, q, s);
         crown.setMatrixAt(k, m);
         trunk.setMatrixAt(k, m);
+        far.setMatrixAt(k, m);
       });
       crown.castShadow = true;
       crown.receiveShadow = true;
       trunk.castShadow = false;
-      crown.computeBoundingSphere();
-      trunk.computeBoundingSphere();
-      this.group.add(crown, trunk);
+      far.castShadow = false;
+      far.receiveShadow = false;
+      for (const o of [crown, trunk, far]) o.computeBoundingSphere();
+      far.visible = false;
+      this.group.add(crown, trunk, far);
+      const ck = `${i},${j}`;
+      let cell = byCell.get(ck);
+      if (!cell) {
+        const x0 = -1000 + i * CELL;
+        const z0 = -1000 + j * CELL;
+        cell = { x0, z0, x1: x0 + CELL, z1: z0 + CELL, near: [], far: [], isNear: true };
+        byCell.set(ck, cell);
+        this.cells.push(cell);
+      }
+      cell.near.push(crown, trunk);
+      cell.far.push(far);
     }
+  }
+
+  /** Level of detail per cell, from where the camera is. */
+  update(camera: THREE.Vector3) {
+    for (const c of this.cells) {
+      const dx = Math.max(c.x0 - camera.x, 0, camera.x - c.x1);
+      const dz = Math.max(c.z0 - camera.z, 0, camera.z - c.z1);
+      const d = Math.hypot(dx, dz);
+      const near = !this.lod || (c.isNear ? d < NEAR + HYSTERESIS : d < NEAR);
+      if (near === c.isNear) continue;
+      c.isNear = near;
+      for (const o of c.near) o.visible = near;
+      for (const o of c.far) o.visible = !near;
+    }
+  }
+
+  /** Turn the far stand-ins off (every cell full detail): for A/B checks of what they save. */
+  setLod(on: boolean) {
+    this.lod = on;
+  }
+
+  /** How many cells are drawing the full trees, and how many the far stand-ins (QA). */
+  stats() {
+    const near = this.cells.filter((c) => c.isNear).length;
+    return { cells: this.cells.length, near, far: this.cells.length - near };
   }
 }

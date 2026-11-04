@@ -49,6 +49,22 @@
    "sha256": "24eed8a3280c1883eeb22f2d690a18a46d0583582de52bc9cf33d2236d37cd83"
   },
   {
+   "path": "../public/models/rs_barrier_hut.glb",
+   "bytes": 22284,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_barrier_hut: pass barrier hut; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "9bec8475a54b2c420829e5eb019086617de0c392c77dda55d5fb18924f3e0843"
+  },
+  {
+   "path": "../public/models/rs_boathouse.glb",
+   "bytes": 58668,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_boathouse: Mirror Lake boathouse, board-and-batten, lake doors, jetty; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "99b65e412f3369bd1bd9a9333aedc0f789b2cc48168d239b7c91440f38db4100"
+  },
+  {
    "path": "../public/models/rs_boulder_a.glb",
    "bytes": 14448,
    "tools": "MeshCraft + ForgeCraft",
@@ -65,12 +81,52 @@
    "sha256": "6bc9712851f3ace7d3bb631e56826e64fa67e7ff7445e6e79017fdcd6c51c436"
   },
   {
+   "path": "../public/models/rs_cabin.glb",
+   "bytes": 109980,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_cabin: log cabin with notched corners (Fernhut; fitted to the Tannberg top-station hut); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "b7af9036c6fa84414142cb71ebc8ca3600e44128d8f0c1d738b1a3726f836d2c"
+  },
+  {
    "path": "../public/models/rs_cache.glb",
    "bytes": 48952,
    "tools": "MeshCraft + ForgeCraft",
    "status": "shipped",
    "notes": "rs_cache: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
    "sha256": "0dcb28bc9dee97370327bc2d006ab93075e46289e51564fb17ac0d306072e274"
+  },
+  {
+   "path": "../public/models/rs_chalet.glb",
+   "bytes": 135540,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_chalet: two-storey Hollin chalet (houses, baker, clinic): body/roof/balcony/door/chimney nodes fitted per house; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "ee5d8b834d0e510f668db9e56c4ca98d2ea411353c68a93f294be9afa5c1fb63"
+  },
+  {
+   "path": "../public/models/rs_chalet_small.glb",
+   "bytes": 86652,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_chalet_small: single-storey chalet (the weather station hut); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "33e136df8726290d8c945da6efb5f1e556c6dbc9a1ec347bb32e24b1f2544ede"
+  },
+  {
+   "path": "../public/models/rs_chalet_wide.glb",
+   "bytes": 158600,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_chalet_wide: wide two-storey chalet (the Kettle, the Tannberg base lodge); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "9f2e566e59383d16e52b670b57d08f5285549d8e326caf735916807ddc7fa139"
+  },
+  {
+   "path": "../public/models/rs_chapel.glb",
+   "bytes": 99672,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_chapel: Hollin chapel with bell tower, belfry louvres, clocks and onion dome; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "b2fd02de75167298361d6b9a0880edecbd25674bb03f152ba844499630778a58"
   },
   {
    "path": "../public/models/rs_crag_a.glb",
@@ -153,12 +209,28 @@
    "sha256": "904fdb3493789fd98f99dd01a88ddf4bd2ef188bc43362b643c02ff1cb0e4fcb"
   },
   {
+   "path": "../public/models/rs_spruce_a_far.glb",
+   "bytes": 5948,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_spruce_a_far: far-forest stand-in for rs_spruce_a (28-tri crown; drawn past ~150 m without trunk or shadows); art/3d/scripts/patrol_models.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "059a0d4008cef14d63d267a2ddf1f449b9eb73e67938bb4d7d3e97bbec67a14c"
+  },
+  {
    "path": "../public/models/rs_spruce_b.glb",
    "bytes": 8700,
    "tools": "MeshCraft",
    "status": "shipped",
    "notes": "rs_spruce_b: Kessel spruce, slimmer variant with snow caps (63 tris); art/3d/scripts/patrol_models.py; validated and engine-checked",
    "sha256": "73de3cc0872a39376aec23f257349446dfa3ad5c950ab409a9f21d51029a5908"
+  },
+  {
+   "path": "../public/models/rs_spruce_b_far.glb",
+   "bytes": 5948,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_spruce_b_far: far-forest stand-in for rs_spruce_b (28-tri crown); art/3d/scripts/patrol_models.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "f688bb9d4803991df748ebe635f779a6596a2e9b061ed9f7663eef4e542df943"
   },
   {
    "path": "../public/models/rs_stump.glb",
@@ -177,6 +249,6 @@
    "sha256": "f2c222aad1fbb293f2060e75e69267afa0d53dce2c5366395ebda9fef13331db"
   }
  ],
- "files": 22,
+ "files": 31,
  "updated": "2026-11-04"
 }

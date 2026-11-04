@@ -212,7 +212,7 @@ def lerp(a, b, t):
     return tuple(x + (y - x) * t for x, y in zip(a, b))
 
 
-def spruce(seed, points, slender):
+def spruce(seed, points, slender, caps=True):
     """Star-shaped tiers of boughs: each tier is a fan from a snowy crown point to a rim that
     alternates drooping bough tips and tucked-in notches (2 x points triangles a tier, fewer points on
     the small upper tiers). Snow lies on the upper, inner part of every tier, the way the game's snowy
@@ -252,7 +252,7 @@ def spruce(seed, points, slender):
             j = (i + 1) % n
             bm.faces.new((apex, rim[j], rim[i]))
             cols.append((ac, rc[j], rc[i]))
-        if t < tiers - 3:
+        if caps and t < tiers - 3:
             # the cap: a low three-sided pyramid of snow just proud of the tier's upper face,
             # reaching most of the way to the notches where snow collects
             top = y + h
@@ -296,6 +296,10 @@ BUILD = {
     "rs_heli": heli,
     "rs_spruce_a": lambda: spruce(11, (5, 5, 4, 4, 3, 3), 1.0),
     "rs_spruce_b": lambda: spruce(47, (5, 4, 4, 4, 3, 3), 0.92),
+    # far-forest stand-ins (beyond ~200 m the game draws these crowns only, no trunk, no shadows):
+    # four tiers, the same height, width and snow, in 28 triangles
+    "rs_spruce_a_far": lambda: spruce(11, (4, 4, 3, 3), 1.0, caps=False),
+    "rs_spruce_b_far": lambda: spruce(47, (4, 4, 3, 3), 0.92, caps=False),
 }
 
 objs, mats = BUILD[asset]()
