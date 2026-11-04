@@ -1,5 +1,9 @@
-// Fully synthesised sound, as in ROCKSLIDE: no files to load, everything shaped from noise and
-// oscillators. Engines, rotors, wind, snow underfoot, Koda, the radio, charges and the avalanche.
+// Synthesised sound, as in ROCKSLIDE: engines, rotors, wind, snow underfoot, Koda, the radio,
+// charges and the avalanche are shaped from noise and oscillators. Only the voices, the Kessel theme
+// and three stingers are files (files.ts), lazy-loaded, each with a synthesised fallback.
+
+import { AudioFiles, type Intensity, type Sting } from './files';
+import type { VoiceLine } from './lines';
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -34,6 +38,7 @@ export class AudioEngine {
   private bellTimer = 6;
   private duck = 1;
   private hidden = false;
+  private files: AudioFiles | null = null;
 
   get ready() {
     return !!this.ctx;
@@ -186,6 +191,10 @@ export class AudioEngine {
     this.echo.connect(dl).connect(ef).connect(fb).connect(dl);
     ef.connect(this.music);
     this.nextChord(true);
+
+    this.files = new AudioFiles(ctx, this.music, this.sfx, import.meta.env.BASE_URL);
+    this.files.warm();
+    if (this.musicOn) this.files.startTheme();
   }
 
   private loopNoise(): AudioBufferSourceNode {
@@ -208,6 +217,7 @@ export class AudioEngine {
     this.musicOn = on;
     if (!this.ctx) return;
     this.music.gain.setTargetAtTime(on ? 0.45 : 0, this.ctx.currentTime, 0.4);
+    if (on) this.files?.startTheme();
   }
 
   private nextChord(first = false) {
@@ -221,9 +231,11 @@ export class AudioEngine {
     ];
     const c = chords[this.chordIndex++ % chords.length];
     const t = this.ctx.currentTime;
+    // once the Kessel theme is playing, the pads bow out
+    const theme = !!this.files?.themeOn;
     this.pads.forEach((p, i) => {
       for (const o of p.osc) o.frequency.setTargetAtTime(c[i], t, first ? 0.01 : 2);
-      p.gain.gain.setTargetAtTime(0.035 - i * 0.007, t, 3);
+      p.gain.gain.setTargetAtTime(theme ? 0 : 0.035 - i * 0.007, t, 3);
     });
   }
 
@@ -311,10 +323,42 @@ export class AudioEngine {
     [659.25, 987.77].forEach((f, i) => this.tone(f, 0.12, 0.6, 'sine', i * 0.09));
   }
 
-  /** A mission done: a rising arpeggio. */
+  /** Play a stinger file, or the synthesised version if the file is not there. */
+  private sting(id: Sting, synth: () => void, delay = 0) {
+    if (!this.files) return synth();
+    void this.files.sting(id, 0.8, delay).then((ok) => ok || (this.on && synth()));
+  }
+
+  /** A mission done: the Kessel fanfare (synthesised: a rising arpeggio). */
   reward() {
     if (!this.on) return;
-    [587.33, 739.99, 880, 1174.66].forEach((f, i) => this.tone(f, 0.12, 0.9, 'triangle', i * 0.11));
+    this.sting('complete', () => [587.33, 739.99, 880, 1174.66].forEach((f, i) => this.tone(f, 0.12, 0.9, 'triangle', i * 0.11)));
+  }
+
+  /** Charges set, clear the slope: the avalanche warning (synthesised: a two-tone horn). */
+  warning() {
+    if (!this.on) return;
+    this.sting('avalanche', () => {
+      for (let i = 0; i < 3; i++) {
+        this.tone(660, 0.07, 0.32, 'square', i * 0.7);
+        this.tone(495, 0.07, 0.32, 'square', i * 0.7 + 0.35);
+      }
+    });
+  }
+
+  /**
+   * Say a subtitle aloud if it is one of the voiced lines (lines.ts). `hold` hears the clip's
+   * length so the subtitle can stay up while it plays. Radio lines get a squelch either side.
+   */
+  say(text: string, hold: (seconds: number) => void) {
+    if (!this.on || !this.files) return;
+    this.files.voice(text, (secs: number, line: VoiceLine) => {
+      hold(secs);
+      if (line.radio) {
+        this.burst({ dur: 0.1, gain: 0.07, type: 'bandpass', freq: 2400, q: 2 });
+        this.burst({ dur: 0.16, gain: 0.06, type: 'bandpass', freq: 2000, q: 1.5, delay: secs + 0.02 });
+      }
+    });
   }
 
   /** A badge found. */
@@ -348,8 +392,14 @@ export class AudioEngine {
   /** Promoted: the reward arpeggio, then a held chord. */
   promote() {
     if (!this.on) return;
-    [587.33, 739.99, 880, 1174.66].forEach((f, i) => this.tone(f, 0.1, 0.7, 'triangle', 0.9 + i * 0.09));
-    [293.66, 440, 587.33, 739.99].forEach((f) => this.tone(f, 0.06, 2.4, 'sine', 1.3));
+    this.sting(
+      'rankup',
+      () => {
+        [587.33, 739.99, 880, 1174.66].forEach((f, i) => this.tone(f, 0.1, 0.7, 'triangle', 0.9 + i * 0.09));
+        [293.66, 440, 587.33, 739.99].forEach((f) => this.tone(f, 0.06, 2.4, 'sine', 1.3));
+      },
+      1.4,
+    );
   }
 
   /** A panel opening: a dry flick of paper. */
@@ -397,8 +447,9 @@ export class AudioEngine {
    * Continuous sound for this frame. `engine`: sled 0..1 throttle, `speed` m/s; `rotor` 0..1;
    * `hiss` 0..1 (snow under you); `rumble` 0..1 (avalanche); `fire` 0..1 (by the hearth).
    */
-  update(dt: number, o: { engine: number; speed: number; rotor: number; hiss: number; wind: number; rumble: number; fire: number; outdoors: number; day?: number; talking?: boolean }) {
+  update(dt: number, o: { engine: number; speed: number; rotor: number; hiss: number; wind: number; rumble: number; fire: number; outdoors: number; day?: number; talking?: boolean; intensity?: Intensity }) {
     if (!this.ctx) return;
+    if (o.intensity !== undefined) this.files?.setIntensity(o.intensity);
     const t = this.ctx.currentTime;
     const day = o.day ?? 1;
     // the music dips under a voice on the radio and comes back after; quieter and lower at night
@@ -434,7 +485,7 @@ export class AudioEngine {
     this.bellTimer -= dt;
     if (this.bellTimer < 0) {
       this.bellTimer = 5 + Math.random() * 9;
-      if (this.musicOn && day > 0.3 && o.rumble < 0.1) {
+      if (this.musicOn && !this.files?.themeOn && day > 0.3 && o.rumble < 0.1) {
         const scale = [587.33, 659.25, 739.99, 880, 987.77, 1174.66];
         let k = Math.floor(Math.random() * scale.length);
         const n = 2 + Math.floor(Math.random() * 3);
@@ -481,7 +532,11 @@ export class AudioEngine {
     o2.stop(t + 1.9);
   }
 
-  suspend() {
+  stats() {
+    return this.files?.stats() ?? null;
+  }
+
+    suspend() {
     this.hidden = true;
     void this.ctx?.suspend();
   }

@@ -351,8 +351,640 @@
    "status": "shipped",
    "notes": "share card (DesignCraft layout, PhotoCraft JPEG)",
    "sha256": "f2c222aad1fbb293f2060e75e69267afa0d53dce2c5366395ebda9fef13331db"
+  },
+  {
+   "path": "../public/audio/voice/avy_clear.m4a",
+   "bytes": 21911,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_clear",
+   "sha256": "ebc132925bc1d2244aeb182b68e0a2d6ff2ebc76b83fb5f134fda3cd81af6a4c"
+  },
+  {
+   "path": "../public/audio/voice/avy_clear.ogg",
+   "bytes": 22279,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_clear",
+   "sha256": "8147e8e8864459bd98b732216ce140d29196d90b743cf03678415eb0fcb94a8d"
+  },
+  {
+   "path": "../public/audio/voice/avy_down_berm.m4a",
+   "bytes": 14179,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_down_berm",
+   "sha256": "39239e0382ae2b5dc75e551c9e4e554f1370c29cd1651802ec87bf8551724577"
+  },
+  {
+   "path": "../public/audio/voice/avy_down_berm.ogg",
+   "bytes": 15676,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_down_berm",
+   "sha256": "2fb77049df24c7f932f9f650fd9c4efa8e2463c25f4b431a588b847f9b9d200b"
+  },
+  {
+   "path": "../public/audio/voice/avy_down_road.m4a",
+   "bytes": 18370,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_down_road",
+   "sha256": "e9ec55ca745c797b32ec16b34d94abeb462a6271aa790dc13f972b2ec6ab3b8f"
+  },
+  {
+   "path": "../public/audio/voice/avy_down_road.ogg",
+   "bytes": 19875,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_down_road",
+   "sha256": "95db68d2a13cf9a62f8216b5af908d652cf8e7a02d562233e7c658f4504d7095"
+  },
+  {
+   "path": "../public/audio/voice/avy_fire.m4a",
+   "bytes": 7281,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_fire",
+   "sha256": "28435ae2cbd1bf8bf92595927c37ec75ec3de322a6cc17ed3fea031dd3f8b243"
+  },
+  {
+   "path": "../public/audio/voice/avy_fire.ogg",
+   "bytes": 8888,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_fire",
+   "sha256": "ae595f4525539edf6ab63031678ec04ff7771650343b5037dae7b570f69ce212"
+  },
+  {
+   "path": "../public/audio/voice/avy_recon_alert.m4a",
+   "bytes": 21499,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_recon_alert",
+   "sha256": "7a87a1e0942d33bd2c2305b2312a19f590dba86b6b0a112c0c6e412e982d5642"
+  },
+  {
+   "path": "../public/audio/voice/avy_recon_alert.ogg",
+   "bytes": 22698,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_recon_alert",
+   "sha256": "35468caae279d741a22247e85b644745ffb9ebd38064025602c10f92e4b73d6e"
+  },
+  {
+   "path": "../public/audio/voice/avy_recon_done.m4a",
+   "bytes": 28134,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_recon_done",
+   "sha256": "63569514eb22554eb2e2e97a885c583c2ad272133e5b7e5ba11c2e0ffec765e6"
+  },
+  {
+   "path": "../public/audio/voice/avy_recon_done.ogg",
+   "bytes": 28358,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_recon_done",
+   "sha256": "96b2e2da61fb90cad53bf73d75df17cedc9498aa80ab409f085088a1b5765341"
+  },
+  {
+   "path": "../public/audio/voice/avy_release_alert.m4a",
+   "bytes": 22665,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_release_alert",
+   "sha256": "a6bfaed0514be8ce809dd7cc629056f01eb735accf5198580d97b67326de93af"
+  },
+  {
+   "path": "../public/audio/voice/avy_release_alert.ogg",
+   "bytes": 23566,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_release_alert",
+   "sha256": "67b4969b40a6311bcd0182119b99a9414a6e5e6d5f1828ecc43d12ffd4057823"
+  },
+  {
+   "path": "../public/audio/voice/avy_release_done.m4a",
+   "bytes": 20046,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_release_done",
+   "sha256": "8a9e6fff433c318da1f39a42c712b82c65cee2366a20592f34996c6d516d9b7e"
+  },
+  {
+   "path": "../public/audio/voice/avy_release_done.ogg",
+   "bytes": 20979,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_release_done",
+   "sha256": "8799d042b08b26a53ffdffc6004b00afa7e84f5bde0c849aebd58bce93b5b66e"
+  },
+  {
+   "path": "../public/audio/voice/avy_secondary.m4a",
+   "bytes": 19879,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_secondary",
+   "sha256": "9d60afc7dd8549223a337c1120bc357863adbe8287587bf82f0289b3d21cbd49"
+  },
+  {
+   "path": "../public/audio/voice/avy_secondary.ogg",
+   "bytes": 20585,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line avy_secondary",
+   "sha256": "3dd7a59365a364e730cd9a42401bf3b77d715b7fd2f8ac59cf710658b3a3f026"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_data.m4a",
+   "bytes": 8676,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_data",
+   "sha256": "d82d1d5b71e230109b1d6081dfa8f8f13df4db9a01b9ac36abf7733700ecbd44"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_data.ogg",
+   "bytes": 10955,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_data",
+   "sha256": "eaa3705f81eb49512b060b53ded53b39038bd7110af5f61539143260aaf7331f"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_drift_alert.m4a",
+   "bytes": 12506,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_drift_alert",
+   "sha256": "9ae2a6dad7a728876e5a566ad10d48e84dd0ff935581d148d5bf0dab0001b8c1"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_drift_alert.ogg",
+   "bytes": 14710,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_drift_alert",
+   "sha256": "db63f20aa1073dc035cf40f7b8204732d82c7ee47d82da83c013f6f3460ca7e4"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_drift_done.m4a",
+   "bytes": 13533,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_drift_done",
+   "sha256": "e8503cdbb85c433c4dedffe1bce57c914b160e5fda358419123fb1d2c7afd8ff"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_drift_done.ogg",
+   "bytes": 15731,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_drift_done",
+   "sha256": "88e42df03f9d759ccb2ebb1caffe31d0f6befc0504c2402834c86ff2e384eacd"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_grounded.m4a",
+   "bytes": 11991,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_grounded",
+   "sha256": "f1a14c817633acc276a6a46543346948a9d5734c8f744a90a73c54107f282c50"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_grounded.ogg",
+   "bytes": 14101,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_grounded",
+   "sha256": "74ff585247b6e40a093a7e01aa60dbfe91d737a9d25b948e71b6f781af0c652e"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_koda.m4a",
+   "bytes": 7573,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_koda",
+   "sha256": "3299a6db23b7098a03c46a865c74c34d17973167f9917c0ec2a7ac5507372001"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_koda.ogg",
+   "bytes": 10057,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_koda",
+   "sha256": "d5ecca99951782f92dd6d6dddab6a43b41b60e767a8495c4c5616040592fd144"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_morning.m4a",
+   "bytes": 24304,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_morning",
+   "sha256": "dd33b8994d31ec65caa5a68421d8272d8446d51bec3a023c058b50a594770871"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_morning.ogg",
+   "bytes": 25691,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_morning",
+   "sha256": "c1ce1950fcb9a4674d99395a3915b0c5200b852febfd6c616f84a65d3cb9d9de"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_road_closed.m4a",
+   "bytes": 9504,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_road_closed",
+   "sha256": "c6cdf8b890ec2d961dc12fff4c7beba2663acb9d2cefc70629165ad38bb85545"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_road_closed.ogg",
+   "bytes": 11691,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_road_closed",
+   "sha256": "7562bd95de559fae09451cc60b23bedc9f09726a339742765f3a362318d4c59c"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_road_open.m4a",
+   "bytes": 7102,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_road_open",
+   "sha256": "c3d34de8ebd7bdecc81aa3b02b7b867a1b9c77be3c3bd2cff3aa52a4b00e4994"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_road_open.ogg",
+   "bytes": 9350,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_road_open",
+   "sha256": "cac368dcb4829019b1bc5f70023c161de616143253b7cadbe1831f55c2b9fe20"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_rounds_alert.m4a",
+   "bytes": 13495,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_rounds_alert",
+   "sha256": "658572a81da87f82c0cc3ef7f8c45fd98308bac13aa368719b89d65e52648e6c"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_rounds_alert.ogg",
+   "bytes": 16096,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_rounds_alert",
+   "sha256": "4199cb47c759227f03fcc44fec569bb31fb755eddeae0ce76c6c1c1b11ad9d8c"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_rounds_done.m4a",
+   "bytes": 23677,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_rounds_done",
+   "sha256": "9d3199f826b0bd5eff6feb6f841b03df1f50bcac95e001c0e40b713514acde72"
+  },
+  {
+   "path": "../public/audio/voice/dispatch_rounds_done.ogg",
+   "bytes": 25806,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line dispatch_rounds_done",
+   "sha256": "935d63cf5759bd9537d730b571618d73bc5d220d1a3346f8392cdada87cb38a3"
+  },
+  {
+   "path": "../public/audio/voice/driver_thanks.m4a",
+   "bytes": 12480,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line driver_thanks",
+   "sha256": "1351dc6a50d1b9e2e692aedfaf4f80549b044af5d81a16bfce1f420b18f88b51"
+  },
+  {
+   "path": "../public/audio/voice/driver_thanks.ogg",
+   "bytes": 15554,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line driver_thanks",
+   "sha256": "8904d5a25660905dba5d2276f4a7195d7b0a11073c2de36204e6930985823e3a"
+  },
+  {
+   "path": "../public/audio/voice/greta_pepper_alert.m4a",
+   "bytes": 16985,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_pepper_alert",
+   "sha256": "5c003f50c36aa69aff5ac72faceadc9627898d878faa7873f2f648618ebc7888"
+  },
+  {
+   "path": "../public/audio/voice/greta_pepper_alert.ogg",
+   "bytes": 18973,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_pepper_alert",
+   "sha256": "286c9843db67c97a5daf7988e9f363d89e6a36d6f0962b4e8d5ee74cc9806eab"
+  },
+  {
+   "path": "../public/audio/voice/greta_pepper_done.m4a",
+   "bytes": 13161,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_pepper_done",
+   "sha256": "12a63f0d669ea56e354ff693bf423bd1174567e3849c19260b2555fe975cc8ee"
+  },
+  {
+   "path": "../public/audio/voice/greta_pepper_done.ogg",
+   "bytes": 16715,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_pepper_done",
+   "sha256": "64e009bb20783dc5876d677d8a3cd90dff3e9491883f97af4d71c5c26edc298e"
+  },
+  {
+   "path": "../public/audio/voice/greta_pepper_thanks.m4a",
+   "bytes": 11467,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_pepper_thanks",
+   "sha256": "6a2d57ecf32f8a42a9a3bf2ed27814da02529b4d8ac20ec9b838648dd9e8ba9e"
+  },
+  {
+   "path": "../public/audio/voice/greta_pepper_thanks.ogg",
+   "bytes": 14474,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_pepper_thanks",
+   "sha256": "0431a5d8844fb5e6d7b0dc802d0cdd34aedbbbcf228e01c916b9408dcda92858"
+  },
+  {
+   "path": "../public/audio/voice/greta_wood_alert.m4a",
+   "bytes": 22418,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_wood_alert",
+   "sha256": "56d0d26e1e69fcb47302d395d2742012034f02a3c9b8aab5495422529575053b"
+  },
+  {
+   "path": "../public/audio/voice/greta_wood_alert.ogg",
+   "bytes": 24194,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_wood_alert",
+   "sha256": "37b52c58c7760fc7dd9d3479f54e58659256f5603ff55ea6df1e212275139c39"
+  },
+  {
+   "path": "../public/audio/voice/greta_wood_done.m4a",
+   "bytes": 16932,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_wood_done",
+   "sha256": "636d6f1271d925ff6b6cc7c58f310eebd7733b10099d4cb71c6e12cc8fdb7467"
+  },
+  {
+   "path": "../public/audio/voice/greta_wood_done.ogg",
+   "bytes": 20531,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_wood_done",
+   "sha256": "6beb8731ef3727ce0c0ec7173b219ac0027e8edd9df771211dd6f60dad33f2e7"
+  },
+  {
+   "path": "../public/audio/voice/greta_wood_thanks.m4a",
+   "bytes": 11323,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_wood_thanks",
+   "sha256": "6735fb89db63b8b93dcaeea73ff94496b419a62b7a834852fa03737b11d24582"
+  },
+  {
+   "path": "../public/audio/voice/greta_wood_thanks.ogg",
+   "bytes": 14490,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line greta_wood_thanks",
+   "sha256": "c08b1f7c9ed5cd2ef9eacee9dc41343547837e00e018dcb74f763d8701ae3faf"
+  },
+  {
+   "path": "../public/audio/voice/nils_aid.m4a",
+   "bytes": 15153,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line nils_aid",
+   "sha256": "3c3d020eacfb12e3a227149f783b235774421ebd998b40c4406594e2061e15db"
+  },
+  {
+   "path": "../public/audio/voice/nils_aid.ogg",
+   "bytes": 18058,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line nils_aid",
+   "sha256": "ae123fbb1e80c793f5f734b0c403bdd750368bd022ca22649fdf9a01ba46492f"
+  },
+  {
+   "path": "../public/audio/voice/nils_carry.m4a",
+   "bytes": 16001,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line nils_carry",
+   "sha256": "f609da0f4596380c38f4b653946da88d5977863502486c92cb90235a20a34ae7"
+  },
+  {
+   "path": "../public/audio/voice/nils_carry.ogg",
+   "bytes": 18790,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line nils_carry",
+   "sha256": "f6b733af761e03f8a2a4971c0dc288f6d26b86f7a0ed1f0afb5a98c5557cfa78"
+  },
+  {
+   "path": "../public/audio/voice/road_tree_alert.m4a",
+   "bytes": 16611,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line road_tree_alert",
+   "sha256": "8ad335939231be94e04aecac43af7984c68dd81b5c8c99438f2d0cb73d2fdae4"
+  },
+  {
+   "path": "../public/audio/voice/road_tree_alert.ogg",
+   "bytes": 19096,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line road_tree_alert",
+   "sha256": "e4cb296856a52f4bfb9e72ca8ba8d0c5ba9ed3d786c26d404907e40dcb007243"
+  },
+  {
+   "path": "../public/audio/voice/road_tree_done.m4a",
+   "bytes": 11986,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line road_tree_done",
+   "sha256": "0a510351a0d76b71954e657b738a268432306d892da9a07fbbf671c3ecf3ac84"
+  },
+  {
+   "path": "../public/audio/voice/road_tree_done.ogg",
+   "bytes": 13912,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line road_tree_done",
+   "sha256": "a06b7a7487bff29d0ec5e990e718579c24fe4ca1b4f7e4920916937f75c69bfa"
+  },
+  {
+   "path": "../public/audio/voice/ski_alert.m4a",
+   "bytes": 20907,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line ski_alert",
+   "sha256": "af0b388db19eddeefa37e1935d65f3c1841ae215aeba0ed1b33c39fc881619c4"
+  },
+  {
+   "path": "../public/audio/voice/ski_alert.ogg",
+   "bytes": 22563,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line ski_alert",
+   "sha256": "44d47f549df893ef2b06b3f9f6061779ae08b8c094630f123d60afa18eabcff2"
+  },
+  {
+   "path": "../public/audio/voice/ski_clinic.m4a",
+   "bytes": 10120,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line ski_clinic",
+   "sha256": "ead26e88024b21177bacba9dfba0a09303d2a3936eb6fc8db9a320aad22faac3"
+  },
+  {
+   "path": "../public/audio/voice/ski_clinic.ogg",
+   "bytes": 12430,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line ski_clinic",
+   "sha256": "fc273d0ff27755aee7dfb36be095171916edb5e2f8cae996b6d87745fe6289af"
+  },
+  {
+   "path": "../public/audio/voice/ski_done.m4a",
+   "bytes": 24042,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line ski_done",
+   "sha256": "3620a7440993e47b62069a21ca26602feb79dd6284645b02f4169e085cad4020"
+  },
+  {
+   "path": "../public/audio/voice/ski_done.ogg",
+   "bytes": 26079,
+   "tools": "AudioCraft voice (Kokoro-82M) + FFmpeg",
+   "status": "shipped",
+   "notes": "voice line ski_done",
+   "sha256": "78f8e0c049cd48ee72a9a94e09958d3b4e5b78cc4342461c62072f9c6f3e3dd4"
+  },
+  {
+   "path": "../public/audio/music/theme_emergency.m4a",
+   "bytes": 125227,
+   "tools": "AudioCraft music + FFmpeg",
+   "status": "shipped",
+   "notes": "Kessel theme layer",
+   "sha256": "eeb67b9ff0878586e109f5306ee638cb9cedc787d96e4e60c266b240ce4fcf4e"
+  },
+  {
+   "path": "../public/audio/music/theme_emergency.ogg",
+   "bytes": 70796,
+   "tools": "AudioCraft music + FFmpeg",
+   "status": "shipped",
+   "notes": "Kessel theme layer",
+   "sha256": "9642c51b79f3e1dd355889febfd40ed5ae57bf680c71eaec61bd395206db7ab3"
+  },
+  {
+   "path": "../public/audio/music/theme_mission.m4a",
+   "bytes": 190528,
+   "tools": "AudioCraft music + FFmpeg",
+   "status": "shipped",
+   "notes": "Kessel theme layer",
+   "sha256": "813514c820dea5fc5b1ba33e0ba8756a812928d386ff29c7e50c2acaf67c1ea1"
+  },
+  {
+   "path": "../public/audio/music/theme_mission.ogg",
+   "bytes": 142782,
+   "tools": "AudioCraft music + FFmpeg",
+   "status": "shipped",
+   "notes": "Kessel theme layer",
+   "sha256": "e62261d231f225558b878cb73c2a887c5cc437720c293021c42f4401836f5167"
+  },
+  {
+   "path": "../public/audio/music/theme_patrol.m4a",
+   "bytes": 188257,
+   "tools": "AudioCraft music + FFmpeg",
+   "status": "shipped",
+   "notes": "Kessel theme layer",
+   "sha256": "77280a7df6d59110b100fbe9e7903c8392a400be0119cde5d3ea45ebf5df0f98"
+  },
+  {
+   "path": "../public/audio/music/theme_patrol.ogg",
+   "bytes": 130825,
+   "tools": "AudioCraft music + FFmpeg",
+   "status": "shipped",
+   "notes": "Kessel theme layer",
+   "sha256": "4f9b88e54c5a11e8d6ff6bf3ddb7f796dc0679bd60ebc5705933edfdbe32a686"
+  },
+  {
+   "path": "../public/audio/sting/avalanche.m4a",
+   "bytes": 28951,
+   "tools": "AudioCraft music/sfx/layer + FFmpeg",
+   "status": "shipped",
+   "notes": "stinger",
+   "sha256": "973ba683f0e1237307be60bc0977dc4c3c4ac8320811b3d1fafb0d18134b122a"
+  },
+  {
+   "path": "../public/audio/sting/avalanche.ogg",
+   "bytes": 36905,
+   "tools": "AudioCraft music/sfx/layer + FFmpeg",
+   "status": "shipped",
+   "notes": "stinger",
+   "sha256": "8144196865a57acebf9ecb6dc6084a0b40801fd63544b7864e216f921535cc59"
+  },
+  {
+   "path": "../public/audio/sting/complete.m4a",
+   "bytes": 22256,
+   "tools": "AudioCraft music/sfx/layer + FFmpeg",
+   "status": "shipped",
+   "notes": "stinger",
+   "sha256": "5598643f0a69e0cf4a237eb449c41766f286a7bccae97ad01f74d83008eb343b"
+  },
+  {
+   "path": "../public/audio/sting/complete.ogg",
+   "bytes": 38325,
+   "tools": "AudioCraft music/sfx/layer + FFmpeg",
+   "status": "shipped",
+   "notes": "stinger",
+   "sha256": "750cf3daa7107094a66dfb7bdfc6a8a2d723308090ea99cedc9a4b1a349f3c60"
+  },
+  {
+   "path": "../public/audio/sting/rankup.m4a",
+   "bytes": 45751,
+   "tools": "AudioCraft music/sfx/layer + FFmpeg",
+   "status": "shipped",
+   "notes": "stinger",
+   "sha256": "bfeb23b58b6b9d453e9fc0af678cfe9e662f58f7235cce5dd967355a3d454a9a"
+  },
+  {
+   "path": "../public/audio/sting/rankup.ogg",
+   "bytes": 59385,
+   "tools": "AudioCraft music/sfx/layer + FFmpeg",
+   "status": "shipped",
+   "notes": "stinger",
+   "sha256": "e90fa294666f9bac52e2395cd53986d102de9b97f1dff115127e88df50a09f7e"
+  },
+  {
+   "path": "../public/fx/kessel-fx.png",
+   "bytes": 172252,
+   "tools": "FXCraft flipbook (smoke, dust, explosion, fire) + art/fx/build_fx.py",
+   "status": "shipped",
+   "notes": "particle atlas, 4 flipbooks x 16 frames",
+   "sha256": "974a0545f1210d4dfa4445be3cce508d066a49f995cf12f5c5000f9872ab9734"
   }
  ],
- "files": 44,
+ "files": 123,
  "updated": "2026-11-04"
 }

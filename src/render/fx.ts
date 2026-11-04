@@ -11,12 +11,19 @@ const PARTICLE_VERT = /* glsl */ `
   attribute float aSize;
   attribute float aAlpha;
   attribute vec3 aColor;
+  attribute float aKind;
+  attribute float aAge;
   varying float vAlpha;
   varying vec3 vColor;
+  varying vec2 vCell;
   uniform float uScale;
   void main() {
     vAlpha = aAlpha;
     vColor = aColor;
+    // which flipbook frame: a quadrant per kind, 4x4 frames each, played once over the particle's life
+    float frame = min(15.0, floor(aAge * 16.0));
+    vec2 quad = vec2(mod(aKind, 2.0), floor(aKind / 2.0));
+    vCell = quad * 4.0 + vec2(mod(frame, 4.0), floor(frame / 4.0));
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = aSize * uScale / max(0.5, -mv.z);
     gl_Position = projectionMatrix * mv;
@@ -25,19 +32,35 @@ const PARTICLE_VERT = /* glsl */ `
 const PARTICLE_FRAG = /* glsl */ `
   varying float vAlpha;
   varying vec3 vColor;
+  varying vec2 vCell;
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;
+  uniform sampler2D uAtlas;
+  uniform float uUseAtlas;
   void main() {
     vec2 d = gl_PointCoord - 0.5;
     float r = length(d);
     if (r > 0.5) discard;
-    float a = smoothstep(0.5, 0.15, r) * vAlpha;
+    vec3 col = vColor;
+    float a;
+    if (uUseAtlas > 0.5) {
+      vec4 t = texture2D(uAtlas, (vCell + gl_PointCoord) / 8.0);
+      col *= t.rgb;
+      a = t.a * vAlpha;
+    } else {
+      a = smoothstep(0.5, 0.15, r) * vAlpha;
+    }
+    if (a < 0.01) discard;
     float depth = gl_FragCoord.z / gl_FragCoord.w;
     float f = smoothstep(uFogNear, uFogFar, depth);
-    gl_FragColor = vec4(mix(vColor, uFogColor, f), a);
+    gl_FragColor = vec4(mix(col, uFogColor, f), a);
   }
 `;
+
+/** Flipbook quadrants in public/fx/kessel-fx.png (art/fx/build_fx.py). */
+export const FX_KIND = { puff: 0, powder: 1, blast: 2, fire: 3 } as const;
+export type FxKind = (typeof FX_KIND)[keyof typeof FX_KIND];
 
 interface P {
   x: number;
@@ -56,13 +79,15 @@ interface P {
   b: number;
   drag: number;
   rise: number;
+  kind: number;
 }
 
-type EmitOpts = { life?: number; size?: number; grow?: number; alpha?: number; color?: readonly [number, number, number]; drag?: number; rise?: number };
+type EmitOpts = { life?: number; size?: number; grow?: number; alpha?: number; color?: readonly [number, number, number]; drag?: number; rise?: number; kind?: FxKind };
 const NO_OPTS: EmitOpts = {};
 const WHITE = [0.97, 0.98, 1] as const;
 const SMOKE = [0.78, 0.78, 0.8] as const;
-const FLASH = [1, 0.75, 0.4] as const;
+const FLASH_TINT = [1, 0.92, 0.85] as const;
+const FIRE = [1, 1, 1] as const;
 const CLOUD = [0.95, 0.97, 1] as const;
 
 export class Particles {
@@ -75,6 +100,8 @@ export class Particles {
   private size: Float32Array;
   private alpha: Float32Array;
   private color: Float32Array;
+  private kind: Float32Array;
+  private age: Float32Array;
   private geo: THREE.BufferGeometry;
   private n = 0;
   readonly uniforms: Record<string, THREE.IUniform>;
@@ -84,13 +111,19 @@ export class Particles {
     this.size = new Float32Array(max);
     this.alpha = new Float32Array(max);
     this.color = new Float32Array(max * 3);
+    this.kind = new Float32Array(max);
+    this.age = new Float32Array(max);
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aSize', new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
     this.geo.setAttribute('aColor', new THREE.BufferAttribute(this.color, 3).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute('aKind', new THREE.BufferAttribute(this.kind, 1).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute('aAge', new THREE.BufferAttribute(this.age, 1).setUsage(THREE.DynamicDrawUsage));
     this.uniforms = {
       uScale: { value: 400 },
+      uAtlas: { value: null },
+      uUseAtlas: { value: 0 },
       uFogColor: { value: new THREE.Color() },
       uFogNear: { value: 100 },
       uFogFar: { value: 1000 },
@@ -99,6 +132,16 @@ export class Particles {
     this.points = new THREE.Points(this.geo, m);
     this.points.frustumCulled = false;
     this.points.renderOrder = 5;
+  }
+
+  get count() {
+    return this.n;
+  }
+
+  /** Draw from the FXCraft flipbook atlas (null: back to the plain soft discs). */
+  setAtlas(tex: THREE.Texture | null) {
+    this.uniforms.uAtlas.value = tex;
+    this.uniforms.uUseAtlas.value = tex ? 1 : 0;
   }
 
   emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, opts: EmitOpts = NO_OPTS) {
@@ -129,12 +172,13 @@ export class Particles {
     p.b = c[2];
     p.drag = opts.drag ?? 1.5;
     p.rise = opts.rise ?? -4;
+    p.kind = opts.kind ?? FX_KIND.puff;
   }
 
   /** A burst of powder (sled spray, a landing, a fall). */
-  powder(x: number, y: number, z: number, n: number, spread: number, up: number, vx = 0, vz = 0, size = 1.2) {
+  powder(x: number, y: number, z: number, n: number, spread: number, up: number, vx = 0, vz = 0, size = 1.2, kind: FxKind = FX_KIND.puff) {
     for (let i = 0; i < n; i++)
-      this.emit(x, y, z, vx + (Math.random() - 0.5) * spread, up * (0.4 + Math.random()), vz + (Math.random() - 0.5) * spread, { life: 0.7 + Math.random() * 0.6, size: size * (0.6 + Math.random() * 0.8), grow: 1.8, alpha: 0.7, drag: 2.2, rise: -5 });
+      this.emit(x, y, z, vx + (Math.random() - 0.5) * spread, up * (0.4 + Math.random()), vz + (Math.random() - 0.5) * spread, { life: 0.7 + Math.random() * 0.6, size: size * (0.6 + Math.random() * 0.8), grow: 1.8, alpha: 0.7, drag: 2.2, rise: -5, kind });
   }
 
   smoke(x: number, y: number, z: number, wind: number) {
@@ -156,7 +200,18 @@ export class Particles {
       const s = 6 + Math.random() * 16;
       this.emit(x, y + 1, z, Math.cos(a) * s * 0.6, 8 + Math.random() * 18, Math.sin(a) * s * 0.6, { life: 1.6 + Math.random() * 1.4, size: 4 + Math.random() * 5, grow: 3, alpha: 0.9, drag: 1.2, rise: -6 });
     }
-    for (let i = 0; i < 12; i++) this.emit(x, y + 1.5, z, (Math.random() - 0.5) * 4, 6 + Math.random() * 4, (Math.random() - 0.5) * 4, { life: 0.5, size: 6, grow: 2, alpha: 1, color: FLASH, drag: 3, rise: 0 });
+    // the fireball and its smoke ring from the FXCraft explosion, staggered so no two frames match
+    for (let i = 0; i < 9; i++)
+      this.emit(x + (Math.random() - 0.5) * 3, y + 1 + Math.random() * 2.5, z + (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 5, 3 + Math.random() * 5, (Math.random() - 0.5) * 5, {
+        life: 0.7 + Math.random() * 0.8,
+        size: 2.2 + Math.random() * 2.2,
+        grow: 1.6,
+        alpha: 0.9,
+        color: FLASH_TINT,
+        drag: 2.5,
+        rise: 0.4,
+        kind: FX_KIND.blast,
+      });
   }
 
   /** The avalanche's powder cloud boiling off the moving snow. */
@@ -169,6 +224,21 @@ export class Particles {
       drag: 0.6,
       rise: 0.2,
       color: CLOUD,
+    });
+  }
+
+  /** A tongue of flame (the hearth): drawn from the fire loop, a plain warm disc without the atlas. */
+  flame(x: number, y: number, z: number) {
+    const lit = this.uniforms.uUseAtlas.value > 0;
+    this.emit(x + (Math.random() - 0.5) * 0.25, y, z + (Math.random() - 0.5) * 0.5, 0, 0.35 + Math.random() * 0.2, 0, {
+      life: 0.7 + Math.random() * 0.3,
+      size: 0.55 + Math.random() * 0.2,
+      grow: lit ? 0.2 : -0.5,
+      alpha: lit ? 0.95 : 0.6,
+      color: lit ? FIRE : ([1, 0.62, 0.3] as const),
+      drag: 0.5,
+      rise: 0.6,
+      kind: FX_KIND.fire,
     });
   }
 
@@ -210,13 +280,15 @@ export class Particles {
       this.color[o] = p.r;
       this.color[o + 1] = p.g;
       this.color[o + 2] = p.b;
+      this.kind[j - 1] = p.kind;
+      this.age[j - 1] = f;
     }
     this.back = from;
     this.pool = into;
     this.oldest = 0;
     this.n = j;
     this.geo.setDrawRange(0, this.n);
-    for (const k of ['position', 'aSize', 'aAlpha', 'aColor']) (this.geo.getAttribute(k) as THREE.BufferAttribute).needsUpdate = true;
+    for (const k of ['position', 'aSize', 'aAlpha', 'aColor', 'aKind', 'aAge']) (this.geo.getAttribute(k) as THREE.BufferAttribute).needsUpdate = true;
   }
 }
 
