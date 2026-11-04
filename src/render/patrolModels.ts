@@ -16,8 +16,11 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 /** The valley's buildings (art/3d/scripts/valley_buildings.py): used only when every one loaded. */
 export const BUILDING_IDS = ['rs_chalet', 'rs_chalet_wide', 'rs_chalet_small', 'rs_chapel', 'rs_cabin', 'rs_boathouse', 'rs_barrier_hut'] as const;
 export type BuildingId = (typeof BUILDING_IDS)[number];
+/** The patrol station's yard buildings (not the lodge): used only when every one loaded. */
+export const YARD_IDS = ['rs_garage', 'rs_hangar', 'rs_equipment', 'rs_doghouse', 'rs_mast'] as const;
+export type YardId = (typeof YARD_IDS)[number];
 
-export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_koda', ...BUILDING_IDS] as const;
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS] as const;
 export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
 export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
 
@@ -100,6 +103,25 @@ export function cullAsCharacter(root: THREE.Object3D, center: THREE.Vector3, rad
     m.boundingSphere = new THREE.Sphere(center.clone(), radius);
     m.frustumCulled = true;
   });
+}
+
+/**
+ * A copy of a static MeshCraft model painted with the game's own materials: every part carries a
+ * palette role, and `paint` says which material that role is for this copy. A role left out keeps the
+ * colour the model was painted with (through `fallback`, so it shares the game's material cache).
+ */
+export function paintModel(src: THREE.Object3D, paint: Record<string, THREE.Material>, fallback: (hex: number) => THREE.Material): THREE.Group {
+  const g = src.clone(true) as THREE.Group;
+  g.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const role = roleOf(m);
+    const hex = parseInt(String((m.material as THREE.Material).userData?.gitcraft_color ?? '#cccccc').slice(1), 16);
+    m.material = paint[role] ?? fallback(hex);
+    m.castShadow = true;
+    m.receiveShadow = true;
+  });
+  return g;
 }
 
 /** Re-home a pivot node under a group that already sits on the same pivot. */

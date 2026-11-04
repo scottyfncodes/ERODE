@@ -95,6 +95,12 @@ building (its wall and roof colours, the lit windows), so each region still bake
 material. All or nothing: if any building model is missing the whole valley stays code-built
 (`tests/buildings.test.ts`).
 
+**The patrol station's yard** (same script): `rs_garage` (floor, three walls, the open front and
+the roof as nodes, so the dollhouse cut-away still hides them when you are inside), `rs_hangar`,
+`rs_equipment`, `rs_doghouse` (the kennel upgrade scales and repaints it) and `rs_mast`. Contents,
+signs, lights, the beacon, the flag and the kennel fence stay code-built, and so do the lodge and its
+wing. All or nothing, like the valley (`tests/yard.test.ts`).
+
 **The patroller and Koda** (`3d/scripts/patrol_people.py`) are skinned meshes on skeletons of the
 code's own joints: the same names, at the same pivots, with zero rest rotation (every bone points
 straight up with roll 0, so each glTF joint node's rotation is identity, the frame of the code's

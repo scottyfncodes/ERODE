@@ -37,6 +37,10 @@ ROLES = {
     "shutter": "#5F9C86", "window": "Lamp Glow", "logDark": "#8E3F4C", "logLight": "#E3A3A6", "roof": "Burgundy Roof",
     "roofSnow": "Kessel Snow", "door": "#6B4428", "log": "Log", "logShade": "Log Dark", "grain": "End Grain",
     "dome": "Mustard", "spire": "Caution Amber", "belfry": "#262A30", "boat": "#6B4428", "boatDark": "#3D2A1C",
+    # the patrol station's yard
+    "boards": "#8FBFA8", "batten": "#729988", "header": "#64857A", "floor": "#9C9A94", "rolled": "#E9E2D0",
+    "roofDark": "#4A4F55", "steel": "#6E7A85", "rib": "#58626A", "arch": "#4F5A64", "red": "Patrol Red",
+    "white": "Paper", "metal": "Steel", "hut": "#5E6266", "dark": "#1A1512",
 }
 mats = K.Materials(pal, ROLES, prefix="RS")
 M = mats.__getitem__
@@ -366,6 +370,147 @@ def barrier_hut():
     return [finish(p + roof, "barrier_hut")]
 
 
+# ------------------------------------------------------------------ the patrol station's yard
+# (src/world/station.ts: GARAGE 12 x 10, walls 3.6; HANGAR 14 x 16, walls 6; EQUIP 9 x 6, walls 3)
+def garage():
+    """The patrol garage: painted boards with battens, an open west front with a header beam and the
+    rolled-up door, a dark roof under snow with board gables. Walls, front and roof are their own nodes:
+    the game cuts them away (its dollhouse view) when you are inside."""
+    w, d, h = 12.0, 10.0, 3.6
+    hw, hd = w / 2, d / 2
+    floor = [B("floor", w, 0.15, d, (0, 0.07, 0))]
+
+    def wall(name, ww, dd, x, z):
+        p = [B("boards", ww, h, dd, (x, h / 2, z))]
+        n = round(max(ww, dd) / 0.6)
+        for i in range(n):
+            u = -0.5 + (i + 0.5) / n
+            if ww > dd:
+                p.append(B("batten", 0.08, h, dd + 0.04, (x + u * ww, h / 2, z)))
+            else:
+                p.append(B("batten", dd + 0.04 if False else ww + 0.04, h, 0.08, (x, h / 2, z + u * dd)))
+        # a small window high in each long wall
+        if ww > dd:
+            for wx in (-3, 3):
+                p += [B("logDark", 1.1, 0.7, dd + 0.06, (wx, 2.6, z)), B("window", 0.9, 0.5, dd + 0.08, (wx, 2.6, z))]
+        return finish(p, name)
+
+    walls = [wall("wall_n", w, 0.3, 0, -hd), wall("wall_s", w, 0.3, 0, hd), wall("wall_e", 0.3, d, hw, 0)]
+    side = (d - 5.5) / 2
+    front = [B("boards", 0.3, h, side, (-hw, h / 2, -hd + side / 2)), B("boards", 0.3, h, side, (-hw, h / 2, hd - side / 2)),
+             B("header", 0.4, 0.7, d, (-hw, h - 0.35, 0)), B("rolled", 0.3, 0.5, 5.6, (-hw + 0.2, h - 0.95, 0))]
+    for z in (-hd + side / 2, hd - side / 2):
+        for k in range(3):
+            front.append(B("batten", 0.34, h, 0.08, (-hw, h / 2, z - side / 2 + (k + 0.5) * side / 3)))
+    # bump stops either side of the door, painted patrol red and white
+    for z in (-2.85, 2.85):
+        for k in range(3):
+            front.append(B("red" if k % 2 == 0 else "white", 0.34, 0.3, 0.34, (-hw - 0.05, 0.15 + k * 0.3, z)))
+    roof = snow_roof(d + 1.2, w + 1.2, 1.8, roof="roofDark")
+    for sd in (-1, 1):
+        roof.append(gable_end("boards", d, 1.8, sd * (hw - 0.1), t=0.3))
+    turn(roof, math.pi / 2)  # ridge along x, as the code's roof
+    for o in roof:
+        o.location.y += h
+    objs = [finish(floor, "floor")] + walls + [finish(front, "front"), finish(roof, "roof")]
+    return objs
+
+
+def hangar():
+    """Hangar 1: ribbed steel walls (open to the west for the helicopter) on a concrete floor, a low
+    arched roof with snow along its crown, and a vent on top."""
+    w, d, h = 14.0, 16.0, 6.0
+    p = [B("floor", w, 0.15, d, (0, 0.07, 0))]
+    p += [B("steel", w - 2, h, 0.3, (1, h / 2, -d / 2)), B("steel", w - 2, h, 0.3, (1, h / 2, d / 2)), B("steel", 0.3, h, d, (w / 2, h / 2, 0))]
+    for i in range(10):
+        x = -w / 2 + 2 + i * ((w - 2) / 10)
+        for s in (-1, 1):
+            p.append(B("rib", 0.12, h, 0.36, (x, h / 2, s * d / 2)))
+    for i in range(12):
+        z = -d / 2 + 0.7 + i * (d - 1.4) / 11
+        p.append(B("rib", 0.36, h, 0.12, (w / 2, h / 2, z)))
+    # the arch: a flattened half cylinder along x, ribs over it, snow along the crown
+    R = d / 2 + 0.4
+    seg = 14
+    arc = [(math.cos(math.pi * i / seg) * R, math.sin(math.pi * i / seg) * R * 0.35) for i in range(seg + 1)]
+    for i in range(seg):
+        (z0, y0), (z1, y1) = arc[i], arc[i + 1]
+        L = math.hypot(z1 - z0, y1 - y0)
+        ang = math.atan2(y1 - y0, z1 - z0)
+        mid = ((z0 + z1) / 2, (y0 + y1) / 2)
+        p.append(B("arch", w, 0.16, L + 0.02, (1, h + mid[1], mid[0]), (-ang, 0, 0)))
+        if 4 <= i <= 9:
+            p.append(B("roofSnow", w - 0.3, 0.2, L + 0.02, (1, h + mid[1] + 0.15, mid[0]), (-ang, 0, 0)))
+    for k in range(6):
+        x = -w / 2 + 1.5 + k * (w - 1) / 5
+        for i in range(seg):
+            (z0, y0), (z1, y1) = arc[i], arc[i + 1]
+            L = math.hypot(z1 - z0, y1 - y0)
+            p.append(B("rib", 0.14, 0.2, L + 0.02, (x, h + (y0 + y1) / 2 + 0.06, (z0 + z1) / 2), (-math.atan2(y1 - y0, z1 - z0), 0, 0)))
+    p += [C("metal", 0.35, 0.35, 0.8, 8, (3, h + R * 0.35 + 0.3, 0)), C("hut", 0.5, 0.5, 0.15, 8, (3, h + R * 0.35 + 0.75, 0))]
+    return [finish(p, "hangar")]
+
+
+def equipment():
+    """The equipment room: board-and-batten walls on a stone footing, a door, a window each side, a
+    snowy roof with board gables (the code's had open triangles)."""
+    w, d, h = 9.0, 6.0, 3.0
+    p = [B("boat", w, h, d, (0, h / 2, 0)), B("stoneDark", w + 0.1, 0.3, d + 0.1, (0, 0.15, 0))]
+    for i in range(12):
+        x = -w / 2 + 0.4 + i * 0.75
+        for s in (-1, 1):
+            if not (s > 0 and abs(x) < 0.9):
+                p.append(B("boatDark", 0.08, h, 0.05, (x, h / 2, s * (d / 2 + 0.02))))
+    # (no canopy over the door: the game hangs its EQUIPMENT sign there)
+    p += [B("logDark", 1.6, 2.35, 0.1, (0, 1.17, d / 2 + 0.03)), B("boatDark", 1.4, 2.2, 0.12, (0, 1.1, d / 2 + 0.06))]
+    for x in (-3, 3):
+        p += window(x, 1.7, d / 2 + 0.06, 1, shutter=False, w=0.9, h=0.7)
+    roof = snow_roof(d + 1, w + 1, 1.4)
+    for s in (-1, 1):
+        roof.append(gable_end("boat", d, 1.4, s * (w / 2 - 0.05)))
+    turn(roof, math.pi / 2)
+    for o in roof:
+        o.location.y += h
+    return [finish(p + roof, "equipment")]
+
+
+def doghouse():
+    """Koda's house: plank walls, a round-topped doorway, a pitched roof under snow (the kennel upgrade
+    scales it up and repaints it)."""
+    p = [B("wall", 1.8, 1.1, 2.2, (0, 0.55, 0)), B("stoneDark", 1.9, 0.12, 2.3, (0, 0.06, 0))]
+    for i in range(4):
+        y = 0.2 + i * 0.27
+        for s in (-1, 1):
+            p.append(B("plank", 0.02, 0.03, 2.1, (s * 0.91, y, 0)))
+    p += [B("dark", 0.6, 0.55, 0.05, (0, 0.37, 1.11)), C("dark", 0.3, 0.3, 0.05, 10, (0, 0.65, 1.11), (math.pi / 2, 0, 0)),
+          B("trim", 0.75, 0.06, 0.07, (0, 0.92, 1.12))]
+    roof = snow_roof(2.4, 2.6, 0.8, snow=0.18)
+    for s in (-1, 1):
+        roof.append(gable_end("wall", 1.8, 0.8, s * 1.08))
+    for o in roof:
+        o.location.y += 1.1
+    return [finish(p + roof, "doghouse")]
+
+
+def mast():
+    """The radio mast: 20 m of red and white sections tapering up, a ladder, a work platform with its
+    arm, the dish, and the equipment hut at the foot (the beacon on top is the game's own light)."""
+    H = 20.0
+    p = []
+    for i in range(8):
+        r0, r1 = 0.6 - i * 0.04, 0.55 - i * 0.04
+        p.append(C("red" if i % 2 == 0 else "white", r1, r0, H / 8, 4, (0, (i + 0.5) * H / 8, 0), (0, math.pi / 4, 0)))
+    for i in range(int(H / 0.5)):
+        p.append(B("metal", 0.4, 0.04, 0.04, (0, 0.3 + i * 0.5, 0.62 - i * 0.01)))
+    p += [B("metal", 0.04, H - 1, 0.04, (0.2, H / 2, 0.58)), B("metal", 0.04, H - 1, 0.04, (-0.2, H / 2, 0.58))]
+    p += [B("metal", 1.4, 0.2, 0.8, (0.5, 14, 0)), B("metal", 0.2, 1.4, 0.2, (1.1, 15, 0)), B("metal", 1.4, 0.5, 0.05, (0.5, 14.35, 0.4))]
+    p.append(place(lathe("white", [(0.0, -0.32), (0.45, -0.25), (0.75, -0.08), (0.82, 0.0)], 12), (-0.6, 12, 0), (0, 0, math.pi / 2)))
+    p.append(C("metal", 0.05, 0.05, 0.6, 5, (-0.95, 12, 0), (0, 0, math.pi / 2)))
+    hut = [B("hut", 2.2, 1.8, 1.8, (1.6, 0.9, 1.6)), B("roofDark", 2.4, 0.12, 2.0, (1.6, 1.86, 1.6)), B("roofSnow", 2.3, 0.1, 1.9, (1.6, 1.96, 1.6)),
+           B("logDark", 0.8, 1.5, 0.06, (1.6, 0.75, 2.52)), B("metal", 0.5, 0.3, 0.06, (2.2, 1.4, 2.52))]
+    return [finish(p + hut, "mast")]
+
+
 BUILD = {
     "rs_chalet": lambda: chalet(6.0, 5.0, 2, 2),
     "rs_chalet_wide": lambda: chalet(10.0, 7.5, 2, 3),
@@ -374,6 +519,11 @@ BUILD = {
     "rs_cabin": cabin,
     "rs_boathouse": boathouse,
     "rs_barrier_hut": barrier_hut,
+    "rs_garage": garage,
+    "rs_hangar": hangar,
+    "rs_equipment": equipment,
+    "rs_doghouse": doghouse,
+    "rs_mast": mast,
 }
 objs = BUILD[asset]()
 bpy.ops.wm.save_as_mainfile(filepath=A["out"])
