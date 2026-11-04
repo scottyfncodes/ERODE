@@ -240,6 +240,8 @@ for (const [label, dev] of [
       await touch('touchEnd', []);
       await page.waitForTimeout(60);
     }
+    // a late-delivered tap starts its zoom late: wait for the zoom to change (or give up) before reading
+    await page.waitForFunction((z) => Math.abs(Number(document.querySelector('.mappanel .mapview').dataset.zoom) - z) > 0.05, z0, { timeout: 2500 }).catch(() => null);
     zDbl = (await still()).z;
     why = await page.evaluate(() => document.querySelector('.mappanel .mapview').dataset.tap);
     ok = zDbl >= Math.min(6, z0 * 2) * 0.97;
