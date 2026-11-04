@@ -250,6 +250,93 @@ describe('the patroller model (MeshCraft, skinned)', () => {
   });
 });
 
+describe('the villagers model (MeshCraft, skinned: their own outfit on the patroller skeleton)', () => {
+  it('moves exactly as the code-built villager: every joint, every frame, through every pose', async () => {
+    const src = await load('rs_villager');
+    const run = (modelled: boolean) => {
+      seedRandom(11);
+      const p = new PatrollerMesh(true);
+      if (modelled) expect(p.useModel(src)).toBe(true);
+      seedRandom(12);
+      const frames: ReturnType<typeof joints>[] = [];
+      let stride = 0;
+      for (const [pose, speed, secs] of PLAN) {
+        p.setSkis(pose === 'ski');
+        for (let t = 0; t < secs; t += 1 / 30) {
+          stride += speed / 30;
+          p.animate(pose, stride, speed, pose === 'ride' ? 0.4 : 0, 1 / 30, pose === 'walk' ? 0.1 : 0);
+          frames.push(joints(p.group, p, P_JOINTS));
+          if (modelled && frames.length % 15 === 0) expect(insideCullSphere(p.group), `culling sphere, ${pose}`).toBeLessThan(0);
+        }
+      }
+      vi.restoreAllMocks();
+      return frames;
+    };
+    const a = run(false);
+    const b = run(true);
+    expect(b.length).toBe(a.length);
+    // (every joint but the pack: the villagers carry none, and the code-built one never hangs it on them)
+    for (let f = 0; f < a.length; f++)
+      for (let j = 0; j < P_JOINTS.length; j++)
+        if (P_JOINTS[j] !== 'pack') expect(matrixGap(a[f][j].m, b[f][j].m), `${P_JOINTS[j]} frame ${f}`).toBeLessThan(1e-9);
+  });
+
+  it('stands where the code-built villager stood, in fewer draw calls, without any patrol gear', async () => {
+    const code = new PatrollerMesh(true);
+    const model = new PatrollerMesh(true);
+    expect(model.useModel(await load('rs_villager'))).toBe(true);
+    for (const pose of ['idle', 'walk'] as Pose[]) {
+      for (let i = 0; i < 40; i++) {
+        code.animate(pose, i * 0.05, pose === 'walk' ? 1.4 : 0, 0, 1 / 30);
+        model.animate(pose, i * 0.05, pose === 'walk' ? 1.4 : 0, 0, 1 / 30);
+      }
+      const a = drawnBounds(code.group);
+      const b = drawnBounds(model.group);
+      for (const k of ['x', 'y', 'z'] as const) {
+        expect(Math.abs(a.min[k] - b.min[k]), `${pose} min ${k}`).toBeLessThan(0.06);
+        expect(Math.abs(a.max[k] - b.max[k]), `${pose} max ${k}`).toBeLessThan(0.06);
+      }
+    }
+    // the cardigan's yoke, buttons, elbow patches and fur cuffs: about 200 triangles more than the
+    // code-built villager, for three villagers
+    expect(visibleTris(model.group)).toBeLessThan(visibleTris(code.group) * 1.12);
+    expect(model.group.getObjectByName('pat_gear')).toBeUndefined();
+    expect(model.group.getObjectByName('pat_skis_back')).toBeUndefined();
+  });
+
+  it('keeps the villagers own colours, hats and skis; goggles only on the skiers', async () => {
+    const p = new PatrollerMesh(true);
+    expect(p.useModel(await load('rs_villager'))).toBe(true);
+    const shown = (name: string) => p.group.getObjectByName(name)!.visible;
+    // Greta: no goggles (a dark lens means none)
+    p.setLook(0x3c6b4a, 0xe8dcc8, 'hat-bobble', 0xe9c46a, 0xf3efe6, 0x222222, 0);
+    expect(shown('vil_goggles')).toBe(false);
+    expect(shown('pat_hat_bobble') && !shown('pat_hat_beanie')).toBe(true);
+    // Nils, the skier: goggles, helmet, skis and poles
+    p.setLook(0x2f7fb8, 0xf2c230, 'hat-helmet', 0x262a30, 0xf2c230, 0x7fd3e8, 0xd8382a);
+    p.setSkis(true);
+    expect(shown('vil_goggles') && shown('pat_hat_helmet') && shown('pat_ski_L') && shown('pat_pole_R')).toBe(true);
+    // the jacket and trim are the figure's own paint, so each villager keeps their colours
+    const own = p as unknown as { jacket: THREE.Material; trim: THREE.Material };
+    const painted = new Set<THREE.Material>();
+    p.group.traverse((o) => (o as THREE.Mesh).isMesh && painted.add((o as THREE.Mesh).material as THREE.Material));
+    expect(painted.has(own.jacket) && painted.has(own.trim)).toBe(true);
+  });
+
+  it('wears the patroller model (without the gear) when the villager file is missing', async () => {
+    const { MissionProps } = await import('../src/render/missionProps');
+    const { getTerrain } = await import('../src/world/terrain');
+    const props = new MissionProps(getTerrain());
+    expect(props.usePeople(undefined, await load('rs_patroller'))).toBe(true);
+    expect(props.greta.group.getObjectByName('vil_goggles')).toBeUndefined();
+    expect(props.greta.group.getObjectByName('pat_gear')).toBeUndefined();
+    const fresh = new MissionProps(getTerrain());
+    expect(fresh.usePeople(await load('rs_villager'), await load('rs_patroller'))).toBe(true);
+    expect(fresh.nils.group.getObjectByName('vil_goggles')).toBeDefined();
+    expect(new MissionProps(getTerrain()).usePeople(undefined, undefined)).toBe(false);
+  });
+});
+
 const K_JOINTS = ['body', 'front', 'rear', 'head', 'jaw', 'tongue', 'earL', 'earR', 'tail.0', 'tail.1', 'tail.2', 'tail.3', ...[0, 1, 2, 3].flatMap((i) => [`legs.${i}.upper`, `legs.${i}.lower`])];
 const K_PLAN: [DogAnim, number][] = [
   ['idle', 1.5],

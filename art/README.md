@@ -79,6 +79,7 @@ replaces, so it lands in the same place at the same size; moving parts are nodes
 | `rs_spruce_a/b` | the procedural conifer (`src/render/conifer.ts`) in the instanced forest; snow caps on the three broad lower tiers (the smaller ones are painted white) | `spruce_crown`, `spruce_trunk` | 65 / 63 (was 76) |
 | `rs_patroller` | `PatrollerMesh` (`src/render/characterMesh.ts`): the patroller and the villagers | skinned, 25 bones (below) | 2,606 drawn (was 2,558) |
 | `rs_koda` | `HuskyMesh` (`src/render/huskyMesh.ts`) | skinned, 21 bones (below) | 1,284 drawn (was 1,324) |
+| `rs_villager` | the villagers' `PatrollerMesh(true)` (Greta, Nils, the van driver) | skinned, the patroller's 25 bones | about 2,370 drawn (was 2,166) |
 
 **The far forest.** Trees are drawn in 250 m cells. Past about 150 m from the camera a cell draws
 `rs_spruce_a/b_far` (four tiers, 28 triangles, no trunk) with a cheaper foliage material (no per-pixel
@@ -122,6 +123,13 @@ saddlebags and bandana.
 
 - Patroller bones: `body`, `pelvis`, `spine`, `chest`, `neck`, `head`, `hip/knee/ankle_L/R`,
   `shoulder/elbow_L/R`, `pack`, `eye_L/R` (blink), `pom_beanie`, `pom_bobble`, `scarf_a/b_0/1`.
+- The villagers (`rs_villager`, the same script with `civilian=True`) wear their own outfit on the
+  patroller's skeleton: a knitted cardigan with a Fair Isle yoke, a button band, ribbed cuffs and
+  waistband, leather elbow patches and fur-cuffed snow boots, with no shell, gaiters, pockets or
+  patrol gear. The cardigan is painted with each villager's own jacket and trim colours, and goggles
+  are their own mesh, worn only by the skiers (a lens colour other than the dark default). If the file
+  is missing, the villagers wear the patroller model without its gear, as before
+  (`tests/people.test.ts`).
 - Koda bones: `body`, `front`, `rear`, `chest` (breathes), `head`, `jaw`, `tongue`, `ear_L/R`,
   `tail_0..3`, `leg_FL/FR/RL/RR_upper/lower`.
 

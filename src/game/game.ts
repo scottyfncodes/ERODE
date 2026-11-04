@@ -121,7 +121,7 @@ export class Game {
   private fps = 60;
   private kitLoaded: string[] = [];
   /** which code-built meshes the MeshCraft models replaced (QA) */
-  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false, buildings: false, yard: false, props: false, lift: false };
+  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false, buildings: false, yard: false, props: false, lift: false, outfits: false };
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
   /** the ?stats performance readout (off unless asked for) */
@@ -164,7 +164,8 @@ export class Game {
     this.avView = new AvalancheView();
     this.props = new MissionProps(this.terrain, models);
     this.pepperHeld = catMesh(models.rs_cat);
-    this.modelled.villagers = this.props.usePeople(models.rs_patroller);
+    this.modelled.villagers = this.props.usePeople(models.rs_villager, models.rs_patroller);
+    this.modelled.outfits = !!models.rs_villager && this.modelled.villagers;
     this.modelled.props = PROP_IDS.every((id) => models[id]);
     this.modelled.lift = this.world.liftModelled;
     this.particles = new Particles(this.rig.quality.tier === 'low' ? 1600 : 2600);

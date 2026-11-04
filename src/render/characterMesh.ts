@@ -154,6 +154,9 @@ export class PatrollerMesh {
   private poles: THREE.Object3D[] = [];
   private skiMat: THREE.MeshLambertMaterial;
   private held = new THREE.Group();
+  /** the villager model's goggles (only the skiers among them wear them) */
+  private goggles: THREE.Object3D | null = null;
+  private lensHex = 0xf2a33a;
   private pack: THREE.Object3D = new THREE.Group();
   private tails: { a: THREE.Object3D; b: THREE.Object3D; ja: Jiggle; jb: Jiggle; off: number }[] = [];
   private t = 0;
@@ -492,7 +495,9 @@ export class PatrollerMesh {
     const bones = ['body', 'pelvis', 'spine', 'chest', 'neck', 'head', 'pack', 'eye_L', 'eye_R', 'pom_beanie', 'pom_bobble'];
     for (const s of ['L', 'R']) bones.push(`hip_${s}`, `knee_${s}`, `ankle_${s}`, `shoulder_${s}`, `elbow_${s}`);
     for (const i of [0, 1]) bones.push(`scarf_a_${i}`, `scarf_b_${i}`);
-    const parts = ['pat_body', 'pat_gear', 'pat_skis_back', 'pat_ski_L', 'pat_ski_R', 'pat_pole_L', 'pat_pole_R', 'pat_hat_beanie', 'pat_hat_helmet', 'pat_hat_trapper', 'pat_hat_bobble'];
+    // (the villagers' model, rs_villager, has no patrol gear and wears its goggles as their own mesh)
+    const parts = ['pat_body', 'pat_ski_L', 'pat_ski_R', 'pat_pole_L', 'pat_pole_R', 'pat_hat_beanie', 'pat_hat_helmet', 'pat_hat_trapper', 'pat_hat_bobble'];
+    if (!this.civilian) parts.push('pat_gear', 'pat_skis_back');
     const n = dressModel(root, [...bones, ...parts], this.roles);
     if (!n) return false;
     // one sphere that holds every pose: the poles, swung while skiing, reach furthest (~2 m)
@@ -565,8 +570,10 @@ export class PatrollerMesh {
     this.poles = [n.pat_pole_L, n.pat_pole_R];
     if (this.civilian) {
       // the villagers carry no pack, straps or cross (and so no skis on their backs)
-      retire([n.pat_gear, n.pat_skis_back]);
+      retire(['pat_gear', 'pat_skis_back'].map((k) => root.getObjectByName(k)).filter((o): o is THREE.Object3D => !!o));
       this.skisOnBack = new THREE.Group();
+      this.goggles = root.getObjectByName('vil_goggles') ?? null;
+      this.showGoggles();
     } else this.skisOnBack = n.pat_skis_back;
     this.setSkis(onFeet);
     if (!onFeet) this.backSkis(backOn);
@@ -580,8 +587,15 @@ export class PatrollerMesh {
     repaint(this.hatMain, hatMain);
     repaint(this.hatSecond, hatSecond);
     repaint(this.lens, lens);
+    this.lensHex = lens;
+    this.showGoggles();
     repaint(this.skiMat, skis);
     for (const [k, h] of Object.entries(this.hats)) h.visible = k === hatId;
+  }
+
+  /** Villagers in the cardigan wear goggles only when they have a lens colour (the skiers). */
+  private showGoggles() {
+    if (this.goggles) this.goggles.visible = this.lensHex !== 0x222222;
   }
 
   /** Skis on the feet (skiing) or on the back. */

@@ -157,7 +157,11 @@ LEG = THIGH + SHIN + ANKLE
 H = 0.195  # hat radius
 
 
-def patroller():
+def patroller(civilian=False):
+    """The patroller; civilian=True is the villagers' outfit on the same skeleton (rs_villager): a
+    knitted cardigan with a Fair Isle yoke, elbow patches and wooden buttons, fur-cuffed snow boots, no
+    gaiters, pockets, patrol shell or gear. Same bones, same paint roles (jacket and trim still take each
+    villager's colours), so the same code drives it."""
     mats = K.Materials(pal, {
         "jacket": "Patrol Red", "trim": "Cross White", "trousers": "#3B3550", "boot": "#6A2E2A", "sole": "#2A1D1A",
         "gaiter": "#2C2840", "glove": "#33303C", "strap": "#2B2F38", "dark": "Aubergine", "skin": "#F2C9A8",
@@ -200,24 +204,47 @@ def patroller():
     for s, sx in (("L", -1), ("R", 1)):
         hp, kn, an = f"hip_{s}", f"knee_{s}", f"ankle_{s}"
         r.add(body, hp, limb(f"thigh{s}", 0.11, 0.088, THIGH + 0.04, J(hp, (0, 0, 0))), "trousers")
-        r.add(body, hp, G(f"pocket{s}", 0.06, J(hp, (sx * 0.095, -0.24, 0)), 0, (0.45, 1.2, 0.9)), "gaiter")
+        if not civilian:
+            r.add(body, hp, G(f"pocket{s}", 0.06, J(hp, (sx * 0.095, -0.24, 0)), 0, (0.45, 1.2, 0.9)), "gaiter")
         r.add(body, kn, limb(f"shin{s}", 0.086, 0.072, SHIN, J(kn, (0, 0, 0))), "trousers")
-        r.add(body, kn, C(f"gaiter{s}", 0.097, 0.094, 0.07, 7, J(kn, (0, -SHIN + 0.2, 0))), "gaiter")
+        if civilian:
+            # snow boots with a sheepskin cuff
+            r.add(body, kn, C(f"fur{s}", 0.105, 0.098, 0.075, 7, J(kn, (0, -SHIN + 0.2, 0))), "patchWhite")
+        else:
+            r.add(body, kn, C(f"gaiter{s}", 0.097, 0.094, 0.07, 7, J(kn, (0, -SHIN + 0.2, 0))), "gaiter")
         r.add(body, kn, C(f"boot{s}", 0.09, 0.08, 0.2, 7, J(kn, (0, -SHIN + 0.09, 0))), "boot")
         r.add(body, an, G(f"foot{s}", 0.088, J(an, (0, -ANKLE + 0.05, -0.075)), 0, (0.92, 0.62, 1.85)), "boot")
         r.add(body, an, G(f"toecap{s}", 0.06, J(an, (0, -ANKLE + 0.045, -0.2)), 0, (1.15, 0.7, 0.9)), "boot")
         r.add(body, an, G(f"tread{s}", 0.09, J(an, (0, -ANKLE + 0.022, -0.075)), 0, (0.96, 0.3, 1.9)), "sole")
 
-    # ---- the patrol shell over insulated trousers
-    r.add(body, "pelvis", C("seat", 0.2, 0.215, 0.2, 8, J("pelvis", (0, 0.02, 0)), scale=(1, 1, 0.78)), "trousers")
-    r.add(body, "pelvis", C("hem", 0.225, 0.242, 0.17, 8, J("pelvis", (0, 0, 0)), scale=(1, 1, 0.8)), "jacket")
-    r.add(body, "pelvis", C("hemBand", 0.245, 0.245, 0.035, 8, J("pelvis", (0, -0.08, 0)), scale=(1, 1, 0.8)), "trim")
-    r.add(body, "spine", C("waist", 0.205, 0.225, 0.2, 8, J("spine", (0, 0.08, 0)), scale=(1, 1, 0.78)), "jacket")
-    r.add(body, "chest", C("torso", 0.26, 0.205, 0.38, 8, J("chest", (0, 0.17, 0)), scale=(1, 1, 0.76)), "jacket")
-    r.add(body, "chest", G("shoulders", 0.27, J("chest", (0, 0.33, 0)), 1, (1, 0.36, 0.78)), "trim")
-    r.add(body, "chest", B("zip", 0.022, 0.4, 0.012, J("chest", (0, 0.16, -0.19)), (0.1, 0, 0)), "trim")
-    r.add(body, "chest", C("collar", 0.13, 0.155, 0.1, 8, J("chest", (0, 0.41, 0))), "jacket")
-    r.add(body, "chest", G("hood", 0.12, J("chest", (0, 0.43, 0.13)), 0, (1.3, 0.6, 0.8)), "jacket")
+    if civilian:
+        # ---- a knitted cardigan: ribbed waistband, a Fair Isle yoke, a button band, a shawl collar
+        r.add(body, "pelvis", C("seat", 0.2, 0.215, 0.2, 8, J("pelvis", (0, 0.02, 0)), scale=(1, 1, 0.78)), "trousers")
+        r.add(body, "pelvis", C("hem", 0.218, 0.232, 0.13, 8, J("pelvis", (0, 0.02, 0)), scale=(1, 1, 0.8)), "jacket")
+        r.add(body, "pelvis", C("rib", 0.236, 0.236, 0.05, 8, J("pelvis", (0, -0.055, 0)), scale=(1, 1, 0.8)), "trim")
+        r.add(body, "spine", C("waist", 0.205, 0.225, 0.2, 8, J("spine", (0, 0.08, 0)), scale=(1, 1, 0.78)), "jacket")
+        r.add(body, "chest", C("torso", 0.26, 0.205, 0.38, 8, J("chest", (0, 0.17, 0)), scale=(1, 1, 0.76)), "jacket")
+        r.add(body, "chest", G("shoulders", 0.27, J("chest", (0, 0.33, 0)), 1, (1, 0.36, 0.78)), "trim")
+        # the yoke's pattern: a ring of diamonds in the body colour, knitted into the band
+        for i in range(12):
+            a = math.tau * (i + 0.5) / 12
+            x, z = math.sin(a) * 0.272, -math.cos(a) * 0.213
+            r.add(body, "chest", B(f"fair{i}", 0.045, 0.045, 0.02, J("chest", (x, 0.31, z)), (0, -a, math.pi / 4)), "jacket")
+        r.add(body, "chest", B("band", 0.05, 0.42, 0.014, J("chest", (0, 0.13, -0.195)), (0.1, 0, 0)), "trim")
+        for i in range(4):
+            r.add(body, "chest", C(f"btn{i}", 0.014, 0.014, 0.012, 6, J("chest", (0, 0.27 - i * 0.1, -0.205 + i * 0.01)), (math.pi / 2 + 0.1, 0, 0)), "dark")
+        r.add(body, "chest", C("collar", 0.14, 0.17, 0.08, 8, J("chest", (0, 0.4, 0.01)), scale=(1, 1, 0.92)), "trim")
+    else:
+        # ---- the patrol shell over insulated trousers
+        r.add(body, "pelvis", C("seat", 0.2, 0.215, 0.2, 8, J("pelvis", (0, 0.02, 0)), scale=(1, 1, 0.78)), "trousers")
+        r.add(body, "pelvis", C("hem", 0.225, 0.242, 0.17, 8, J("pelvis", (0, 0, 0)), scale=(1, 1, 0.8)), "jacket")
+        r.add(body, "pelvis", C("hemBand", 0.245, 0.245, 0.035, 8, J("pelvis", (0, -0.08, 0)), scale=(1, 1, 0.8)), "trim")
+        r.add(body, "spine", C("waist", 0.205, 0.225, 0.2, 8, J("spine", (0, 0.08, 0)), scale=(1, 1, 0.78)), "jacket")
+        r.add(body, "chest", C("torso", 0.26, 0.205, 0.38, 8, J("chest", (0, 0.17, 0)), scale=(1, 1, 0.76)), "jacket")
+        r.add(body, "chest", G("shoulders", 0.27, J("chest", (0, 0.33, 0)), 1, (1, 0.36, 0.78)), "trim")
+        r.add(body, "chest", B("zip", 0.022, 0.4, 0.012, J("chest", (0, 0.16, -0.19)), (0.1, 0, 0)), "trim")
+        r.add(body, "chest", C("collar", 0.13, 0.155, 0.1, 8, J("chest", (0, 0.41, 0))), "jacket")
+        r.add(body, "chest", G("hood", 0.12, J("chest", (0, 0.43, 0.13)), 0, (1.3, 0.6, 0.8)), "jacket")
     # the scarf, wound twice, and its two tails on their own joints
     r.add(body, "chest", C("wrap", 0.135, 0.165, 0.075, 8, J("chest", (0, 0.425, 0.005))), "scarf")
     r.add(body, "chest", C("wrap2", 0.125, 0.145, 0.06, 8, J("chest", (0, 0.475, 0.01)), (0, 0, 0.12)), "scarf")
@@ -233,6 +260,9 @@ def patroller():
         r.add(body, sh, limb(f"upper{s}", 0.08, 0.066, 0.3, J(sh, (0, 0, 0))), "jacket")
         r.add(body, el, limb(f"fore{s}", 0.068, 0.058, 0.26, J(el, (0, 0, 0))), "jacket")
         r.add(body, el, C(f"cuff{s}", 0.07, 0.07, 0.05, 7, J(el, (0, -0.24, 0))), "trim")
+        if civilian:
+            # leather elbow patches
+            r.add(body, el, G(f"patch{s}", 0.045, J(el, (0, -0.04, 0.058)), 0, (0.85, 1.2, 0.3)), "boot")
         r.add(body, el, G(f"hand{s}", 0.074, J(el, (0, -0.31, -0.01)), 1, (0.88, 1.12, 1)), "glove")
         r.add(body, el, G(f"thumb{s}", 0.032, J(el, (-sx * 0.055, -0.29, -0.045)), 0), "glove")
 
@@ -266,9 +296,11 @@ def patroller():
     for sx in (-1, 1):
         r.add(body, "head", S(f"ear{sx}", 0.045, hd((sx * 0.178, 0.122, 0.005)), 6, (0.42, 1, 0.78)), "skin")
     # goggles pushed up on the brow
-    r.add(body, "head", C("gStrap", 0.19, 0.19, 0.04, 9, hd((0, 0.225, 0.01))), "dark")
-    r.add(body, "head", B("gFrame", 0.25, 0.085, 0.05, hd((0, 0.232, -0.165)), bevel=0.01), "dark")
-    r.add(body, "head", B("gLens", 0.225, 0.065, 0.06, hd((0, 0.232, -0.17))), "lens")
+    # (the villagers' goggles are their own mesh: only the skiers among them wear them)
+    gog = "vil_goggles" if civilian else body
+    r.add(gog, "head", C("gStrap", 0.19, 0.19, 0.04, 9, hd((0, 0.225, 0.01))), "dark")
+    r.add(gog, "head", B("gFrame", 0.25, 0.085, 0.05, hd((0, 0.232, -0.165)), bevel=0.01), "dark")
+    r.add(gog, "head", B("gLens", 0.225, 0.065, 0.06, hd((0, 0.232, -0.17))), "lens")
 
     # ---- hats (one shows at a time); pom-poms on their own joints. Each crown is a dome with no
     # underside (floor) that stops inside its band, so it never covers the face or shows through
@@ -286,26 +318,27 @@ def patroller():
     r.add("pat_hat_bobble", "head", C("bband", H + 0.016, H + 0.02, 0.07, 9, hd((0, 0.195, 0.01))), "hatSecond")
     r.add("pat_hat_bobble", "pom_bobble", G("bpom", 0.085, J("pom_bobble", (0, 0.085 * 0.75, 0)), 1), "hatSecond")
 
-    # ---- the patrol's gear (the villagers go without): straps, radio, the cross, the pack
-    gear = "pat_gear"
-    for sx in (-1, 1):
-        r.add(gear, "chest", B(f"strap{sx}", 0.055, 0.3, 0.02, J("chest", (sx * 0.13, 0.2, -0.19)), (0.1, 0, 0)), "strap")
-        r.add(gear, "chest", B(f"over{sx}", 0.055, 0.02, 0.36, J("chest", (sx * 0.13, 0.38, 0))), "strap")
-    r.add(gear, "chest", B("radio", 0.06, 0.1, 0.04, J("chest", (0.13, 0.26, -0.215)), bevel=0.008), "strap")
-    r.add(gear, "chest", C("aerial", 0.007, 0.007, 0.1, 4, J("chest", (0.145, 0.35, -0.215))), "strap")
-    r.add(gear, "chest", B("patch", 0.085, 0.085, 0.012, J("chest", (-0.11, 0.24, -0.185)), (0.1, 0, 0)), "patchWhite")
-    r.add(gear, "chest", B("pv", 0.022, 0.06, 0.014, J("chest", (-0.11, 0.24, -0.19)), (0.1, 0, 0)), "patchRed")
-    r.add(gear, "chest", B("ph", 0.06, 0.022, 0.014, J("chest", (-0.11, 0.24, -0.19)), (0.1, 0, 0)), "patchRed")
-    r.add(gear, "pack", G("packMain", 0.215, J("pack", (0, 0.15, 0.25)), 1, (0.86, 1.02, 0.42)), "pack")
-    r.add(gear, "pack", G("packFlap", 0.2, J("pack", (0, 0.3, 0.255)), 1, (0.92, 0.38, 0.46)), "packDark")
-    r.add(gear, "pack", C("crossBg", 0.115, 0.115, 0.012, 8, J("pack", (0, 0.13, 0.348)), (math.pi / 2, 0, 0)), "trim")
-    r.add(gear, "pack", B("crossV", 0.055, 0.15, 0.014, J("pack", (0, 0.13, 0.356))), "jacket")
-    r.add(gear, "pack", B("crossH", 0.15, 0.055, 0.014, J("pack", (0, 0.13, 0.356))), "jacket")
-    for sx in (-1, 1):
-        r.add(gear, "pack", G(f"side{sx}", 0.07, J("pack", (sx * 0.19, 0.06, 0.25)), 0, (0.6, 1.1, 1)), "packDark")
-    # skis on the pack, A-framed (shown when they are not on the feet)
-    for sx in (-1, 1):
-        r.add("pat_skis_back", "pack", B(f"bski{sx}", 0.065, 1.3, 0.03, J("pack", (sx * 0.1, 0.26, 0.37)), (0, 0, sx * 0.065)), "ski")
+    if not civilian:
+        # ---- the patrol's gear (the villagers go without): straps, radio, the cross, the pack
+        gear = "pat_gear"
+        for sx in (-1, 1):
+            r.add(gear, "chest", B(f"strap{sx}", 0.055, 0.3, 0.02, J("chest", (sx * 0.13, 0.2, -0.19)), (0.1, 0, 0)), "strap")
+            r.add(gear, "chest", B(f"over{sx}", 0.055, 0.02, 0.36, J("chest", (sx * 0.13, 0.38, 0))), "strap")
+        r.add(gear, "chest", B("radio", 0.06, 0.1, 0.04, J("chest", (0.13, 0.26, -0.215)), bevel=0.008), "strap")
+        r.add(gear, "chest", C("aerial", 0.007, 0.007, 0.1, 4, J("chest", (0.145, 0.35, -0.215))), "strap")
+        r.add(gear, "chest", B("patch", 0.085, 0.085, 0.012, J("chest", (-0.11, 0.24, -0.185)), (0.1, 0, 0)), "patchWhite")
+        r.add(gear, "chest", B("pv", 0.022, 0.06, 0.014, J("chest", (-0.11, 0.24, -0.19)), (0.1, 0, 0)), "patchRed")
+        r.add(gear, "chest", B("ph", 0.06, 0.022, 0.014, J("chest", (-0.11, 0.24, -0.19)), (0.1, 0, 0)), "patchRed")
+        r.add(gear, "pack", G("packMain", 0.215, J("pack", (0, 0.15, 0.25)), 1, (0.86, 1.02, 0.42)), "pack")
+        r.add(gear, "pack", G("packFlap", 0.2, J("pack", (0, 0.3, 0.255)), 1, (0.92, 0.38, 0.46)), "packDark")
+        r.add(gear, "pack", C("crossBg", 0.115, 0.115, 0.012, 8, J("pack", (0, 0.13, 0.348)), (math.pi / 2, 0, 0)), "trim")
+        r.add(gear, "pack", B("crossV", 0.055, 0.15, 0.014, J("pack", (0, 0.13, 0.356))), "jacket")
+        r.add(gear, "pack", B("crossH", 0.15, 0.055, 0.014, J("pack", (0, 0.13, 0.356))), "jacket")
+        for sx in (-1, 1):
+            r.add(gear, "pack", G(f"side{sx}", 0.07, J("pack", (sx * 0.19, 0.06, 0.25)), 0, (0.6, 1.1, 1)), "packDark")
+        # skis on the pack, A-framed (shown when they are not on the feet)
+        for sx in (-1, 1):
+            r.add("pat_skis_back", "pack", B(f"bski{sx}", 0.065, 1.3, 0.03, J("pack", (sx * 0.1, 0.26, 0.37)), (0, 0, sx * 0.065)), "ski")
     # skis on the boots, poles in the mittens
     for s in ("L", "R"):
         an, el = f"ankle_{s}", f"elbow_{s}"
@@ -413,7 +446,7 @@ def koda():
     return r
 
 
-BUILD = {"rs_patroller": patroller, "rs_koda": koda}
+BUILD = {"rs_patroller": patroller, "rs_villager": lambda: patroller(civilian=True), "rs_koda": koda}
 rig = BUILD[asset]()
 arm, objs = build(rig, asset)
 bpy.ops.wm.save_as_mainfile(filepath=A["out"])
