@@ -207,15 +207,25 @@ export class MissionProps {
     this.debris.clear();
     this.logBodies = [];
     this.logs.count = 0;
+    this.fallV.clear();
   }
 
+  /** logs that hit the snow this frame (for a thud and a burst of snow); cleared every update */
+  readonly impacts: { x: number; y: number; z: number; hard: number }[] = [];
+  private fallV = new Map<number, number>();
+
   update(dt: number) {
+    this.impacts.length = 0;
     const want = this.gateClosed ? 0 : 1.35;
     this.gateArm.rotation.z += (want - this.gateArm.rotation.z) * Math.min(1, dt * 3);
     if (this.logBodies.length) {
       this.debris.step(dt);
       const m = new THREE.Matrix4();
       this.logBodies.forEach(({ b }, i) => {
+        // a log that was falling and is now on the ground: an impact as hard as it came down
+        const was = this.fallV.get(b.id) ?? 0;
+        if (b.grounded && was < -1.5) this.impacts.push({ x: b.p.x, y: b.p.y, z: b.p.z, hard: Math.min(1, -was / 7) });
+        this.fallV.set(b.id, b.grounded ? 0 : b.v.y);
         m.compose(b.p, b.q, new THREE.Vector3(1, 1, 1));
         this.logs.setMatrixAt(i, m);
       });

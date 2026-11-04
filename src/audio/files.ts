@@ -9,6 +9,9 @@ import { voiceFor, type VoiceLine } from './lines';
 /** 0 patrol, 1 on a mission, 2 avalanche emergency */
 export type Intensity = 0 | 1 | 2;
 export type Sting = 'complete' | 'rankup' | 'avalanche';
+/** One-shot impact sets (public/audio/sfx/<set>_<n>): boots on snow, heavy snow and timber landing. */
+export const SFX_SETS = { step: 6, thud: 4 } as const;
+export type SfxSet = keyof typeof SFX_SETS;
 
 export const THEME_LAYERS = ['patrol', 'mission', 'emergency'] as const;
 /** one loop of the theme: 8 bars at 84 bpm, 1,008,000 samples at 44.1 kHz */
@@ -24,7 +27,7 @@ export function pickFormat(canPlay: (type: string) => string): 'ogg' | 'm4a' {
   return canPlay('audio/ogg; codecs="vorbis"') ? 'ogg' : 'm4a';
 }
 
-export function audioUrl(base: string, kind: 'voice' | 'music' | 'sting', id: string, ext: string) {
+export function audioUrl(base: string, kind: 'voice' | 'music' | 'sting' | 'sfx', id: string, ext: string) {
   return `${base}audio/${kind}/${id}.${ext}`;
 }
 
@@ -50,7 +53,7 @@ export class AudioFiles {
     this.ext = a ? pickFormat((t) => a.canPlayType(t)) : 'ogg';
   }
 
-  private load(kind: 'voice' | 'music' | 'sting', id: string): Promise<AudioBuffer | null> {
+  private load(kind: 'voice' | 'music' | 'sting' | 'sfx', id: string): Promise<AudioBuffer | null> {
     const url = audioUrl(this.base, kind, id, this.ext);
     let p = this.cache.get(url);
     if (!p) {
@@ -101,9 +104,48 @@ export class AudioFiles {
     this.layers.forEach((l, i) => l.gain.gain.setTargetAtTime(g[i], t, g[i] > l.gain.gain.value ? 0.8 : 3));
   }
 
-  /** Fetch the stingers ahead of time (they are small). */
+  /** Fetch the stingers and the impact sets ahead of time (they are small). */
   warm() {
     for (const s of ['complete', 'rankup', 'avalanche'] as const) void this.load('sting', s);
+    for (const [set, n] of Object.entries(SFX_SETS)) for (let i = 1; i <= n; i++) void this.load('sfx', `${set}_${i}`).then((b) => b && this.decoded.set(`${set}_${i}`, b));
+  }
+
+  private last: Record<string, number> = {};
+  private decoded = new Map<string, AudioBuffer>();
+
+  /**
+   * One impact from a set: a random take (never the same one twice running), nudged in pitch and
+   * softened by a low-pass, so a run of footsteps never machine-guns. Returns false if the set is not
+   * loaded yet (the caller's synthesised sound covers it).
+   */
+  hit(set: SfxSet, gain: number, o: { rate?: number; lowpass?: number; delay?: number; pan?: number } = {}): boolean {
+    const n = SFX_SETS[set];
+    let i = 1 + Math.floor(Math.random() * n);
+    if (i === this.last[set]) i = (i % n) + 1;
+    this.last[set] = i;
+    const id = `${set}_${i}`;
+    const buf = this.decoded.get(id);
+    if (!buf) {
+      void this.load('sfx', id).then((b) => b && this.decoded.set(id, b));
+      return false;
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = (o.rate ?? 1) * (0.92 + Math.random() * 0.16);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = o.lowpass ?? 6000;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    let node: AudioNode = src.connect(lp).connect(g);
+    if (o.pan && this.ctx.createStereoPanner) {
+      const p = this.ctx.createStereoPanner();
+      p.pan.value = Math.max(-1, Math.min(1, o.pan));
+      node = node.connect(p);
+    }
+    node.connect(this.sfx);
+    src.start(this.ctx.currentTime + (o.delay ?? 0));
+    return true;
   }
 
   /** Play a stinger; false if its file is not ready (the caller plays the synthesised one). */

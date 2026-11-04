@@ -25,7 +25,7 @@ import { detectQuality, Rig } from '../render/rig';
 import { SledMesh } from '../render/sledMesh';
 import { StationView } from '../render/stationView';
 import { buildTerrain, snowUniforms } from '../render/terrainView';
-import { drawTopo } from '../render/topoMap';
+import { drawTopo, topoJob } from '../render/topoMap';
 import { WorldView } from '../render/worldView';
 import { KitView, type Kit } from '../render/kitView';
 import { PROP_IDS, type PatrolModels } from '../render/patrolModels';
@@ -104,6 +104,13 @@ export class Game {
   private p: Profile;
   private store = storage();
   private topo: HTMLCanvasElement;
+  /** when the valley was last drawn behind an open panel */
+  private lastBehind = 0;
+  /** the sharp copy of the map is drawn */
+  private sharpMap = false;
+  /** what a render costs on the main thread (ms, smoothed) */
+  private renderMs = 8;
+  private readonly footPos = new THREE.Vector3();
   private state: 'title' | 'play' = 'title';
   private last = performance.now();
   private time = 0;
@@ -114,7 +121,6 @@ export class Game {
   private watchSkip = false;
   private cond: Conditions;
   private indoors = 0;
-  private stepClock = 0;
   private seat = new THREE.Vector3();
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
@@ -190,6 +196,7 @@ export class Game {
     this.input = new Input(canvas);
     this.hud = new Hud(ui, this.input);
     this.panels = new Panels(ui, this.topo.toDataURL('image/png'));
+    setTimeout(() => this.drawSharpMap(), 2000);
     this.cond = conditions(this.p.weather);
     this.bindHud();
     this.applyProfile();
@@ -509,9 +516,22 @@ export class Game {
     if (this.state === 'title') this.titleFrame(dt);
     else if (!this.panels.open) this.playFrame(dt);
     else this.idleFrame(dt);
-    this.rig.adapt(dt);
+    // Behind a panel the valley only needs to look alive: drawing it about eight times a second leaves
+    // the phone's GPU and main thread to the panel (a map being pinched stays smooth), and the render
+    // scale is left alone rather than dropped for frames that were never rendered.
+    // On a device where a frame is expensive it is drawn less often still (up to a second apart), so
+    // the main thread stays free for the fingers on the panel.
+    if (this.state !== 'title' && this.panels.open && now - this.lastBehind < Math.min(1000, Math.max(120, this.renderMs * 10))) {
+      this.stats?.frame(frameMs, { renderer: this.rig.renderer, tier: this.rig.quality.tier, scale: this.rig.renderScale });
+      this.input.endFrame();
+      return;
+    }
+    this.lastBehind = now;
+    if (!this.panels.open) this.rig.adapt(dt);
     this.forest.update(this.rig.camera.position);
+    const r0 = performance.now();
     this.rig.render();
+    this.renderMs += (performance.now() - r0 - this.renderMs) * 0.2;
     this.stats?.frame(frameMs, { renderer: this.rig.renderer, tier: this.rig.quality.tier, scale: this.rig.renderScale });
     this.input.endFrame();
   }
@@ -606,6 +626,13 @@ export class Game {
     this.world.update(dt, this.rig.night, c.wind);
     this.kitView.update(dt, this.rig.night);
     this.props.update(dt);
+    for (const im of this.props.impacts) {
+      const me = this.pos2();
+      const d = Math.hypot(im.x - me.x, im.z - me.z);
+      this.audio.thud(0.6 + im.hard * 0.6, d);
+      this.particles.powder(im.x, im.y, im.z, 4 + Math.round(im.hard * 6), 2.2, 1.6 * im.hard + 0.5, 0, 0, 1.1);
+      if (d < 14) this.cam.kick(0.08 * im.hard * (1 - d / 14));
+    }
     this.markers.update(dt);
     this.placeActors(dt, false);
     this.smoke(dt);
@@ -674,15 +701,7 @@ export class Game {
       const indoors = inLodge(this.walker.x, this.walker.z) || inGarage(this.walker.x, this.walker.z);
       const working = this.holdT > 0;
       stepWalker(this.walker, free && !working ? wx : 0, free && !working ? wz : 0, dt, this.terrain, this.solid, this.grid, indoors);
-      if (this.walker.speed > 0.5) {
-        const stepLen = this.walker.speed > 4 ? 1.6 : 1.1;
-        if (Math.floor(this.walker.stride / stepLen) !== this.stepClock) {
-          this.stepClock = Math.floor(this.walker.stride / stepLen);
-          this.audio.step(this.walker.speed / 6);
-          if (!indoors && this.terrain.surface(this.walker.x, this.walker.z) === 'powder') this.particles.powder(this.walker.x, this.walker.y + 0.1, this.walker.z, 2, 0.8, 0.6, 0, 0, 0.5);
-        }
-        if (!indoors) this.tracks.add('foot', this.walker.x, this.walker.z, -Math.sin(this.walker.yaw), -Math.cos(this.walker.yaw), 0.22, 0, 0.18);
-      }
+      // (footsteps, boot prints and the snow they kick up come from the animation's footfalls)
     } else if (this.mode === 'sled') {
       const s = this.sled;
       const boost = item(e.sledEngine).stat ?? 1;
@@ -1000,6 +1019,8 @@ export class Game {
       }
       for (const e of pack.events) {
         if (e.type === 'crack') this.audio.crack();
+        // slab blocks letting go: heavy, dull, further off the later they arrive
+        if (e.type === 'release') this.audio.thud(1.6, Math.hypot(e.x - this.pos2().x, e.z - this.pos2().z) * 0.35);
         if (e.type === 'secondary') this.hud.radio('Avalanche service', 'Secondary release on the next slope over. That is fine, let it run.', 4);
       }
       pack.events.length = 0;
@@ -1246,6 +1267,24 @@ export class Game {
       const fz = -Math.cos(w.yaw);
       const slope = indoors ? 0 : this.terrain.height(w.x + fx * 0.4, w.z + fz * 0.4) - this.terrain.height(w.x - fx * 0.4, w.z - fz * 0.4);
       pl.animate(pose, w.stride, w.speed, 0, dt, THREE.MathUtils.clamp(slope / 0.8, -0.8, 0.8));
+      // a boot meets the snow on this frame: the sound and the kick of snow come from that boot
+      const ff = pl.footfall;
+      if (ff) {
+        const surf = indoors ? 'packed' : this.terrain.surface(w.x, w.z);
+        const soft = surf === 'powder' ? 1 : surf === 'ice' ? 0 : 0.3;
+        this.audio.step(ff.hard, soft);
+        if (!indoors) {
+          pl.footWorld(ff.side, this.footPos);
+          // a boot print where the boot actually landed (powder takes a deeper one)
+          this.tracks.print(this.footPos.x - Math.sin(w.yaw) * 0.06, this.footPos.z - Math.cos(w.yaw) * 0.06, -Math.sin(w.yaw), -Math.cos(w.yaw), 0.3, 0.07, 0.22 + soft * 0.14);
+          // powder flies off a running boot; packed snow only puffs a little
+          // a small kick of snow off the boot: a couple of grains on packed snow, a little more in powder
+          const n = surf === 'powder' ? 2 + Math.round(ff.hard) : ff.hard > 0.6 ? 1 : 0;
+          const fx = -Math.sin(w.yaw);
+          const fz = -Math.cos(w.yaw);
+          if (n) this.particles.powder(this.footPos.x, this.footPos.y + 0.03, this.footPos.z, n, 0.35 + ff.hard * 0.3, 0.3 + ff.hard * 0.4, fx * w.speed * 0.15, fz * w.speed * 0.15, 0.14 + ff.hard * 0.1 + soft * 0.08);
+        }
+      }
     } else if (this.mode === 'sled') {
       this.sledMesh.group.updateMatrixWorld(true);
       this.seat.copy(this.sledMesh.seat);
@@ -1494,6 +1533,25 @@ export class Game {
     );
   }
 
+  /**
+   * A sharp copy of the map for zooming in, drawn a few milliseconds at a time once the valley is up.
+   * Its own method (not a closure in the constructor), so its drawing buffers are freed when it is done.
+   */
+  private drawSharpMap() {
+    const sharp = topoJob(this.terrain, 1536);
+    const drawSharp = () => {
+      if (!sharp.step(6)) return void setTimeout(drawSharp, 24);
+      const c = sharp.canvas;
+      c.toBlob((b) => {
+        if (b) this.panels.setTopo(URL.createObjectURL(b));
+        this.sharpMap = !!b;
+        // the PNG is all the map needs from here: give the canvas's memory back
+        c.width = c.height = 0;
+      }, 'image/png');
+    };
+    drawSharp();
+  }
+
   private openMap() {
     this.input.release();
     if (!this.panels.open) this.audio.paper();
@@ -1615,6 +1673,8 @@ export class Game {
                 .sort((a, b) => a.d - b.d)
                 .slice(0, 5),
       }),
+      sharpMap: () => this.sharpMap,
+      actor: () => ({ yaw: this.walker.yaw, speed: this.walker.speed, camYaw: this.cam.yaw, x: this.walker.x, z: this.walker.z }),
       info: () => ({ calls: this.rig.renderer.info.render.calls, tris: this.rig.renderer.info.render.triangles, heli: { ...this.heli }, dog: { mode: this.dog.mode, anim: this.dog.anim, x: this.dog.x, z: this.dog.z } }),
       state: () => ({ mode: this.mode, pos: this.pos2(), active: this.p.active, fps: Math.round(this.fps), step: this.p.active ? currentStep(this.p.active)?.kind : null, watching: this.watching, pack: { fired: this.pack.fired, done: this.pack.done, moving: this.pack.moving, result: this.pack.result } }),
       teleport: (x: number, z: number, yaw = 0) => {
