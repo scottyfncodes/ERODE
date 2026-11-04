@@ -5,13 +5,25 @@ import { coniferGeometry, softenFoliage } from './conifer';
 import { createBarkMaterial, createFoliageMaterial } from './materials';
 import type { PatrolModels } from './patrolModels';
 
+const _col = new THREE.Color();
+const _h = { h: 0, s: 0, l: 0 };
+/**
+ * Engelmann spruce and subalpine fir, the Colorado treeline: needles a dark, cool blue-green (darker
+ * than the storybook teal the model was painted in), snow loads a cold white.
+ */
+export function spruceGrade(c: THREE.Color): THREE.Color {
+  c.getHSL(_h);
+  if (_h.l > 0.62) return c.setHSL(0.6, 0.18, Math.min(0.95, _h.l * 1.01));
+  return c.setHSL(0.43 + (_h.h - 0.45) * 0.3, _h.s * 0.62, _h.l * 0.72);
+}
+
 /** A conifer from ROCKSLIDE's forests with snow loaded on the inner boughs. */
 function snowyConifer(seed: number) {
   const { trunk, crown } = coniferGeometry(seed, 6, 1, 8, 1);
   const pos = crown.getAttribute('position');
   const col = crown.getAttribute('color');
   const rng = mulberry32(seed * 3 + 1);
-  const snow = new THREE.Color(0.98, 0.965, 0.95);
+  const snow = new THREE.Color(0.94, 0.96, 0.99);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -54,7 +66,10 @@ export function modelConifer(scene: THREE.Object3D | undefined): { trunk: THREE.
       // COLOR_0 may be rgba or normalised integers: read through the accessor, keep rgb
       const src = g.getAttribute('color');
       const c = new Float32Array(pos.count * 3);
-      for (let i = 0; i < pos.count; i++) c.set([src.getX(i), src.getY(i), src.getZ(i)], i * 3);
+      for (let i = 0; i < pos.count; i++) {
+        spruceGrade(_col.setRGB(src.getX(i), src.getY(i), src.getZ(i)));
+        c.set([_col.r, _col.g, _col.b], i * 3);
+      }
       out.setAttribute('color', new THREE.BufferAttribute(c, 3));
     }
     out.computeVertexNormals();

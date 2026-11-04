@@ -6,30 +6,46 @@ import * as THREE from 'three';
  */
 
 /**
- * The storybook grade: every colour the valley is built from passes through this once, when its
- * material is made. Darks lift to aubergine instead of black, loud colours settle to a painted
- * pastel, and everything warms a touch, so even a one-off colour sits in the Kessel palette.
+ * The high-country grade: every colour the valley is built from passes through this once, when its
+ * material is made, so even a one-off colour belongs to a working Colorado mountain. Paint weathers
+ * at altitude: saturation settles (more for the pale, chalky colours), darks stay a cold near-neutral
+ * instead of black, greens lean olive, and the old storybook pastels are mapped to what a mountain
+ * operation actually paints things.
  */
 const _c = new THREE.Color();
 const _hsl = { h: 0, s: 0, l: 0 };
-export function storybook(hex: number): number {
+/** the storybook colours, and what they became */
+const REPAINT: Record<number, number> = {
+  0x8fbfa8: 0x4d6152, // the garage's mint boards: forest-service green
+  0xd98b8f: 0x8a4a3e, // blush trim: faded barn red
+  0x8e3f4c: 0x5e2c27, // raspberry: oxblood
+  0xc8747f: 0x7d6150, // painted timber: weathered timber
+  0x7fd3e8: 0x6f9bb0, // sky-blue paint: a cold slate blue
+  0xcfe8f5: 0xc9d6df,
+  0x8fc4dc: 0x6a8ea3,
+  0x2a9d8f: 0x3e6b63, // teal: spruce
+  0xc8e05a: 0xa8b04a, // lime: lichen
+};
+export function grade(hex: number): number {
+  const rep = REPAINT[hex];
+  if (rep !== undefined) hex = rep;
   // in sRGB, the space the colours were picked in
   _c.setHex(hex, THREE.SRGBColorSpace).getHSL(_hsl, THREE.SRGBColorSpace);
   let { h, s, l } = _hsl;
-  // no pure blacks: near-black leans to plum (the short way round the hue circle)
-  if (l < 0.22) {
-    const k = 1 - l / 0.22;
-    let dh = 0.93 - h;
+  // no pure blacks: near-black lifts a little toward a cold slate
+  if (l < 0.2) {
+    const k = 1 - l / 0.2;
+    let dh = 0.6 - h;
     if (dh > 0.5) dh -= 1;
     if (dh < -0.5) dh += 1;
-    h += dh * k * 0.5;
-    s = Math.max(s, 0.16 * k);
+    h += dh * k * 0.4;
+    s = Math.max(s, 0.08 * k);
   }
   l = 0.1 + l * 0.86;
-  // painted, not neon
-  s = Math.min(s, 0.7) * (l > 0.75 ? 0.85 : 0.95);
-  // greens lean teal
-  if (h > 0.22 && h < 0.42) h += 0.03;
+  // weathered, not neon; chalky pastels lose the most
+  s = Math.min(s, 0.68) * (l > 0.7 ? 0.7 : 0.88);
+  // greens lean olive
+  if (h > 0.22 && h < 0.45) h -= 0.02;
   _c.setHSL(((h % 1) + 1) % 1, s, l, THREE.SRGBColorSpace);
   return _c.getHex(THREE.SRGBColorSpace);
 }
@@ -41,28 +57,48 @@ export function mat(color: number, extra?: Partial<THREE.MeshLambertMaterialPara
     const m = matCache.get(key);
     if (m) return m;
   }
-  const m = new THREE.MeshLambertMaterial({ color: storybook(color), ...extra });
+  const m = new THREE.MeshLambertMaterial({ color: grade(color), ...extra });
   if (key) matCache.set(key, m);
   return m;
 }
 
 /** A material that can be recoloured (customisation) without touching the shared cache. */
-export const paint = (color: number) => new THREE.MeshLambertMaterial({ color: storybook(color) });
+export const paint = (color: number) => new THREE.MeshLambertMaterial({ color: grade(color) });
 
 /** Recolour a `paint` material through the same grade. */
-export const repaint = (m: THREE.MeshLambertMaterial, color: number) => m.color.setHex(storybook(color));
+export const repaint = (m: THREE.MeshLambertMaterial, color: number) => m.color.setHex(grade(color));
 
 /**
  * Faceted: the same storybook colour, flat shaded, so a figure reads as cut polygons like the
  * terrain it walks on instead of smooth plastic. Cached per colour; `facetPaint` is recolourable.
  */
+/**
+ * Out on the mountain things carry snow: a light dusting wherever a surface faces the sky (shoulders,
+ * the top of the pack, a hat, Koda's back, the toes of the boots), in world space, so it stays on top
+ * whatever the figure is doing.
+ */
+function dusted(m: THREE.MeshLambertMaterial): THREE.MeshLambertMaterial {
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      {
+        vec3 nW = (vec4(normal, 0.0) * viewMatrix).xyz;
+        float dust = smoothstep(0.5, 0.9, nW.y) * 0.42;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.92, 0.94, 0.98), dust);
+      }`,
+    );
+  };
+  m.customProgramCacheKey = () => 'facet-dusted';
+  return m;
+}
 const facetCache = new Map<number, THREE.MeshLambertMaterial>();
 export function facet(color: number): THREE.MeshLambertMaterial {
   let m = facetCache.get(color);
-  if (!m) facetCache.set(color, (m = new THREE.MeshLambertMaterial({ color: storybook(color), flatShading: true })));
+  if (!m) facetCache.set(color, (m = dusted(new THREE.MeshLambertMaterial({ color: grade(color), flatShading: true }))));
   return m;
 }
-export const facetPaint = (color: number) => new THREE.MeshLambertMaterial({ color: storybook(color), flatShading: true });
+export const facetPaint = (color: number) => dusted(new THREE.MeshLambertMaterial({ color: grade(color), flatShading: true }));
 
 /** A cut gem: an icosahedron (detail 0 or 1), the faceted building block of the people and Koda. */
 export function gem(r: number, m: THREE.Material | number, x = 0, y = 0, z = 0, detail = 1): THREE.Mesh {
@@ -79,41 +115,45 @@ export const glow = (color: number) => new THREE.MeshBasicMaterial({ color });
  * trim under burgundy roofs; the patrol's tomato red and cream cross wherever help is.
  */
 export const PAL = {
-  snow: 0xf7f1ea,
-  snowShade: 0xd6d2ea,
-  // the station is painted timber now, raspberry with cream
-  log: 0xc8747f,
-  logDark: 0x8e3f4c,
-  logLight: 0xe3a3a6,
-  roof: 0x7b2f3b,
-  roofSnow: 0xf8f3ec,
-  stone: 0xb7a69e,
-  stoneDark: 0x8d7c78,
-  window: 0xffd59a,
-  windowDay: 0x9cc6d9,
-  red: 0xd4422f,
-  white: 0xf6ecdc,
-  dark: 0x3a2632,
-  metal: 0xa9a4ad,
-  yellow: 0xe0b042,
-  wood: 0xc79a62,
-  green: 0x5f9c86,
-  // the people
-  trousers: 0x3b3550,
-  boot: 0x6a2e2a,
-  sock: 0xefe3c8,
-  mitt: 0x3b3550,
-  brass: 0xd9a843,
-  pack: 0x56606c,
-  packDark: 0x434b56,
+  snow: 0xf1f4f8,
+  snowShade: 0xc9d4e6,
+  // Colorado working timber: board-and-batten and logs weathered grey-brown by sun at altitude
+  log: 0x7d6150,
+  logDark: 0x4e3b30,
+  logLight: 0xa48a74,
+  // standing-seam metal roofs, dark, so the snow on them reads
+  roof: 0x353d3c,
+  roofSnow: 0xf2f5f8,
+  stone: 0x8e8a86,
+  stoneDark: 0x5d5a57,
+  window: 0xffcf8a,
+  windowDay: 0x7f9fb3,
+  // patrol red (the jackets, the cross), deeper than a toy red
+  red: 0xc0352a,
+  white: 0xe9e6df,
+  dark: 0x24272c,
+  // galvanised and painted steel
+  metal: 0x9aa0a6,
+  yellow: 0xd9a429,
+  wood: 0x96785a,
+  // forest-service green
+  green: 0x3e5a48,
+  // the people: technical shells and soft-shell pants, worn boots
+  trousers: 0x2b2f37,
+  boot: 0x2b2420,
+  sock: 0xd9d2c3,
+  mitt: 0x2a2d33,
+  brass: 0xc29a45,
+  pack: 0x3d444c,
+  packDark: 0x2c3238,
   hair: 0x5a3a26,
-  // the village row
-  mint: 0x9cc9b3,
-  powder: 0xa9c8e0,
-  mustard: 0xe0b042,
-  blush: 0xe7aaa6,
-  lavender: 0xb7a9d1,
-  burgundy: 0x7b2f3b,
+  // the mining-town row in Hollin: barn red, slate blue, ochre, sage, weathered grey
+  mint: 0x7c917f,
+  powder: 0x5d7286,
+  mustard: 0xb5863a,
+  blush: 0x8f3c2f,
+  lavender: 0x84878a,
+  burgundy: 0x5b2a26,
 };
 
 export function box(w: number, h: number, d: number, m: THREE.Material | number, x = 0, y = 0, z = 0): THREE.Mesh {

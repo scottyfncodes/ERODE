@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { storybook } from '../src/render/kit';
+import { grade } from '../src/render/kit';
 import palette from '../art/rockslide-palette.json';
 
 const hsl = (hex: number) => {
@@ -11,14 +11,14 @@ const hsl = (hex: number) => {
 };
 const hueGap = (a: number, b: number) => Math.min(Math.abs(a - b), 1 - Math.abs(a - b));
 
-describe('the storybook grade', () => {
+describe('the high-country grade', () => {
   it('keeps every colour in its own family (browns stay brown, reds stay red)', () => {
-    for (const c of [0xa77a4c, 0x8a603a, 0x6b4428, 0xa63a2c, 0xd8382a, 0x2f5f9e, 0xe9c46a, 0x7a4f2e]) expect(hueGap(hsl(c).h, hsl(storybook(c)).h)).toBeLessThan(0.04);
+    for (const c of [0xa77a4c, 0x8a603a, 0x6b4428, 0xa63a2c, 0xd8382a, 0x2f5f9e, 0xe9c46a, 0x7a4f2e]) expect(hueGap(hsl(c).h, hsl(grade(c)).h)).toBeLessThan(0.04);
   });
 
   it('has no pure blacks and no neon', () => {
-    for (const c of [0x000000, 0x111111, 0x1a1512, 0x262a30]) expect(hsl(storybook(c)).l).toBeGreaterThan(0.09);
-    for (const c of [0xff0000, 0x00ff00, 0x0000ff, 0xff7a1a]) expect(hsl(storybook(c)).s).toBeLessThanOrEqual(0.71);
+    for (const c of [0x000000, 0x111111, 0x1a1512, 0x262a30]) expect(hsl(grade(c)).l).toBeGreaterThan(0.09);
+    for (const c of [0xff0000, 0x00ff00, 0x0000ff, 0xff7a1a]) expect(hsl(grade(c)).s).toBeLessThanOrEqual(0.71);
   });
 
   it('the palette file lists the storybook roles the kit and the game use', () => {

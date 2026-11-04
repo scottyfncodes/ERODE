@@ -36,12 +36,23 @@ sfx() {
     i=$((i + 1))
   done
 }
+# --- ambience: the high-altitude wind bed (AudioCraft `ambience` wind, a seamless 24 s loop) ------
+amb() {
+  mkdir -p "$OUT/amb"
+  enc "$SRC/alpine_wind/alpine_wind.wav" "$OUT/amb/wind" 2 64k -af "highpass=f=60,lowpass=f=7000,loudnorm=I=-24:TP=-3" -ar 22050 -ac 2
+}
+if [[ $ONLY == amb ]]; then
+  amb
+  du -ch "$OUT/amb" | tail -1
+  exit 0
+fi
 if [[ $ONLY == sfx ]]; then
   sfx
   du -ch "$OUT/sfx" | tail -1
   exit 0
 fi
 sfx
+amb
 
 # --- voice -------------------------------------------------------------------------------------
 RADIO_IDS=$(python3 -c "import json;print(' '.join(json.load(open('art/audio/voice.json'))['radio']))")

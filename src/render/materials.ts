@@ -66,10 +66,10 @@ export const TOON_GLSL = /* glsl */ `
     float x = lumE * bands;
     float lq = (floor(x) + smoothstep(0.3, 0.7, fract(x))) / bands;
     // a hint of banding, mostly natural light
-    lq = mix(lq, lumE, 0.7);
+    lq = mix(lq, lumE, 0.85);
     outgoingLight *= lq / max(lumE, 0.0005);
     float l2 = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
-    outgoingLight = mix(vec3(l2), outgoingLight, 1.12);
+    outgoingLight = mix(vec3(l2), outgoingLight, 1.05);
   }
 `;
 

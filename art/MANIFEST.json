@@ -1143,8 +1143,40 @@
    "status": "shipped",
    "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
    "sha256": "97a7e6ca37dd5a44113ea8c7fc3c2312579b3fa343c351dcb5c3bcbf99fde7ab"
+  },
+  {
+   "path": "../public/tex/rock_detail.jpg",
+   "bytes": 111301,
+   "tools": "MaterialCraft fetch (Poly Haven) + PIL",
+   "status": "shipped",
+   "notes": "Granite relief and grain for exposed rock: Tiger Rock by Dario Barresi (polyhaven.com/a/tiger_rock), CC0. Normal XY in RG, albedo brightness in B, 512 px (gitcraft-out/materials/cliff_rock)",
+   "sha256": "28a0e5b966e13899d441e910eed6193f7c367af509186039014d981fefb9a031"
+  },
+  {
+   "path": "../public/tex/snow_normal.jpg",
+   "bytes": 71433,
+   "tools": "MaterialCraft fetch (Poly Haven) + PIL",
+   "status": "shipped",
+   "notes": "Wind-packed snow relief: Snow 02 by Rob Tuytel (polyhaven.com/a/snow_02), CC0. Normal map, 512 px (gitcraft-out/materials/snow)",
+   "sha256": "dd08236586e8063a68b1dcc2de92646c1ee20dd423fa194e61fc73a569fbf377"
+  },
+  {
+   "path": "../public/audio/amb/wind.ogg",
+   "bytes": 140162,
+   "tools": "AudioCraft ambience + FFmpeg",
+   "status": "shipped",
+   "notes": "High-altitude wind bed: AudioCraft ambience wind, 24 s seamless loop, seed 5 (gitcraft-out/audio/alpine_wind); owned by this project",
+   "sha256": "7b8dc3a85df236eba9f4ffba6db4a01ee0fb18df39caba2395f2e1766dbf1e6f"
+  },
+  {
+   "path": "../public/audio/amb/wind.m4a",
+   "bytes": 194998,
+   "tools": "AudioCraft ambience + FFmpeg",
+   "status": "shipped",
+   "notes": "High-altitude wind bed (AAC): AudioCraft ambience wind, seed 5; owned by this project",
+   "sha256": "937b70ac983af0692580bb0ed7831c51d12452f09b3e485b1bca0ee0da4fd500"
   }
  ],
- "files": 143,
+ "files": 147,
  "updated": "2026-11-04"
 }
