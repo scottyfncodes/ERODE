@@ -488,6 +488,8 @@ export class AudioEngine {
     this.hissGain.gain.setTargetAtTime(o.hiss * 0.08, t, 0.1);
     this.windGain.gain.setTargetAtTime((0.03 + o.wind * 0.14 + Math.min(0.12, o.speed * 0.004)) * o.outdoors, t, 0.4);
     this.windFilter.frequency.setTargetAtTime(280 + o.wind * 500 + o.speed * 12, t, 0.4);
+    // the wind bed: always a breath of it outdoors at altitude, a roar in a storm
+    this.files?.setWind(this.on ? (0.18 + o.wind * 0.75) * o.outdoors : 0);
     this.rumbleGain.gain.setTargetAtTime(o.rumble * 0.9, t, 0.3);
     this.fireGain.gain.setTargetAtTime(o.fire * 0.05, t, 0.3);
     if (o.fire > 0.1) {

@@ -12,7 +12,7 @@ import { BADGES, item, RANKS, type Group } from '../progress/catalog';
 import { available, build, buy, complete, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
 import { PatrollerMesh, type Pose } from '../render/characterMesh';
 import { ForestView } from '../render/forestView';
-import { FX_KIND, Particles, Snowfall, Tracks } from '../render/fx';
+import { FX_KIND, GroundDrift, Particles, Snowfall, Tracks } from '../render/fx';
 
 /** Vince's hair: honey blonde */
 const VINCE_HAIR = 0xe6c27a;
@@ -26,6 +26,8 @@ import { SledMesh } from '../render/sledMesh';
 import { StationView } from '../render/stationView';
 import { buildTerrain, snowUniforms } from '../render/terrainView';
 import { drawTopo, topoJob } from '../render/topoMap';
+import { buildOps, opsObstacles } from '../render/opsView';
+import { PEAKS } from '../world/places';
 import { WorldView } from '../render/worldView';
 import { KitView, type Kit } from '../render/kitView';
 import { PROP_IDS, type PatrolModels } from '../render/patrolModels';
@@ -83,6 +85,8 @@ export class Game {
   private particles: Particles;
   private snowfall: Snowfall;
   private tracks: Tracks;
+  private drift: GroundDrift;
+  private spinT = 0;
   /** Vince: twenty, the patrol's newest hand, long blonde hair with a bit of a curl */
   private player = new PatrollerMesh(false, { hair: VINCE_HAIR, long: true });
   private dogMesh = new HuskyMesh();
@@ -150,11 +154,13 @@ export class Game {
     // the Kessel kit (MeshCraft): tors on the steeps, boulders, deadwood and the patrol's own gear
     const scattered = (this.scattered = scatterKit(this.terrain, this.trees, this.rig.quality.trees));
     // collisions use the same trees and rocks you see
-    this.grid = new TreeGrid([...this.trees, ...kitObstacles(scattered.filter((p) => kit[p.kind]))]);
+    this.grid = new TreeGrid([...this.trees, ...kitObstacles(scattered.filter((p) => kit[p.kind])), ...opsObstacles(this.terrain)]);
     progress(0.5, 'Drawing the map');
     this.topo = drawTopo(this.terrain, 640);
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
+    // the working mountain: snow fences, exploders, signs, the old snowcat, the mine
+    scene.add(buildOps(this.terrain));
     const forest = (this.forest = new ForestView(this.trees, models));
     scene.add(forest.group);
     // the patrol's vehicles from MeshCraft; the code-built ones stay if a model did not load
@@ -181,8 +187,9 @@ export class Game {
     this.particles = new Particles(this.rig.quality.tier === 'low' ? 1600 : 2600);
     this.loadFxAtlas();
     this.snowfall = new Snowfall(this.rig.quality.snowflakes);
+    this.drift = new GroundDrift(this.terrain, this.rig.quality.tier === 'low' ? 380 : 700, this.rig.quality.tier === 'low' ? 36 : 64);
     this.tracks = new Tracks(this.terrain, this.rig.quality.tier === 'low' ? 1100 : 1800);
-    scene.add(this.station.group, this.world.group, this.markers.group, this.avView.group, this.props.group, this.particles.points, this.snowfall.points, this.tracks.mesh);
+    scene.add(this.station.group, this.world.group, this.markers.group, this.avView.group, this.props.group, this.particles.points, this.snowfall.points, this.tracks.mesh, this.drift.group);
     scene.add(this.player.group, this.dogMesh.group, this.sledMesh.group, this.heliMesh.group);
     progress(0.85, 'Waking Koda');
     this.pack = new Snowpack(this.terrain);
@@ -638,6 +645,9 @@ export class Game {
     this.smoke(dt);
     this.particles.update(dt, this.rig.fog, this.pixelScale());
     this.snowfall.update(dt, this.rig.camera.position, c.snow * (1 - this.indoors * 0.8), c.wind * 6, c.wind * 2);
+    this.drift.update(dt, this.rig.camera.position, c.wind, 4, 1, c.snow, 1 - this.indoors);
+    this.cam.wind = c.wind;
+    this.spindrift(dt, c.wind, c.light);
     this.tracks.update(dt, c.snow);
     this.updateHud(dt);
     this.updateAudio(dt);
@@ -1363,6 +1373,28 @@ export class Game {
 
   private hearthFlame = 0;
   private readonly hearthPos = new THREE.Vector3();
+
+  /**
+   * Spindrift: the wind tearing snow off the summits in long plumes, streaming east. Seen from the
+   * valley floor it says how hard it blows up high even when it is still down here.
+   */
+  private spindrift(dt: number, wind: number, light: number) {
+    this.spinT -= dt;
+    if (this.spinT > 0 || light < 0.2) return;
+    this.spinT = 0.5 / (0.4 + wind * 1.6);
+    const p = PEAKS[Math.floor(Math.random() * PEAKS.length)];
+    const y = this.terrain.height(p.x, p.z) + 6;
+    const v = 6 + wind * 16;
+    this.particles.emit(p.x + (Math.random() - 0.5) * 30, y + Math.random() * 8, p.z + (Math.random() - 0.5) * 30, v * 0.97, 1.5 + Math.random() * 2, v * 0.25, {
+      life: 5 + Math.random() * 4,
+      size: 18 + Math.random() * 16,
+      grow: 2.6,
+      alpha: 0.18 + wind * 0.22,
+      drag: 0.05,
+      rise: 0.3,
+      kind: FX_KIND.powder,
+    });
+  }
 
   private smoke(dt: number) {
     // the hearth burns while you are in the lodge to see it

@@ -27,7 +27,7 @@ export function pickFormat(canPlay: (type: string) => string): 'ogg' | 'm4a' {
   return canPlay('audio/ogg; codecs="vorbis"') ? 'ogg' : 'm4a';
 }
 
-export function audioUrl(base: string, kind: 'voice' | 'music' | 'sting' | 'sfx', id: string, ext: string) {
+export function audioUrl(base: string, kind: 'voice' | 'music' | 'sting' | 'sfx' | 'amb', id: string, ext: string) {
   return `${base}audio/${kind}/${id}.${ext}`;
 }
 
@@ -53,7 +53,7 @@ export class AudioFiles {
     this.ext = a ? pickFormat((t) => a.canPlayType(t)) : 'ogg';
   }
 
-  private load(kind: 'voice' | 'music' | 'sting' | 'sfx', id: string): Promise<AudioBuffer | null> {
+  private load(kind: 'voice' | 'music' | 'sting' | 'sfx' | 'amb', id: string): Promise<AudioBuffer | null> {
     const url = audioUrl(this.base, kind, id, this.ext);
     let p = this.cache.get(url);
     if (!p) {
@@ -102,6 +102,33 @@ export class AudioFiles {
     const t = this.ctx.currentTime;
     // in quickly when things get serious, out slowly when they calm down
     this.layers.forEach((l, i) => l.gain.gain.setTargetAtTime(g[i], t, g[i] > l.gain.gain.value ? 0.8 : 3));
+  }
+
+  private wind: GainNode | null = null;
+  private windAsked = false;
+  private windLevel = 0;
+
+  /**
+   * The high-altitude wind bed (an AudioCraft ambience loop), under the synthesised gusts: set its
+   * level 0..1 every frame; it is fetched the first time it is wanted.
+   */
+  setWind(level: number) {
+    this.windLevel = level;
+    if (!this.windAsked && level > 0.01) {
+      this.windAsked = true;
+      void this.load('amb', 'wind').then((buf) => {
+        if (!buf) return;
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        const g = this.ctx.createGain();
+        g.gain.value = 0;
+        src.connect(g).connect(this.sfx);
+        src.start();
+        this.wind = g;
+      });
+    }
+    this.wind?.gain.setTargetAtTime(this.windLevel, this.ctx.currentTime, 0.6);
   }
 
   /** Fetch the stingers and the impact sets ahead of time (they are small). */

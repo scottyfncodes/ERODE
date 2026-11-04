@@ -36,6 +36,9 @@ export class FollowCamera {
   private ahead = 0;
   /** 0 on a landscape screen, 1 on a tall phone held upright */
   portrait = 0;
+  /** the weather's wind 0..1: a little buffet on an exposed mountain */
+  wind = 0;
+  private clock = 0;
 
   constructor(private cam: THREE.PerspectiveCamera, private terrain: Terrain) {}
 
@@ -112,6 +115,22 @@ export class FollowCamera {
     let cy = this.target.y + sp * dist;
     cy = Math.max(cy, this.terrain.height(cx, cz) + 1.0);
     this.cam.position.set(cx, cy, cz);
+    // a held camera: on foot it breathes, slow and barely there, more when you stand still, and the
+    // wind nudges it on an exposed day. Never enough to fight the controls.
+    this.clock += dt;
+    if (this.mode === 'foot') {
+      const t = this.clock;
+      const still = 1 - Math.min(1, speed / 3);
+      const a = 0.035 * (0.4 + 0.6 * still) + this.wind * 0.03;
+      this.cam.position.x += (Math.sin(t * 0.37) + Math.sin(t * 0.91 + 1.3) * 0.5) * a;
+      this.cam.position.y += (Math.sin(t * 0.53 + 0.7) + Math.sin(t * 1.37) * 0.3) * a * 0.8;
+      this.cam.position.z += Math.sin(t * 0.29 + 2.1) * a * 0.6;
+      if (this.wind > 0.5) {
+        const b = (this.wind - 0.5) * 0.05;
+        this.cam.position.x += Math.sin(t * 7.3) * Math.sin(t * 2.1) * b;
+        this.cam.position.y += Math.sin(t * 6.1 + 1) * Math.sin(t * 1.7) * b * 0.6;
+      }
+    }
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt * 1.5);
       const s = this.shake * 0.4;

@@ -507,3 +507,94 @@ export class Tracks {
     (this.mesh.geometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true;
   }
 }
+
+/**
+ * Blowing snow: the wind lifting grains off the surface and streaming them past you at boot height,
+ * the thing that makes a mountain feel exposed even when you are standing still. Two layers round the
+ * camera, both hugging the ground: fast ice grains and slow, soft wisps. Thicker as the wind and the
+ * snowfall pick up; a faint drift even on a calm day.
+ */
+export class GroundDrift {
+  readonly group = new THREE.Group();
+  private grains: THREE.Points;
+  private wisps: THREE.Points;
+  private gp: Float32Array;
+  private gh: Float32Array;
+  private wp: Float32Array;
+  private wh: Float32Array;
+  private gMat: THREE.PointsMaterial;
+  private wMat: THREE.PointsMaterial;
+  private t = 0;
+  private readonly R = 26;
+
+  constructor(private terrain: Terrain, private nGrains = 600, private nWisps = 60) {
+    const mk = (n: number) => {
+      const p = new Float32Array(n * 3);
+      const h = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        p[i * 3] = (Math.random() - 0.5) * 2 * this.R;
+        p[i * 3 + 2] = (Math.random() - 0.5) * 2 * this.R;
+        // most of it at boot height, a little lifted higher
+        h[i] = -Math.log(1 - Math.random() * 0.98) * 0.35;
+      }
+      return { p, h };
+    };
+    const g = mk(nGrains);
+    const w = mk(nWisps);
+    this.gp = g.p;
+    this.gh = g.h;
+    this.wp = w.p;
+    this.wh = w.h;
+    const sprite = flakeSprite();
+    this.gMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.07, map: sprite, transparent: true, opacity: 0.8, depthWrite: false, fog: true });
+    this.wMat = new THREE.PointsMaterial({ color: 0xf4f8ff, size: 2.4, map: sprite, transparent: true, opacity: 0.1, depthWrite: false, fog: true });
+    const geo = (p: Float32Array) => new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(p, 3).setUsage(THREE.DynamicDrawUsage));
+    this.grains = new THREE.Points(geo(this.gp), this.gMat);
+    this.wisps = new THREE.Points(geo(this.wp), this.wMat);
+    this.grains.frustumCulled = this.wisps.frustumCulled = false;
+    this.group.add(this.grains, this.wisps);
+  }
+
+  /** `wind` 0..1 (the weather's), (wx, wz) its direction; `snow` 0..1; `outdoors` 0..1. */
+  update(dt: number, cam: THREE.Vector3, wind: number, wx: number, wz: number, snow: number, outdoors: number) {
+    this.t += dt;
+    const k = Math.min(1, (0.12 + wind * 0.9 + snow * 0.25) * outdoors);
+    this.group.visible = k > 0.02;
+    if (!this.group.visible) return;
+    const l = Math.hypot(wx, wz) || 1;
+    const dx = wx / l;
+    const dz = wz / l;
+    // gusts: the drift surges and eases
+    const gust = 0.65 + 0.35 * Math.sin(this.t * 0.7) * Math.sin(this.t * 0.23 + 1);
+    const speed = (2.5 + wind * 11) * gust;
+    const shownG = Math.floor(this.nGrains * k);
+    const shownW = Math.floor(this.nWisps * k);
+    this.grains.geometry.setDrawRange(0, shownG);
+    this.wisps.geometry.setDrawRange(0, shownW);
+    this.gMat.opacity = 0.35 + 0.5 * k;
+    this.wMat.opacity = 0.05 + 0.12 * k;
+    const R = this.R;
+    const step = (p: Float32Array, h: Float32Array, n: number, sp: number, lift: number) => {
+      for (let i = 0; i < n; i++) {
+        const o = i * 3;
+        // relative to the camera, so the field travels with you
+        let x = p[o] + (dx * sp + Math.sin(this.t * 3 + i) * 0.6) * dt;
+        let z = p[o + 2] + (dz * sp + Math.cos(this.t * 2.6 + i * 1.7) * 0.6) * dt;
+        if (x > R) x -= 2 * R;
+        else if (x < -R) x += 2 * R;
+        if (z > R) z -= 2 * R;
+        else if (z < -R) z += 2 * R;
+        p[o] = x;
+        p[o + 2] = z;
+        const gx = cam.x + x;
+        const gz = cam.z + z;
+        p[o + 1] = this.terrain.height(gx, gz) - cam.y + h[i] * lift + Math.sin(this.t * 4 + i) * 0.04;
+      }
+    };
+    step(this.gp, this.gh, shownG, speed, 1 + wind);
+    step(this.wp, this.wh, shownW, speed * 0.6, 0.6 + wind * 1.5);
+    this.group.position.copy(cam);
+    (this.grains.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    (this.wisps.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+  }
+}
