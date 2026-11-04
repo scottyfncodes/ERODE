@@ -324,7 +324,7 @@ def koda():
     mats = K.Materials(pal, {
         "grey": "#5F6873", "white": "#F4F2EE", "dark": "#3A4048", "noseBlack": "#15171A", "iris": "#8FD0F0",
         "pupil": "#101418", "earInner": "#E8B4A8", "tongue": "#E86A7A", "collar": "#D8382A", "tag": "#F2C230",
-        "harnessMain": "#D8382A", "harnessSecond": "#F3EFE6", "bandana": "#D8382A",
+        "harnessMain": "#D8382A", "harnessSecond": "#F3EFE6", "bandana": "#D8382A", "glint": "Cross White",
     }, prefix="RS")
     r = Rig(mats)
     r.bone("body", None, (0, 0.5, 0))
@@ -367,7 +367,12 @@ def koda():
     r.add(body, "head", G("skull", 0.2, hd((0, 0.04, 0)), 1, (1, 0.88, 1.05)), "grey")
     r.add(body, "head", G("face", 0.17, hd((0, -0.03, -0.08)), 1, (1.06, 0.85, 1)), "white")
     r.add(body, "head", G("muzzle", 0.11, hd((0, -0.06, -0.25)), 1, (0.92, 0.72, 1.45)), "white")
-    r.add(body, "head", G("nose", 0.045, hd((0, -0.015, -0.4)), 0, (1.1, 0.8, 0.9)), "noseBlack")
+    # a rounded nose (the old one was a spiky ball)
+    r.add(body, "head", S("nose", 0.04, hd((0, -0.012, -0.4)), 6, (1.15, 0.75, 0.85)), "noseBlack")
+    # the husky's white brow spots above each eye, and tufts of white ruff at the cheeks
+    for sx in (-1, 1):
+        r.add(body, "head", G(f"browspot{sx}", 0.03, hd((sx * 0.075, 0.115, -0.168)), 0, (1.15, 0.65, 0.6), (0.3, 0, sx * -0.3)), "white")
+        r.add(body, "head", cone(f"cheek{sx}", 0.045, 0.11, 3, hd((sx * 0.16, -0.055, -0.04)), (0, 0, sx * -(math.pi / 2 + 0.45))), "white")
     r.add(body, "head", G("mask", 0.07, hd((0, 0.06, -0.19)), 0, (0.75, 0.5, 2), (0.3, 0, 0)), "grey")
     r.add(body, "jaw", G("jawG", 0.08, J("jaw", (0, -0.01, -0.08)), 0, (0.95, 0.4, 1.4)), "white")
     # ears (the left flops: the code tips it over on its joint), with pink insides
@@ -385,9 +390,15 @@ def koda():
     r.add(body, "front", G("tag", 0.03, J("front", (0, 0.08, -0.55)), 0), "tag")
     # eyes open and shut (the code swaps them), and the tongue (shown when panting)
     for sx, s in ((-1, "L"), (1, "R")):
-        r.add("koda_eyes_open", "head", G(f"iris{s}", 0.036, hd((sx * 0.085, 0.06, -0.165)), 0), "iris")
-        r.add("koda_eyes_open", "head", G(f"pupil{s}", 0.019, hd((sx * 0.088, 0.06, -0.196)), 0), "pupil")
-        r.add("koda_eyes_shut", "head", B(f"lid{s}", 0.07, 0.012, 0.02, hd((sx * 0.085, 0.06, -0.175))), "dark")
+        # pale husky-blue almond eyes, tipped up at the outer corner, on the face's surface there
+        # (where the skull and the white face meet, z ~ -0.19), the pupil set into the iris (it used
+        # to float in front of it) and a catchlight
+        r.add("koda_eyes_open", "head", G(f"iris{s}", 0.042, hd((sx * 0.085, 0.06, -0.183)), 0, (1, 0.8, 0.52), (0, 0, sx * 0.25)), "iris")
+        r.add("koda_eyes_open", "head", G(f"pupil{s}", 0.021, hd((sx * 0.085, 0.058, -0.2)), 0, (1, 1.05, 0.4)), "pupil")
+        r.add("koda_eyes_open", "head", B(f"glint{s}", 0.012, 0.012, 0.006, hd((sx * 0.085 - 0.009, 0.071, -0.209)), (0, 0, 0.6)), "glint")
+        # asleep: a curved, closed eye (two strokes bowed downward)
+        for k in (-1, 1):
+            r.add("koda_eyes_shut", "head", B(f"lid{s}{k}", 0.042, 0.012, 0.02, hd((sx * 0.085 + k * 0.017, 0.055, -0.192)), (0, 0, k * 0.35)), "dark")
     tg = K.box("tongueB", (0.065, 0.015, 0.13), (0, 0, 0))
     K.deform(tg, lambda v: Vector((v.x, v.y, v.z - 0.065)))
     r.add("koda_tongue", "tongue", place(tg, J("tongue", (0, 0, 0))), "tongue")

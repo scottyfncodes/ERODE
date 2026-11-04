@@ -114,11 +114,11 @@
   },
   {
    "path": "../public/models/rs_koda.glb",
-   "bytes": 83288,
+   "bytes": 89276,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_koda: Koda, skinned on a 21-bone skeleton of the code's own joints; 1284 tris drawn (code-built 1324), welded vertices (980 in all); eyes/tongue/harness/bandana as toggled meshes; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched in tests/people.test.ts",
-   "sha256": "344cae392919e11fa6179960cfedd9efeff711902515eb982de3b312cc2034eb"
+   "notes": "rs_koda: Koda, skinned on a 21-bone skeleton of the code's own joints; face pass: pale-blue almond eyes with pupils and catchlights, curved closed eyes for sleep, white brow spots, a rounded nose, cheek ruff; 1372 tris drawn (code-built 1324, +4%); art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched in tests/people.test.ts",
+   "sha256": "aa0a9592a159deb7c65ab7d4309b09ebef7fba54f9ab539ff568f7a5d62eaf01"
   },
   {
    "path": "../public/models/rs_lantern.glb",

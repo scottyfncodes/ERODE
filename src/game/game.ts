@@ -26,6 +26,7 @@ import { drawTopo } from '../render/topoMap';
 import { WorldView } from '../render/worldView';
 import { KitView, type Kit } from '../render/kitView';
 import type { PatrolModels } from '../render/patrolModels';
+import { StatsOverlay, statsWanted } from '../ui/stats';
 import { kitObstacles, scatterKit, type Placed } from '../world/scatter';
 import { Hud } from '../ui/hud';
 import { Panels } from '../ui/panels';
@@ -123,9 +124,12 @@ export class Game {
   private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false };
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
+  /** the ?stats performance readout (off unless asked for) */
+  private stats: StatsOverlay | null = null;
 
   constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void, kit: Kit = {}, models: PatrolModels = {}) {
     this.p = loadProfile(this.store) ?? newProfile();
+    if (statsWanted()) this.stats = new StatsOverlay(document.body);
     this.rig = new Rig(canvas, detectQuality(this.p.settings.quality));
     progress(0.15, 'Raising the mountains');
     this.terrain = getTerrain();
@@ -480,6 +484,8 @@ export class Game {
 
   private frame() {
     const now = performance.now();
+    // wall-clock, uncapped, for the stats readout (the simulation's steps below are capped)
+    const frameMs = now - this.last;
     this.realDt = Math.min(0.25, (now - this.last) / 1000);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
@@ -491,6 +497,7 @@ export class Game {
     else this.idleFrame(dt);
     this.rig.adapt(dt);
     this.rig.render();
+    this.stats?.frame(frameMs, { renderer: this.rig.renderer, tier: this.rig.quality.tier, scale: this.rig.renderScale });
     this.input.endFrame();
   }
 

@@ -216,6 +216,7 @@ export class HuskyMesh {
       harnessMain: this.harnessMain,
       harnessSecond: this.harnessSecond,
       bandana: this.bandanaMat,
+      glint: facet(0xf6ecdc),
     };
     this.bandana = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.2, 3), this.bandanaMat);
     this.bandana.rotation.set(Math.PI + 0.4, 0, 0);
