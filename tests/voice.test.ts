@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { MISSIONS } from '../src/missions/catalog';
 import { VOICE_LINES, voiceFor } from '../src/audio/lines';
-import { THEME_LAYERS, THEME_LOOP_S, audioUrl, layerGains, pickFormat } from '../src/audio/files';
+import { SFX_SETS, THEME_LAYERS, THEME_LOOP_S, audioUrl, layerGains, pickFormat } from '../src/audio/files';
 
 // The audio files (public/audio/, GITCRAFT AudioCraft): every mission's call and sign-off is voiced,
 // every voiced line has both encodings, the theme layers line up, and the pack stays small.
@@ -12,6 +12,8 @@ const files = (ext: string) => [
   ...VOICE_LINES.map((l) => audioUrl('public/', 'voice', l.id, ext)),
   ...THEME_LAYERS.map((l) => audioUrl('public/', 'music', `theme_${l}`, ext)),
   ...STINGS.map((s) => audioUrl('public/', 'sting', s, ext)),
+  // the impact sets: every take of every set, in both encodings
+  ...Object.entries(SFX_SETS).flatMap(([set, n]) => Array.from({ length: n }, (_, i) => audioUrl('public/', 'sfx', `${set}_${i + 1}`, ext))),
 ];
 
 describe('voice lines', () => {

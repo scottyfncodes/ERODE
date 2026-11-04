@@ -2,6 +2,7 @@ import { FAMILY_LABEL, mission, MISSIONS } from '../missions/catalog';
 import { BADGES, GROUP_LABEL, GROUP_SLOTS, item, ITEMS, RANKS, SLOT_LABEL, type Group } from '../progress/catalog';
 import { available, blockReason, done, rank, upgradeBlock, type Profile, type Settings } from '../progress/profile';
 import { mapUV } from '../render/topoMap';
+import { MapView } from './mapView';
 import { UPGRADES } from '../world/station';
 import { DANGER_LABEL, forecast, SKY_LABEL, type Conditions } from '../world/weather';
 import { skyGlyph } from './hud';
@@ -24,7 +25,44 @@ export class Panels {
   kind = '';
   onClose: (() => void) | null = null;
 
+  /** the live maps on the open panel (pinch, pan) */
+  private views: MapView[] = [];
+  /** called when the player handles a map (for a soft click) */
+  onMapGesture: (() => void) | null = null;
+
   constructor(private parent: HTMLElement, private topoUrl: string) {}
+
+  /** A sharper copy of the map has been drawn: use it from now on, and on a map that is open. */
+  setTopo(url: string) {
+    this.topoUrl = url;
+    this.wrap?.querySelectorAll<HTMLImageElement>('.mapcontent img').forEach((i) => (i.src = url));
+  }
+
+  private dropViews() {
+    for (const v of this.views) v.destroy();
+    this.views = [];
+  }
+
+  /** Bring the maps in a freshly drawn panel to life. `me`: centre on the player at first. */
+  private wireMaps(root: HTMLElement, me?: { u: number; v: number }) {
+    root.querySelectorAll<HTMLElement>('.mapcard').forEach((card) => {
+      const view = new MapView(card.querySelector('.mapview') as HTMLElement, card.querySelector('.mapcontent') as HTMLElement);
+      view.onChange = () => {
+        card.classList.add('used');
+        this.onMapGesture?.();
+      };
+      card.querySelectorAll<HTMLButtonElement>('[data-z]').forEach((b) => {
+        b.onclick = () => {
+          const k = b.dataset.z;
+          if (k === 'in') view.zoomBy(1.8);
+          else if (k === 'out') view.zoomBy(1 / 1.8);
+          else if (k === 'me' && me) view.centreOn(me.u, me.v);
+          else if (k === 'all') view.zoomBy(1 / 100);
+        };
+      });
+      this.views.push(view);
+    });
+  }
 
   get open() {
     return !!this.wrap;
@@ -32,6 +70,7 @@ export class Panels {
 
   close() {
     if (!this.wrap) return;
+    this.dropViews();
     this.wrap.remove();
     this.wrap = null;
     this.kind = '';
@@ -42,6 +81,7 @@ export class Panels {
 
   private shell(title: string, extra = '', kind = ''): { body: HTMLElement; panel: HTMLElement; header: HTMLElement } {
     const again = !!this.wrap;
+    this.dropViews();
     if (this.wrap) this.wrap.remove();
     this.kind = kind;
     const wrap = document.createElement('div');
@@ -51,9 +91,22 @@ export class Panels {
     this.parent.appendChild(wrap);
     this.wrap = wrap;
     (wrap.querySelector('.x') as HTMLElement).onclick = () => this.close();
+    // the dimmed edge closes the panel on a clean tap only: a thumb that lands there mid-pinch, or a
+    // drag that wanders off the map, must not throw the panel away
+    let tap: { id: number; x: number; y: number; t: number } | null = null;
+    let fingers = 0;
     wrap.addEventListener('pointerdown', (e) => {
-      if (e.target === wrap) this.close();
+      fingers++;
+      tap = e.target === wrap && fingers === 1 ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp } : null;
     });
+    const lift = (e: PointerEvent) => {
+      fingers = Math.max(0, fingers - 1);
+      const t = tap;
+      tap = null;
+      if (e.type === 'pointerup' && t && t.id === e.pointerId && e.target === wrap && Math.hypot(e.clientX - t.x, e.clientY - t.y) < 12 && e.timeStamp - t.t < 500) this.close();
+    };
+    wrap.addEventListener('pointerup', lift);
+    wrap.addEventListener('pointercancel', lift);
     return { body: wrap.querySelector('.body') as HTMLElement, panel: wrap.querySelector('.panel') as HTMLElement, header: wrap.querySelector('header') as HTMLElement };
   }
 
@@ -62,7 +115,8 @@ export class Panels {
       const { u, v } = mapUV(x, z);
       return `left:${(u * 100).toFixed(2)}%;top:${(v * 100).toFixed(2)}%`;
     };
-    let h = `<div class="mapcard"><img src="${this.topoUrl}" alt="Map of the Kessel valley"/>`;
+    // the map itself pinches and pans (MapView); pins and markers live on it and keep their size
+    let h = `<div class="mapcard"><div class="mapview" role="img" aria-label="Map of the Kessel valley. Pinch or use the buttons to zoom."><div class="mapcontent"><img src="${this.topoUrl}" alt="" draggable="false"/>`;
     for (const p of pins) h += `<div class="pin${p.sel ? ' sel' : ''}" style="${P(p.x, p.z)}"><span>${p.label}</span><b></b></div>`;
     if (marks) {
       for (const b of marks.badges ?? []) h += `<div class="dot" style="${P(b.x, b.z)};background:${b.found ? '#4cc27a' : 'transparent'};border-color:#3a2a1e"></div>`;
@@ -71,10 +125,12 @@ export class Panels {
       if (marks.koda) h += `<div class="dot" style="${P(marks.koda.x, marks.koda.z)};background:#5f6873"></div>`;
       if (marks.target) h += `<div class="pin sel" style="${P(marks.target.x, marks.target.z)}"><span>${marks.target.label}</span><b></b></div>`;
       const deg = (-marks.me.yaw * 180) / Math.PI;
-      const { u, v } = mapUV(marks.me.x, marks.me.z);
-      h += `<div class="me" style="left:calc(${(u * 100).toFixed(2)}% - 8px);top:calc(${(v * 100).toFixed(2)}% - 11px);transform:rotate(${deg}deg)"></div>`;
-      h += `<div class="legend"><span><i style="background:#e0412c"></i>Sled</span><span><i style="background:#f2b33d"></i>Helicopter</span><span><i style="background:#5f6873"></i>Koda</span>${marks.badges?.length ? '<span><i style="border:2px solid #3a2a1e"></i>Old badge</span>' : ''}</div>`;
+      h += `<div class="me" style="${P(marks.me.x, marks.me.z)};--rot:${deg.toFixed(1)}deg"></div>`;
     }
+    h += '</div></div>';
+    h += `<div class="mapctl"><button data-z="in" aria-label="Zoom in">+</button><button data-z="out" aria-label="Zoom out">−</button>${marks ? '<button data-z="me" aria-label="Centre on you"><i class="loc"></i></button>' : ''}</div>`;
+    h += '<div class="maphint label">Pinch to zoom</div>';
+    if (marks) h += `<div class="legend"><span><i style="background:#e0412c"></i>Sled</span><span><i style="background:#f2b33d"></i>Helicopter</span><span><i style="background:#5f6873"></i>Koda</span>${marks.badges?.length ? '<span><i style="border:2px solid #3a2a1e"></i>Old badge</span>' : ''}</div>`;
     return h + '</div>';
   }
 
@@ -142,6 +198,7 @@ export class Panels {
     }
     const pins = ids.map((id) => ({ ...mission(id).where, label: mission(id).title, sel: id === chosen }));
     body.innerHTML = `<div class="board"><div>${this.mapCard(null, pins)}</div><div>${fcH}${dl}${list}${detail}</div></div>`;
+    this.wireMaps(body);
     body.querySelectorAll('[data-m]').forEach((b) => ((b as HTMLElement).onclick = () => this.board(p, c, danger, onAccept, onBuild, 'calls', (b as HTMLElement).dataset.m)));
     const go = body.querySelector('[data-go]') as HTMLButtonElement | null;
     if (go && chosen) go.onclick = () => onAccept(chosen);
@@ -186,8 +243,10 @@ export class Panels {
 
   map(p: Profile, marks: MapMarks) {
     const { body, panel } = this.shell('Valley map', '', 'map');
-    panel.style.width = 'min(640px, 100%)';
+    panel.classList.add('mappanel');
     body.innerHTML = this.mapCard(marks, []);
+    const me = mapUV(marks.me.x, marks.me.z);
+    this.wireMaps(body, { u: me.u, v: me.v });
     void p;
   }
 

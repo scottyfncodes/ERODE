@@ -11,13 +11,37 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 SRC=gitcraft-out/audio
 OUT=public/audio
-mkdir -p "$OUT/voice" "$OUT/music" "$OUT/sting"
+mkdir -p "$OUT/voice" "$OUT/music" "$OUT/sting" "$OUT/sfx"
+# `build_audio.sh sfx` rebuilds only the impact sets (the rest need their own AudioCraft renders)
+ONLY=${1:-all}
 
 enc() { # in.wav out-stem ogg-quality aac-bitrate [extra ffmpeg args...]
   local in=$1 stem=$2 q=$3 br=$4; shift 4
   ffmpeg -v error -y -i "$in" "$@" -c:a libvorbis -q:a "$q" "$stem.ogg"
   ffmpeg -v error -y -i "$in" "$@" -c:a aac -b:a "$br" -movflags +faststart "$stem.m4a"
 }
+
+# --- impacts: boots on snow, heavy things landing in it -----------------------------------------
+# AudioCraft `sfx` footstep and thud takes, short and mono; the game filters each hit itself
+# (snow muffles: the low-pass depends on how hard the boot lands and what it lands in).
+sfx() {
+  local i=1
+  for f in "$SRC"/snowstep/snowstep_0[1-6].wav; do
+    enc "$f" "$OUT/sfx/step_$i" 3 48k -af "highpass=f=70,afade=t=out:st=0.1:d=0.05" -ar 22050 -ac 1
+    i=$((i + 1))
+  done
+  i=1
+  for f in "$SRC"/snowthud/snowthud_0[1-4].wav; do
+    enc "$f" "$OUT/sfx/thud_$i" 3 48k -af "highpass=f=35,afade=t=out:st=0.22:d=0.1" -ar 22050 -ac 1
+    i=$((i + 1))
+  done
+}
+if [[ $ONLY == sfx ]]; then
+  sfx
+  du -ch "$OUT/sfx" | tail -1
+  exit 0
+fi
+sfx
 
 # --- voice -------------------------------------------------------------------------------------
 RADIO_IDS=$(python3 -c "import json;print(' '.join(json.load(open('art/audio/voice.json'))['radio']))")

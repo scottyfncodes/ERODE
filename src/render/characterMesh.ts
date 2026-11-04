@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { ball, box, cyl, facet, facetPaint, gem, PAL, repaint } from './kit';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { cullAsCharacter, dressModel, retire } from './patrolModels';
-import { ANKLE, cycleLength, footAt, legIK, LEG, pelvisBob, runBlend, SHIN, Spring, THIGH, type Foot, type LegAngles } from './gait';
+import { ANKLE, footAt, gaitShape, legIK, LEG, pelvisBob, SHIN, Spring, THIGH, type Foot, type LegAngles } from './gait';
 
 export type Pose = 'idle' | 'walk' | 'run' | 'ride' | 'ski' | 'pilot' | 'work' | 'pet' | 'carry' | 'sleep';
 
@@ -252,8 +252,21 @@ export class PatrollerMesh {
     head: new Jiggle(120, 10),
   };
   private readonly ik: LegAngles = { hip: 0, knee: 0 };
-  private readonly fL: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true };
-  private readonly fR: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true };
+  private readonly fL: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true, ground: 0 };
+  private readonly fR: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true, ground: 0 };
+  /**
+   * Each foot's correction to the nominal gait: while planted it soaks up any difference between how
+   * far the gait thinks the body moved and how far it really did (speeding up, slowing down), so the
+   * boot stays exactly where it landed; in the air it fades out before the next contact.
+   */
+  private readonly lock = { L: { corr: 0, atLift: 0, was: false, last: 0 }, R: { corr: 0, atLift: 0, was: false, last: 0 } };
+  /** the speed the gait is shaped for: the walker's speed, smoothed so strides change over a step */
+  private readonly gaitV = new Spring(0);
+  /** a footfall this frame (for footstep sounds and snow puffs): side and how hard */
+  footfall: { side: 'L' | 'R'; hard: number } | null = null;
+  /** where the feet were when locomotion stopped, so the stop steps rather than slides */
+  private stopFrom = { L: 0, R: 0, t: 1 };
+  private prevPose: Pose = 'idle';
 
   /** long hair (Vince's), on the head joint or bone */
   private longHair: THREE.Object3D | null = null;
@@ -673,6 +686,11 @@ export class PatrollerMesh {
     if (!this.poles[0].visible) this.skisOnBack.visible = on;
   }
 
+  /** Where a foot is in the world (its ankle), for footfall effects. */
+  footWorld(side: 'L' | 'R', out: THREE.Vector3): THREE.Vector3 {
+    return (side === 'L' ? this.L : this.R).ankle.getWorldPosition(out);
+  }
+
   /** Something in the arms (Pepper the cat). */
   hold(obj: THREE.Object3D | null) {
     this.held.clear();
@@ -730,6 +748,7 @@ export class PatrollerMesh {
     const leg = { L: { hip: 0, hipRoll: 0, knee: 0, ankle: 0 }, R: { hip: 0, hipRoll: 0, knee: 0, ankle: 0 } };
     const arm = { L: { arm: 0.05, roll: -0.14, elbow: 0.25 }, R: { arm: 0.05, roll: 0.14, elbow: 0.25 } };
     let ik = false;
+    let stepping = false;
     let fwdL = 0;
     let fwdR = 0;
     let liftL = 0;
@@ -740,25 +759,55 @@ export class PatrollerMesh {
     let blow = 0;
 
     const locomotion = pose === 'walk' || pose === 'run' || pose === 'carry';
+    this.footfall = null;
+    if (locomotion && !moving(this.prevPose)) {
+      // setting off: fresh plants, and start from a stride that has both feet near the middle
+      this.lock.L.was = this.lock.R.was = false;
+      this.lock.L.corr = this.lock.R.corr = this.lock.L.atLift = this.lock.R.atLift = 0;
+      this.gaitV.set(Math.min(speed, 1));
+      this.phase = 0.72;
+    }
+    if (!locomotion && pose !== 'idle') this.stopFrom.t = 1;
+    this.prevPose = pose;
     if (locomotion) {
-      const v = Math.max(0, speed);
-      const r = runBlend(v);
+      // strides change over a step, not in a frame (the measured speed jitters at collisions)
+      const v = Math.max(0, this.gaitV.step(Math.max(0, speed), dt, 0.18));
+      const g = gaitShape(v);
+      const r = g.r;
       const k = Math.min(1, v / 0.8);
-      this.phase = (this.phase + ds / cycleLength(v)) % 1;
+      this.phase = (this.phase + ds / g.L) % 1;
       const ph = this.phase;
       y = LEG - 0.02 + pelvisBob(ph, v);
-      // the stride the leg can cover from the top of the bob: fixed for the whole stride, so the
-      // planted foot's path is a straight line
-      const top = LEG - 0.02 + Math.max(pelvisBob(0, v), pelvisBob(0.25, v));
-      const reach = Math.sqrt(Math.max(0, (THIGH + SHIN) ** 2 * 0.985 - (top - ANKLE - 0.04) ** 2));
-      footAt(ph, v, reach, this.fL);
-      footAt(ph + 0.5, v, reach, this.fR);
-      fwdL = this.fL.fwd * k;
-      fwdR = this.fR.fwd * k;
+      footAt(ph, v, 10, this.fL);
+      footAt(ph + 0.5, v, 10, this.fR);
+      // pin planted feet to the ground: the nominal foot moved back by (ground - last); the body
+      // really moved ds, and the difference goes into the correction
+      for (const [f, l, side] of [
+        [this.fL, this.lock.L, 'L'],
+        [this.fR, this.lock.R, 'R'],
+      ] as const) {
+        if (f.planted) {
+          if (!l.was) {
+            // contact: no correction carried into a fresh plant
+            l.corr = 0;
+            if (v > 0.6 && ds > 0) this.footfall = { side, hard: Math.min(1, 0.25 + v / 6) };
+          } else l.corr += -ds - (f.ground - l.last);
+          l.atLift = l.corr;
+        } else {
+          // ease the correction away over the first half of the swing
+          const s = Math.min(1, Math.max(0, ((((ph + (side === 'R' ? 0.5 : 0)) % 1) - g.duty) / (1 - g.duty) / 0.55)));
+          l.corr = l.atLift * (1 - s * s * (3 - 2 * s));
+        }
+        l.was = f.planted;
+        l.last = f.ground;
+      }
+      fwdL = this.fL.fwd + this.lock.L.corr;
+      fwdR = this.fR.fwd + this.lock.R.corr;
       liftL = this.fL.lift;
       liftR = this.fR.lift;
       pitchL = this.fL.pitch * k;
       pitchR = this.fR.pitch * k;
+      this.stopFrom = { L: fwdL, R: fwdR, t: 0 };
       ik = true;
       // Everything above the legs runs on smooth curves of the gait phase, a beat behind the feet:
       // driving it straight off the foot positions (linear in stance, a snap in swing) is what
@@ -770,13 +819,16 @@ export class PatrollerMesh {
       // runner's feet land nearly under the middle, so the body hardly shifts sideways at all.
       sway = -Math.cos(TAU * (ph - 0.3)) * (0.022 - r * 0.018) * k;
       roll = sway * (1.2 - r * 0.6);
-      // the pelvis turns with the forward leg; the shoulders counter-turn, less than the hips, and
-      // both settle down at a run (the arms balance the legs, the trunk stays square to the way)
-      pyaw = -c * (0.09 - r * 0.035) * k;
-      chestYaw = -pyaw * (1.15 - r * 0.35);
-      // a little forward lean walking, more running; into acceleration and up a hill
-      spine = -(0.04 + r * 0.22) * k - accel * 0.012 - slope * 0.35;
-      chest = -0.02 * k - r * 0.05 + Math.cos(TAU * ph * 2) * (0.012 + 0.018 * r) * k;
+      // the pelvis turns with the forward leg and the shoulders turn against it: walking the trunk
+      // twists gently; running, the arms drive the shoulders harder the other way, so the chest turns
+      // past square while the hips swing with the legs. The chest is a child of the pelvis, so its own
+      // turn is the counter-rotation plus undoing the pelvis.
+      pyaw = -c * (0.075 + r * 0.03) * k;
+      chestYaw = -pyaw * (1 + 0.55 + r * 0.5);
+      // a lean from the ankles with speed, more into acceleration (and back when braking), and up a hill
+      spine = -(0.05 + r * 0.19) * k - clamp(accel, -8, 10) * 0.016 - slope * 0.35;
+      // the trunk gives a little at each landing at a run (mid-stance, the bottom of the bob)
+      chest = -0.02 * k - r * 0.04 + Math.cos(TAU * (ph - g.duty / 2) * 2) * (0.01 + 0.03 * r) * k;
       // the head stays level (it counters the bob) and leads into turns
       headX = -(spine + chest) * 0.9 - Math.cos(TAU * ph * 2) * 0.015 * k;
       headY = clamp(turn * 0.2, -0.4, 0.4) - chestYaw * 0.6;
@@ -785,8 +837,8 @@ export class PatrollerMesh {
       // pump running. The swing eases at each end instead of running on a pure sine, the elbow holds
       // near a right angle at a run and only flexes a little, a beat behind the shoulder, and the hand
       // comes in towards the middle as it swings forward and out a touch as it goes back.
-      const fwdSwing = (0.34 + r * 0.36) * k;
-      const backSwing = (0.24 + r * 0.3) * k;
+      const fwdSwing = (0.4 + r * 0.34) * k;
+      const backSwing = (0.32 + r * 0.32) * k;
       for (const [a, sgn, s] of [
         [arm.L, 1, -1],
         [arm.R, -1, 1],
@@ -912,6 +964,19 @@ export class PatrollerMesh {
       roll = w * 0.035;
       fwdL = 0.06;
       fwdR = -0.04;
+      if (this.stopFrom.t < 1) {
+        // coming to a stop: the trailing foot takes a short step up beside the other instead of
+        // both boots sliding together
+        const st = (this.stopFrom.t = Math.min(1, this.stopFrom.t + dt / 0.36));
+        const e = st * st * (3 - 2 * st);
+        const farL = Math.abs(this.stopFrom.L - fwdL) >= Math.abs(this.stopFrom.R - fwdR);
+        fwdL = mix(this.stopFrom.L, fwdL, e);
+        fwdR = mix(this.stopFrom.R, fwdR, e);
+        const hop = Math.sin(Math.PI * st) * Math.min(0.09, 0.03 + Math.abs(farL ? this.stopFrom.L : this.stopFrom.R) * 0.2);
+        if (farL) liftL = hop;
+        else liftR = hop;
+        stepping = true;
+      }
       y = LEG - 0.035 - Math.abs(w) * 0.008 + Math.sin(t * 1.7) * 0.005;
       chest = Math.sin(t * 1.7) * 0.016;
       spineRoll = -w * 0.035;
@@ -1030,8 +1095,13 @@ export class PatrollerMesh {
         [this.L, fwdL, liftL, pitchL],
         [this.R, fwdR, liftR, pitchR],
       ] as const) {
-        const down = py - ANKLE - lift - slope * fwd;
-        legIK(fwd, down, this.ik);
+        // The legs hang from hip joints on a pelvis that twists, rolls and sways with the stride. Measure
+        // the foot from where this hip joint really is: twisted forward or back, raised or lowered by
+        // the roll. (The leg's own plane is turned back square to the way you go, below.)
+        const hx = s.hip.position.x;
+        const fwdHip = fwd - hx * Math.sin(this.pelvis.rotation.y);
+        const down = py + hx * Math.sin(this.pelvis.rotation.z) - ANKLE - lift - slope * fwd;
+        legIK(fwdHip, down, this.ik);
         const tgt = s === this.L ? leg.L : leg.R;
         tgt.hip = this.ik.hip;
         tgt.knee = this.ik.knee;
@@ -1040,18 +1110,21 @@ export class PatrollerMesh {
         tgt.hipRoll = -this.pelvis.rotation.z - this.pelvis.position.x / Math.max(0.3, py);
       }
     }
-    const legTime = slow ? tPose : ik ? 0.025 : 0.1;
+    const legTime = slow && !stepping ? tPose : ik ? 0.025 : 0.1;
     for (const [s, l, a] of [
       [this.L, leg.L, arm.L],
       [this.R, leg.R, arm.R],
     ] as const) {
-      if (ik && !slow) {
+      if (ik && (!slow || stepping)) {
         // on the ground the solver is the truth: no lag, so a planted foot stays planted
         s.s.hip.set(l.hip);
         s.s.hipRoll.set(l.hipRoll);
         s.s.knee.set(l.knee);
         s.s.ankle.set(l.ankle);
       }
+      // each leg swings in the line of travel whatever the hips are doing (feet do not twist on the snow)
+      if (s.hip.rotation.order !== 'YXZ') s.hip.rotation.reorder('YXZ');
+      s.hip.rotation.y = ik ? -this.pelvis.rotation.y : 0;
       s.hip.rotation.x = s.s.hip.step(l.hip, dt, legTime);
       s.hip.rotation.z = s.s.hipRoll.step(l.hipRoll, dt, legTime);
       s.knee.rotation.x = s.s.knee.step(l.knee, dt, legTime);

@@ -22,6 +22,7 @@ licences extends to what they produced.
 | Voice lines (33: dispatch, the avalanche service, the Tannberg ski patrol, the road crew, Greta, Nils, the van driver) | `public/audio/voice/` | StudioCraft AudioCraft `voice`: [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) v1.0 via kokoro-onnx (weights Apache-2.0; kokoro-onnx and onnxruntime MIT; phonemiser espeak-ng GPL-3.0, run as a separate program); radio filter and encoding with FFmpeg | No restriction on generated speech; owned by this project |
 | The Kessel theme (patrol, mission and emergency layers) | `public/audio/music/` | AudioCraft `music` (GITCRAFT's own synth, no samples) + FFmpeg | Owned by this project |
 | Stingers: mission complete, rank up, avalanche warning | `public/audio/sting/` | AudioCraft `music`, `sfx` and `layer` + FFmpeg | Owned by this project |
+| Impact sounds: boots on snow (6 takes), heavy snow and timber landing (4 takes) | `public/audio/sfx/` | AudioCraft `sfx` (`footstep`, `thud`; GITCRAFT's own synth, no samples) + FFmpeg | Owned by this project |
 | Particle atlas (powder puff, powder burst, charge blast, hearth fire) | `public/fx/kessel-fx.png` | StudioCraft FXCraft `flipbook` (NumPy, Pillow) + `art/fx/build_fx.py` | Owned by this project |
 | Teaser trailer (not shipped in the game) | `docs/trailer/` | CinematicCraft `capture`, `title_card`, `assemble` (Playwright, Chromium, FFmpeg/x264) | Owned by this project |
 

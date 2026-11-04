@@ -983,8 +983,168 @@
    "status": "shipped",
    "notes": "particle atlas, 4 flipbooks x 16 frames",
    "sha256": "974a0545f1210d4dfa4445be3cce508d066a49f995cf12f5c5000f9872ab9734"
+  },
+  {
+   "path": "../public/audio/sfx/step_1.m4a",
+   "bytes": 2130,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "c2256f12f421d31ab5067f9dcd76603e5d4bb237f97d44a4aa0c058e490bfca7"
+  },
+  {
+   "path": "../public/audio/sfx/step_1.ogg",
+   "bytes": 4363,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "5a4ddd274f5049bd335f21ccc04bdf5a748305bb526c80299647cf53d178f343"
+  },
+  {
+   "path": "../public/audio/sfx/step_2.m4a",
+   "bytes": 2065,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "f9909438fab1092fc756b8ab2a416942e2e0126fde12d4f5e712731a0f049643"
+  },
+  {
+   "path": "../public/audio/sfx/step_2.ogg",
+   "bytes": 4222,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "ff45c2b5c742ec21d413019255d9ad541fd2a0037c819eef1170e0d583a9e68e"
+  },
+  {
+   "path": "../public/audio/sfx/step_3.m4a",
+   "bytes": 2153,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "81977bdf0f2e4e183a80e9525c82ade670e634bb06607ffad035f1c37acd3b84"
+  },
+  {
+   "path": "../public/audio/sfx/step_3.ogg",
+   "bytes": 4227,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "29a116ce87bc3cdc72c4bf1b312fc21db09cace845dfecac6b9f77a60256ab23"
+  },
+  {
+   "path": "../public/audio/sfx/step_4.m4a",
+   "bytes": 2171,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "cadbc038ee3d8f4553e87094f8c9b7f7f8af108dbc44c8c202c741c7ba098599"
+  },
+  {
+   "path": "../public/audio/sfx/step_4.ogg",
+   "bytes": 4342,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "1f5f2bcee49b19232dfdb4797b7d21682d407c9de73d8d1e0f4315ba18211f89"
+  },
+  {
+   "path": "../public/audio/sfx/step_5.m4a",
+   "bytes": 2069,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "e2f869a192c10cb78cfdc22056d0e3574d37f803801840f1f20c71673711cba5"
+  },
+  {
+   "path": "../public/audio/sfx/step_5.ogg",
+   "bytes": 4219,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "d95b88c792487ed704828856dea7fcae71597c3ab31c538a6fe3f708fbb81946"
+  },
+  {
+   "path": "../public/audio/sfx/step_6.m4a",
+   "bytes": 1992,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "c7b665008b9d495a5dae015254da63dc475e3370a424448f656d39590b4a522e"
+  },
+  {
+   "path": "../public/audio/sfx/step_6.ogg",
+   "bytes": 4225,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "boot on snow (impact layer under the synthesised crunch): AudioCraft sfx preset footstep, gitcraft-out/audio/snowstep (seed 21); licence: owned by this project, no third-party samples",
+   "sha256": "c96e35360cd1d65e7f70cdd6a57ead346acd013a003b9c4c7613b082ab7ac0b7"
+  },
+  {
+   "path": "../public/audio/sfx/thud_1.m4a",
+   "bytes": 3047,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
+   "sha256": "7529e5ff628df76e47d266a9d75e68ce2185b024304fffd5fa4b1d5de05bfc80"
+  },
+  {
+   "path": "../public/audio/sfx/thud_1.ogg",
+   "bytes": 4170,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
+   "sha256": "088eea45cb4993e33091bc2d43b1a7475e60f0a0f70309b5bbde95addaa8e6b1"
+  },
+  {
+   "path": "../public/audio/sfx/thud_2.m4a",
+   "bytes": 3168,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
+   "sha256": "1a5f50d6ae9b2eb4e3ea2d19980a239f4f5fbdf8861302d7d35e7c74698578e3"
+  },
+  {
+   "path": "../public/audio/sfx/thud_2.ogg",
+   "bytes": 4184,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
+   "sha256": "c8c806cc4292963c2a7b7896ebb0bba5961370c817595d5f25463123cc01b1f7"
+  },
+  {
+   "path": "../public/audio/sfx/thud_3.m4a",
+   "bytes": 2651,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
+   "sha256": "ab0ab8b048b1375bd84969a107d7d2db7569c3c0fe29ece6668fd0b2ae3d512b"
+  },
+  {
+   "path": "../public/audio/sfx/thud_3.ogg",
+   "bytes": 4198,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
+   "sha256": "03e01a452d46a78b91200a3cb5fc785ffbe229f98bb5145b468fa56cd6186303"
+  },
+  {
+   "path": "../public/audio/sfx/thud_4.m4a",
+   "bytes": 3181,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
+   "sha256": "a8c270630965668e164bbe7b672f364ffe0638c34e2f0d47093b9454855f0d3f"
+  },
+  {
+   "path": "../public/audio/sfx/thud_4.ogg",
+   "bytes": 4169,
+   "tools": "AudioCraft sfx + FFmpeg",
+   "status": "shipped",
+   "notes": "heavy snow or timber landing: AudioCraft sfx preset thud, gitcraft-out/audio/snowthud (seed 33); licence: owned by this project, no third-party samples",
+   "sha256": "97a7e6ca37dd5a44113ea8c7fc3c2312579b3fa343c351dcb5c3bcbf99fde7ab"
   }
  ],
- "files": 123,
+ "files": 143,
  "updated": "2026-11-04"
 }

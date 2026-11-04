@@ -32,6 +32,7 @@ export class AudioEngine {
   private birdTimer = 4;
   private crackleTimer = 0;
   private lastStep = 0;
+  private lastThud = 0;
   private turbine!: OscillatorNode;
   private turbineGain!: GainNode;
   private echo!: GainNode;
@@ -279,14 +280,33 @@ export class AudioEngine {
     return !!this.ctx && this.soundOn;
   }
 
-  /** A footstep in snow: a soft squeaky crunch. */
-  step(hard = 0.5) {
+  /**
+   * A footstep in snow, on the frame the boot lands: the boot's weight (an AudioCraft footstep take,
+   * muffled the way snow muffles it) under a squeaky crunch of compressing snow. `hard` 0..1: a run
+   * lands harder and brighter than a walk; `soft` 0..1: powder swallows more of it than packed snow.
+   */
+  step(hard = 0.5, soft = 0) {
     if (!this.on) return;
     const now = this.ctx!.currentTime;
-    if (now - this.lastStep < 0.18) return;
+    if (now - this.lastStep < 0.12) return;
     this.lastStep = now;
-    this.burst({ dur: 0.09, gain: 0.08 + hard * 0.06, type: 'bandpass', freq: 1400 + Math.random() * 900, q: 1.4 });
-    this.burst({ dur: 0.06, gain: 0.05, type: 'lowpass', freq: 400 });
+    const body = this.files?.hit('step', 0.16 + hard * 0.22, { rate: 0.8 + hard * 0.15, lowpass: 900 + hard * 900 - soft * 400 }) ?? false;
+    this.burst({ dur: 0.07 + soft * 0.05, gain: (0.06 + hard * 0.07) * (1 - soft * 0.3), type: 'bandpass', freq: 1500 + Math.random() * 900 - soft * 500, q: 1.4 });
+    if (!body) this.burst({ dur: 0.06, gain: 0.05 + hard * 0.04, type: 'lowpass', freq: 400 });
+  }
+
+  /** Something heavy landing in snow at a distance (m): timber, a slab block. */
+  thud(weight = 1, dist = 10) {
+    if (!this.on) return;
+    // a run of impacts reads as a rumble of separate thumps, not one smeared roar
+    const now = this.ctx!.currentTime;
+    if (now - this.lastThud < 0.07) return;
+    this.lastThud = now;
+    const k = Math.min(1, 25 / Math.max(5, dist)) * Math.min(1, weight);
+    if (k < 0.04) return;
+    // further away is duller and a moment later (sound is slow over a valley)
+    const ok = this.files?.hit('thud', 0.55 * k, { rate: 0.75 + Math.random() * 0.2, lowpass: 400 + 1800 * k, delay: Math.min(0.4, dist / 340) }) ?? false;
+    if (!ok) this.burst({ dur: 0.3, gain: 0.3 * k, type: 'lowpass', freq: 320 });
   }
 
   bark() {
@@ -435,6 +455,7 @@ export class AudioEngine {
   landing(hard: number) {
     if (!this.on) return;
     this.burst({ dur: 0.25, gain: Math.min(0.5, hard * 0.05), type: 'lowpass', freq: 600 });
+    if (hard > 3) this.files?.hit('thud', Math.min(0.5, hard * 0.04), { rate: 0.9, lowpass: 900 });
   }
 
   bump(hard: number) {

@@ -7,15 +7,45 @@ import { LAKE, PADS, PEAKS, ROUTES, LIFT, BOWL, WORLD_HALF, elevation } from '..
  * on the mission table in the lodge, the mission board and the map screen.
  */
 export function drawTopo(t: Terrain, size = 640): HTMLCanvasElement {
+  const job = topoJob(t, size);
+  job.step(Infinity);
+  return job.canvas;
+}
+
+/**
+ * The same map drawn a slice at a time: `step(ms)` works for about that long and returns true when
+ * the map is finished. The game draws a sharp, large copy this way while the player is busy, for
+ * zooming in on the map, without a hitch.
+ */
+export function topoJob(t: Terrain, size: number): { canvas: HTMLCanvasElement; step: (ms: number) => boolean } {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d')!;
   const img = g.createImageData(size, size);
   const px = (i: number) => -WORLD_HALF + ((i + 0.5) / size) * WORLD_HALF * 2;
   const H = new Float32Array(size * size);
-  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) H[j * size + i] = t.height(px(i), px(j));
-  const step = 20;
-  for (let j = 0; j < size; j++)
+  let hRow = 0;
+  let pRow = 0;
+  let done = false;
+  const step = (ms: number) => {
+    if (done) return true;
+    const until = performance.now() + ms;
+    do {
+      // heights run a row ahead of the shading, which needs the row below
+      if (hRow < size) {
+        const j = hRow++;
+        for (let i = 0; i < size; i++) H[j * size + i] = t.height(px(i), px(j));
+      }
+      while (pRow < size && (pRow < hRow - 1 || hRow === size)) shadeRow(pRow++);
+    } while (pRow < size && performance.now() < until);
+    if (pRow < size) return false;
+    g.putImageData(img, 0, 0);
+    overlay();
+    done = true;
+    return true;
+  };
+  const shadeRow = (j: number) => {
+    const step = 20;
     for (let i = 0; i < size; i++) {
       const h = H[j * size + i];
       const hr = H[j * size + Math.min(size - 1, i + 1)];
@@ -48,7 +78,8 @@ export function drawTopo(t: Terrain, size = 640): HTMLCanvasElement {
       img.data[o + 2] = b;
       img.data[o + 3] = 255;
     }
-  g.putImageData(img, 0, 0);
+  };
+  const overlay = () => {
   const S = (v: number) => ((v + WORLD_HALF) / (WORLD_HALF * 2)) * size;
   const k = size / 640;
   // the avalanche path, hatched in red
@@ -154,7 +185,8 @@ export function drawTopo(t: Terrain, size = 640): HTMLCanvasElement {
     g.lineTo(size, S(v));
     g.stroke();
   }
-  return c;
+  };
+  return { canvas: c, step };
 }
 
 /** World (x, z) to a 0..1 map position. */

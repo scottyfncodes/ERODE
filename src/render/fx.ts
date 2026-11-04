@@ -413,9 +413,6 @@ export class Tracks {
       return;
     }
     if (d > 6) return;
-    const i = this.head;
-    this.head = (this.head + 1) % this.max;
-    this.ages[i] = 0;
     const v = this.quad;
     v[0] = prev.lx;
     v[1] = prev.y1;
@@ -429,6 +426,42 @@ export class Tracks {
     v[9] = qx;
     v[10] = y2;
     v[11] = qz;
+    this.put(depth);
+  }
+
+  /**
+   * One boot print where a foot came down: `len` heel to toe along (fx, fz), `half` its half width,
+   * a touch wider at the ball than the heel. Prints share the ribbons' budget and fade the same way.
+   */
+  print(x: number, z: number, fx: number, fz: number, len = 0.3, half = 0.065, depth = 0.3) {
+    const rx = -fz;
+    const rz = fx;
+    const hx = x - fx * len * 0.35;
+    const hz = z - fz * len * 0.35;
+    const tx = x + fx * len * 0.65;
+    const tz = z + fz * len * 0.65;
+    const v = this.quad;
+    const y = this.terrain.height(x, z) + 0.05;
+    v[0] = hx - rx * half * 0.85;
+    v[1] = y;
+    v[2] = hz - rz * half * 0.85;
+    v[3] = hx + rx * half * 0.85;
+    v[4] = y;
+    v[5] = hz + rz * half * 0.85;
+    v[6] = tx - rx * half;
+    v[7] = y;
+    v[8] = tz - rz * half;
+    v[9] = tx + rx * half;
+    v[10] = y;
+    v[11] = tz + rz * half;
+    this.put(depth);
+  }
+
+  private put(depth: number) {
+    const i = this.head;
+    this.head = (this.head + 1) % this.max;
+    this.ages[i] = 0;
+    const v = this.quad;
     for (let k = 0; k < 6; k++) {
       const s = ORDER[k] * 3;
       const o = (i * 6 + k) * 3;
