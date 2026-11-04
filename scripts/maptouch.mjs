@@ -129,7 +129,9 @@ for (const [label, dev] of [
   // (those synthetic moves came 0 ms apart, a huge flick: let it coast out, then come back to you)
   await page.waitForTimeout(1500);
   await page.locator('.mapctl [data-z=me]').tap();
-  await page.waitForTimeout(600);
+  // the locate tap can arrive late: wait for its eased move to start and finish before panning
+  await page.waitForFunction(() => document.querySelector('.mappanel .mapview').dataset.moving === '1', null, { timeout: 4000 }).catch(() => null);
+  await still();
   // one real finger: pan, hold, lift
   const vOne = await view();
   const held = await page.evaluate(() => document.querySelector('.mappanel .mapview').dataset.fingers);
