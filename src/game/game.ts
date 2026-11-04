@@ -13,6 +13,9 @@ import { available, build, buy, complete, done, equip, findBadge, hasUpgrade, lo
 import { PatrollerMesh, type Pose } from '../render/characterMesh';
 import { ForestView } from '../render/forestView';
 import { FX_KIND, Particles, Snowfall, Tracks } from '../render/fx';
+
+/** Vince's hair: honey blonde */
+const VINCE_HAIR = 0xe6c27a;
 import { HeliMesh } from '../render/heliMesh';
 import { HuskyMesh } from '../render/huskyMesh';
 import { shared } from '../render/materials';
@@ -80,7 +83,8 @@ export class Game {
   private particles: Particles;
   private snowfall: Snowfall;
   private tracks: Tracks;
-  private player = new PatrollerMesh();
+  /** Vince: twenty, the patrol's newest hand, long blonde hair with a bit of a curl */
+  private player = new PatrollerMesh(false, { hair: VINCE_HAIR, long: true });
   private dogMesh = new HuskyMesh();
   private sledMesh = new SledMesh();
   private heliMesh = new HeliMesh();
@@ -682,7 +686,9 @@ export class Game {
     } else if (this.mode === 'sled') {
       const s = this.sled;
       const boost = item(e.sledEngine).stat ?? 1;
-      const prof = { ...SLED, powderDrag: SLED.powderDrag * (item(e.sledTrack).stat ?? 1) };
+      const trackStat = item(e.sledTrack).stat ?? 1;
+      // the deep lug track floats and bites in powder
+      const prof = { ...SLED, powderDrag: SLED.powderDrag * trackStat, powderBite: 1 / Math.sqrt(trackStat) };
       stepGlider(s, prof, free ? mv.x : 0, free ? mv.y : 0, dt, this.terrain, this.solid, this.grid, boost);
       const sp = glideSpeed(s);
       const fx = -Math.sin(s.yaw);
@@ -803,7 +809,7 @@ export class Game {
         this.audio.whine();
       }
       if (e.type === 'found') {
-        this.hud.radio('You', 'Good dog. Good, good dog.', 2.5);
+        this.hud.radio('Vince', 'Good dog. Good, good dog.', 2.5);
         this.audio.whine();
       }
     }
@@ -903,7 +909,7 @@ export class Game {
         }
         case 'track':
           this.audio.whine();
-          this.hud.radio('You', 'Koda, find him. Find!', 2.5);
+          this.hud.radio('Vince', 'Koda, find him. Find!', 2.5);
           {
             const s = currentStep(r);
             if (s?.kind === 'track') startTrack(this.dog, s.trail);
@@ -1100,7 +1106,7 @@ export class Game {
       this.hud.radio('Dispatch', 'Data coming through. Nice work.', 3);
     }
     if (id === 'saw') this.props.sawTree();
-    if (id === 'locker') this.hud.radio('You', 'Two charges, detonators, the firing box. Signed out.', 3.5);
+    if (id === 'locker') this.hud.radio('Vince', 'Two charges, detonators, the firing box. Signed out.', 3.5);
     if (id === 'gate-close') this.hud.radio('Dispatch', 'Pass road closed below Kessel Bowl.', 3);
     if (id === 'gate-open') this.hud.radio('Dispatch', 'Pass road open again.', 3);
     if (id === 'aid-nils') this.hud.radio('Nils', 'I heard the dog first. I thought I was dreaming.', 4);
@@ -1174,7 +1180,7 @@ export class Game {
         this.station.setBadges(this.p.badges);
         this.audio.sparkle();
         this.hud.toast(`Old patrol badge: ${b.name}`, 'good', 3);
-        this.hud.radio('You', `${this.p.badges.length} of ${BADGES.length}. That one goes on the board in the lodge.`, 3.5);
+        this.hud.radio('Vince', `${this.p.badges.length} of ${BADGES.length}. That one goes on the board in the lodge.`, 3.5);
         this.save();
       }
     }
@@ -1383,7 +1389,8 @@ export class Game {
     }
     const c = this.cond;
     const danger = avalancheDanger(p.weather, c);
-    this.hud.setConditions(clock(p.weather.minute), `${SKY_LABEL[c.sky]} ${c.temp}° ${c.windKmh} km/h`, danger, DANGER_LABEL[danger], p.funds);
+    // minimal: the temperature, and the sky only when it matters (snow, a storm that grounds the helicopter)
+    this.hud.setConditions(clock(p.weather.minute), `${c.temp}°${c.sky === 'snow' || c.sky === 'storm' ? ` ${SKY_LABEL[c.sky]}` : ''}`, danger, DANGER_LABEL[danger], p.funds);
     // chips
     const busyDog = this.dog.mode === 'track';
     this.hud.setChips({

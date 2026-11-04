@@ -6,6 +6,7 @@ import { newGlider, stepGlider, SLED, SKIS, glideSpeed, forwardSpeed } from '../
 import { newHeli, stepHeli, HELI, heliAgl } from '../src/actors/heli';
 import { newHusky, stepHusky, startTrack, pet } from '../src/actors/husky';
 import { pad } from '../src/world/places';
+import { CHARGE_SPOTS } from '../src/world/places';
 
 const t = getTerrain();
 const solid = buildColliders();
@@ -47,6 +48,17 @@ describe('the snowmobile', () => {
     for (let i = 0; i < 90; i++) stepGlider(g, SLED, 0, 1, dt, t, solid, null);
     for (let i = 0; i < 400; i++) stepGlider(g, SLED, 0, -1, dt, t, solid, null);
     expect(forwardSpeed(g)).toBeLessThan(-1);
+  });
+
+  it('cannot climb a slope steeper than its track can grip, and slides back down', () => {
+    // the steepest charge spot in Kessel Bowl, facing straight up it at full throttle
+    const c = [...CHARGE_SPOTS].sort((a, b) => t.slope(b.x, b.z) - t.slope(a.x, a.z))[0];
+    expect((t.slope(c.x, c.z) * 180) / Math.PI).toBeGreaterThan(33);
+    const n = t.normal(c.x, c.z);
+    const g = newGlider(c.x, c.z, Math.atan2(n.x, n.z), t);
+    const y0 = g.y;
+    for (let i = 0; i < 60 * 4; i++) stepGlider(g, SLED, 0, 1, dt, t, solid, null);
+    expect(g.y).toBeLessThan(y0 + 0.5);
   });
 
   it('climbs the ridge track to Kessel Ridge', () => {

@@ -126,6 +126,57 @@ const CIVVY_SCARVES = [PAL.mint, PAL.powder, PAL.lavender, PAL.blush, PAL.mustar
  * them; every joint moves through a damped spring, so poses blend instead of snapping, and the
  * loose things (scarf tails, pom-pom, pack) ride on wobbly springs of their own. Forward is -z.
  */
+/**
+ * Shoulder-length hair with a loose curl, in the head's own space (face towards -z): a soft mass at
+ * the back of the head, a ring of faceted curls round the nape that falls to the collar, locks over the
+ * ears and a few strands of fringe under the hat band. One merged mesh, so one draw call.
+ */
+function longHair(mat: THREE.Material): THREE.Mesh {
+  const geos: THREE.BufferGeometry[] = [];
+  const piece = (r: number, x: number, y: number, z: number, sx = 1, sy = 1, sz = 1, detail = 0) => {
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, detail));
+    m.position.set(x, y, z);
+    m.scale.set(sx, sy, sz);
+    // a fixed twist per curl (no randomness: the figure is the same every time)
+    m.rotation.set(x * 9 + y * 5, z * 11 - x * 7, y * 13);
+    m.updateMatrix();
+    geos.push(m.geometry.applyMatrix4(m.matrix));
+  };
+  // the mass behind and below the hat
+  piece(0.165, 0, 0.1, 0.055, 1.0, 1.0, 0.84, 1);
+  piece(0.14, 0, -0.01, 0.075, 1.0, 1.0, 0.72, 1);
+  // curls round the back, three rows, the lowest at the collar
+  const rows: [number, number, number, number][] = [
+    // y, radius of the ring, curl size, how far round (radians either side of the back)
+    [0.06, 0.163, 0.05, 1.85],
+    [-0.02, 0.152, 0.048, 1.6],
+    [-0.095, 0.135, 0.045, 1.25],
+    [-0.16, 0.115, 0.04, 0.8],
+  ];
+  rows.forEach(([y, R, r, span], k) => {
+    const n = Math.max(3, 7 - k);
+    for (let i = 0; i < n; i++) {
+      const a = -span + (2 * span * i) / (n - 1) + (k % 2) * 0.12;
+      const wob = ((i * 37 + k * 11) % 7) / 7 - 0.5;
+      piece(r * (1 + wob * 0.18), Math.sin(a) * R, y + wob * 0.018, Math.cos(a) * R * 0.92 + 0.035);
+    }
+  });
+  // locks over the ears
+  for (const s of [-1, 1]) {
+    piece(0.05, s * 0.162, 0.1, -0.01, 0.85, 1.2, 1);
+    piece(0.045, s * 0.152, 0.025, 0.0, 0.85, 1.15, 1);
+    piece(0.04, s * 0.14, -0.05, 0.02);
+    piece(0.036, s * 0.125, -0.115, 0.035);
+  }
+  // fringe under the hat band
+  piece(0.045, -0.085, 0.2, -0.15, 1.2, 0.8, 0.9);
+  piece(0.042, 0.02, 0.205, -0.165, 1.3, 0.75, 0.9);
+  piece(0.04, 0.11, 0.195, -0.14, 1.1, 0.8, 0.9);
+  const mesh = new THREE.Mesh(mergeGeometries(geos, false), mat);
+  mesh.name = 'long_hair';
+  return mesh;
+}
+
 export class PatrollerMesh {
   readonly group = new THREE.Group();
   /** leans with turns, inside the group the game places */
@@ -204,7 +255,14 @@ export class PatrollerMesh {
   private readonly fL: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true };
   private readonly fR: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true };
 
-  constructor(civilian = false) {
+  /** long hair (Vince's), on the head joint or bone */
+  private longHair: THREE.Object3D | null = null;
+
+  /**
+   * `look.hair`: a hair colour of this figure's own (the villagers share the default brown);
+   * `look.long`: shoulder-length, loosely curled hair that falls out from under the hat.
+   */
+  constructor(civilian = false, look: { hair?: number; long?: boolean } = {}) {
     this.civilian = civilian;
     this.jacket = facetPaint(PAL.red);
     this.trim = facetPaint(PAL.white);
@@ -220,7 +278,7 @@ export class PatrollerMesh {
     const strapMat = facet(0x2b2f38);
     const dark = facet(PAL.dark);
     const skin = facet(SKIN);
-    const hair = facet(PAL.hair);
+    const hair = look.hair !== undefined ? facetPaint(look.hair) : facet(PAL.hair);
     const scarf = facet(civilian ? CIVVY_SCARVES[Math.floor(Math.random() * CIVVY_SCARVES.length)] : PAL.green);
     this.roles = {
       jacket: this.jacket,
@@ -411,6 +469,10 @@ export class PatrollerMesh {
     const earL = gem(0.04, skin, -0.178, 0.125, 0, 0);
     const earR = gem(0.04, skin, 0.178, 0.125, 0, 0);
     this.head.add(hairCap, face, nose, eyeL, eyeR, browL, browR, cheekL, cheekR, smile, earL, earR);
+    if (look.long) {
+      this.longHair = longHair(hair);
+      this.head.add(this.longHair);
+    }
     // goggles pushed up on the brow
     const strap = cyl(0.19, 0.19, 0.04, 9, dark, 0, 0.225, 0.01);
     const frame = box(0.25, 0.085, 0.05, dark, 0, 0.232, -0.165);
@@ -547,6 +609,7 @@ export class PatrollerMesh {
     this.chest = n.chest;
     this.neck = n.neck;
     this.head = n.head;
+    if (this.longHair) this.head.add(this.longHair);
     this.pack = n.pack;
     for (const [side, s] of [
       [this.L, 'L'],
@@ -703,31 +766,37 @@ export class PatrollerMesh {
       // the cycle: left heel strikes at 0, right at 0.5
       const c = Math.cos(TAU * ph);
       const lag = Math.cos(TAU * (ph - 0.06));
-      // weight over the planted foot; the hip drops a touch on the swinging side
-      sway = -Math.cos(TAU * (ph - 0.3)) * (0.022 - r * 0.01) * k;
-      roll = sway * 1.2;
-      // the pelvis turns with the forward leg; the shoulders counter-turn, less than the hips
-      pyaw = -c * (0.09 + r * 0.05) * k;
-      chestYaw = -pyaw * 1.25;
+      // weight over the planted foot; the hip drops a touch on the swinging side. Walking only: a
+      // runner's feet land nearly under the middle, so the body hardly shifts sideways at all.
+      sway = -Math.cos(TAU * (ph - 0.3)) * (0.022 - r * 0.018) * k;
+      roll = sway * (1.2 - r * 0.6);
+      // the pelvis turns with the forward leg; the shoulders counter-turn, less than the hips, and
+      // both settle down at a run (the arms balance the legs, the trunk stays square to the way)
+      pyaw = -c * (0.09 - r * 0.035) * k;
+      chestYaw = -pyaw * (1.15 - r * 0.35);
       // a little forward lean walking, more running; into acceleration and up a hill
       spine = -(0.04 + r * 0.22) * k - accel * 0.012 - slope * 0.35;
-      chest = -0.02 * k - r * 0.05 + Math.cos(TAU * ph * 2) * (0.012 + 0.025 * r) * k;
+      chest = -0.02 * k - r * 0.05 + Math.cos(TAU * ph * 2) * (0.012 + 0.018 * r) * k;
       // the head stays level (it counters the bob) and leads into turns
       headX = -(spine + chest) * 0.9 - Math.cos(TAU * ph * 2) * 0.015 * k;
-      headY = clamp(turn * 0.2, -0.4, 0.4) - chestYaw * 0.5;
-      headZ = -roll * 0.5;
+      headY = clamp(turn * 0.2, -0.4, 0.4) - chestYaw * 0.6;
+      headZ = -roll * 0.6;
       // arms swing from the shoulder with the opposite leg: a relaxed pendulum walking, a bent
-      // pump running. The forearm trails the upper arm and bends more as it comes forward.
-      const fwdSwing = (0.32 + r * 0.45) * k;
-      const backSwing = (0.22 + r * 0.4) * k;
+      // pump running. The swing eases at each end instead of running on a pure sine, the elbow holds
+      // near a right angle at a run and only flexes a little, a beat behind the shoulder, and the hand
+      // comes in towards the middle as it swings forward and out a touch as it goes back.
+      const fwdSwing = (0.34 + r * 0.36) * k;
+      const backSwing = (0.24 + r * 0.3) * k;
       for (const [a, sgn, s] of [
         [arm.L, 1, -1],
         [arm.R, -1, 1],
       ] as const) {
-        const w = -sgn * lag; // +1 = this arm fully forward
-        a.arm = (w > 0 ? w * fwdSwing : w * backSwing) + 0.04 + r * 0.25;
-        a.roll = s * (0.1 + r * 0.06);
-        a.elbow = 0.22 + Math.max(0, w) * (0.28 + r * 0.4) + r * 1.15;
+        const raw = -sgn * lag; // +1 = this arm fully forward
+        const w = Math.sign(raw) * Math.pow(Math.abs(raw), 0.8);
+        const fore = -sgn * Math.cos(TAU * (ph - 0.14)); // the forearm trails the upper arm
+        a.arm = (w > 0 ? w * fwdSwing : w * backSwing) + 0.04 + r * 0.18;
+        a.roll = s * (0.09 + r * 0.05 - Math.max(0, w) * r * 0.1 + Math.max(0, -w) * 0.03 * k);
+        a.elbow = 0.18 + r * 1.2 + (Math.max(0, fore) * (0.22 + r * 0.16) + Math.min(0, fore) * r * 0.08) * k;
       }
       if (pose === 'carry') {
         // Pepper held to the chest

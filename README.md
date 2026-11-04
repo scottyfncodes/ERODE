@@ -2,7 +2,7 @@
 
 *The mountain is the world. The patrol station is home.*
 
-You run the mountain patrol for the Kessel valley: its slopes, its roads, its village and the people who get lost on it. You have a log station, a snowmobile, a helicopter, a pair of old skis, and Koda, a grey-and-white husky with one ear that never stands up.
+You are Vince, twenty, long blonde hair with a bit of a curl, the newest hand on the Kessel Patrol. You run the mountain patrol for the Kessel valley: its slopes, its roads, its village and the people who get lost on it. You have a log station, a snowmobile, a helicopter, a pair of old skis, and Koda, a grey-and-white husky with one ear that never stands up.
 
 Third-person, iPhone first, plays in the browser. Progress saves in the browser and **Continue** picks up exactly where you left off, mid-mission included.
 
@@ -41,7 +41,7 @@ The day runs 06:00 to 22:00 in about twenty minutes; weather blends between clea
 | | How it plays |
 | --- | --- |
 | **On foot** | Walk or run (push the stick further). Powder slows you, steep slopes push back. Walk into the lodge and the roof lifts away. |
-| **Snowmobile** | The stick: up is throttle, down brakes and reverses, sideways steers. It carves on packed snow and drifts in powder, throws a spray, leaves tracks, jumps off crests. Koda rides on the rack. |
+| **Snowmobile** | The stick: up is throttle, down brakes and reverses, sideways steers. It carves on packed snow and drifts in powder, climbs only what its track can grip (about 31° on packed snow, 23° in powder, more with the deep lug track) and bogs down and slides back on anything steeper, throws a spray, leaves tracks, jumps off crests. Koda rides on the rack. |
 | **Helicopter** | SKYTRACE's rescue helicopter. The stick moves you over the ground (relative to the camera), Climb and Descend on the right, and the nose follows where you go so the scanner looks ahead. Settle gently to land. |
 | **Skis** | Gravity does the work: tuck down the fall line, carve with the stick, pull back to snowplough. On the flat you pole along; with climbing skins you can walk uphill. |
 
