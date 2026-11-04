@@ -25,7 +25,7 @@ import { buildTerrain, snowUniforms } from '../render/terrainView';
 import { drawTopo } from '../render/topoMap';
 import { WorldView } from '../render/worldView';
 import { KitView, type Kit } from '../render/kitView';
-import type { PatrolModels } from '../render/patrolModels';
+import { PROP_IDS, type PatrolModels } from '../render/patrolModels';
 import { StatsOverlay, statsWanted } from '../ui/stats';
 import { kitObstacles, scatterKit, type Placed } from '../world/scatter';
 import { Hud } from '../ui/hud';
@@ -84,7 +84,7 @@ export class Game {
   private dogMesh = new HuskyMesh();
   private sledMesh = new SledMesh();
   private heliMesh = new HeliMesh();
-  private pepperHeld = catMesh();
+  private pepperHeld: THREE.Group;
   private walker: Walker;
   private sled: Glider;
   private skis: Glider;
@@ -121,7 +121,7 @@ export class Game {
   private fps = 60;
   private kitLoaded: string[] = [];
   /** which code-built meshes the MeshCraft models replaced (QA) */
-  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false, buildings: false, yard: false };
+  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false, buildings: false, yard: false, props: false, lift: false };
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
   /** the ?stats performance readout (off unless asked for) */
@@ -162,8 +162,11 @@ export class Game {
     this.modelled.buildings = this.world.modelled;
     this.markers = new Markers(this.terrain);
     this.avView = new AvalancheView();
-    this.props = new MissionProps(this.terrain);
+    this.props = new MissionProps(this.terrain, models);
+    this.pepperHeld = catMesh(models.rs_cat);
     this.modelled.villagers = this.props.usePeople(models.rs_patroller);
+    this.modelled.props = PROP_IDS.every((id) => models[id]);
+    this.modelled.lift = this.world.liftModelled;
     this.particles = new Particles(this.rig.quality.tier === 'low' ? 1600 : 2600);
     this.snowfall = new Snowfall(this.rig.quality.snowflakes);
     this.tracks = new Tracks(this.terrain, this.rig.quality.tier === 'low' ? 1100 : 1800);

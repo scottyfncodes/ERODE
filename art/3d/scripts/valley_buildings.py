@@ -536,8 +536,8 @@ def cat():
         p += [place(K.cylinder("ear", 0.0001, 0.09, (0, 0, 0), axis="Y", verts=4, r2=0.045), (sx * 0.06, 0.46, -0.2), (0, 0, -sx * 0.15), "catGrey"),
               gem("catEye", 0.022, (sx * 0.045, 0.36, -0.305), (1, 0.8, 0.6), sub=0),
               gem("pupil", 0.01, (sx * 0.045, 0.36, -0.318), (0.5, 1.1, 0.5), sub=0)]
-    for z in (-0.08, 0.0, 0.08):  # tabby stripes over the back
-        p.append(B("catStripe", 0.26, 0.03, 0.035, (0, 0.31, z), (0.1, 0, 0)))
+    for z in (-0.09, 0.0, 0.09):  # tabby stripes: thin bands set into the fur of her back
+        p.append(B("catStripe", 0.17, 0.012, 0.03, (0, 0.307, z)))
     for x, z in ((-0.07, -0.12), (0.07, -0.12), (-0.07, 0.12), (0.07, 0.12)):
         p += [C("catGrey", 0.03, 0.025, 0.1, 5, (x, 0.07, z)), gem("catWhite", 0.032, (x, 0.02, z - 0.01), (1, 0.6, 1.2), sub=0)]
     # the tail: up from the rump and curling forward at the tip
@@ -608,9 +608,10 @@ def barrier():
 def lift_tower(h, end):
     """A lift tower: a tapering steel column on a footing, a ladder, and at the top the crossarm with a
     sheave train under each end (the cable runs over them). The end towers carry the bullwheel."""
-    p = [C("stoneDark", 0.6, 0.7, 0.4, 8, (0, 0.2, 0)), C("liftSteel", 0.22, 0.32, h, 8, (0, h / 2, 0))]
-    for i in range(int(h / 0.45)):
-        p.append(B("metal", 0.3, 0.035, 0.035, (0, 0.6 + i * 0.45, 0.3)))
+    # (light enough for eleven of them on a phone: six-sided column and footing, a rung every 0.9 m)
+    p = [C("stoneDark", 0.6, 0.7, 0.4, 6, (0, 0.2, 0)), C("liftSteel", 0.22, 0.32, h, 6, (0, h / 2, 0))]
+    for i in range(int(h / 0.9)):
+        p.append(B("metal", 0.3, 0.035, 0.035, (0, 0.6 + i * 0.9, 0.3)))
     p += [B("metal", 0.035, h - 0.8, 0.035, (0.14, h / 2 + 0.2, 0.3)), B("metal", 0.035, h - 0.8, 0.035, (-0.14, h / 2 + 0.2, 0.3))]
     p.append(B("liftSteel", 3.4, 0.3, 0.4, (0, h, 0), bevel=0.03))
     if end:
@@ -619,8 +620,8 @@ def lift_tower(h, end):
     else:
         for sx in (-1, 1):
             p += [B("liftSteel", 0.9, 0.12, 0.2, (sx * 1.5, h - 0.25, 0)),
-                  C("post", 0.12, 0.12, 0.08, 8, (sx * 1.5 - 0.3, h - 0.38, 0), (math.pi / 2, 0, 0)),
-                  C("post", 0.12, 0.12, 0.08, 8, (sx * 1.5 + 0.3, h - 0.38, 0), (math.pi / 2, 0, 0))]
+                  C("post", 0.12, 0.12, 0.08, 6, (sx * 1.5 - 0.3, h - 0.38, 0), (math.pi / 2, 0, 0)),
+                  C("post", 0.12, 0.12, 0.08, 6, (sx * 1.5 + 0.3, h - 0.38, 0), (math.pi / 2, 0, 0))]
         p.append(B("roofSnow", 3.3, 0.1, 0.36, (0, h + 0.2, 0)))
     return [finish(p, "tower")]
 

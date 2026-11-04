@@ -49,6 +49,14 @@
    "sha256": "24eed8a3280c1883eeb22f2d690a18a46d0583582de52bc9cf33d2236d37cd83"
   },
   {
+   "path": "../public/models/rs_barrier.glb",
+   "bytes": 33916,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_barrier: the pass barrier: post, motor housing, rest fork (barrier node) and the red and white arm with counterweight on its pivot (arm node, swung by the game); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "a3fa01ff1ba0bd98fb3bef8c99cd9987965d77af297c53000b2a7d723b2c63b3"
+  },
+  {
    "path": "../public/models/rs_barrier_hut.glb",
    "bytes": 22284,
    "tools": "MeshCraft",
@@ -95,6 +103,22 @@
    "status": "shipped",
    "notes": "rs_cache: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
    "sha256": "0dcb28bc9dee97370327bc2d006ab93075e46289e51564fb17ac0d306072e274"
+  },
+  {
+   "path": "../public/models/rs_cat.glb",
+   "bytes": 63040,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_cat: Pepper, the boathouse cat: grey tabby with stripes, white socks and a curled tail (also the one you carry); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "57476a0101536dac77c47bf8700a0d7972ecc94cb6d25e48471b66b1f1c33222"
+  },
+  {
+   "path": "../public/models/rs_chair.glb",
+   "bytes": 17180,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_chair: Tannberg chair: hanger, seat, back, footrest (drawn instanced, one per material); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "c7d6872b6e47edf18b810540074f187b40bcba6eb78510e83a1a4d0c063b3df7"
   },
   {
    "path": "../public/models/rs_chalet.glb",
@@ -177,6 +201,14 @@
    "sha256": "d05d23da93db395ba53dc08bacde0e2c27c16888416a480a6f0d2c98ebac8731"
   },
   {
+   "path": "../public/models/rs_fallen_tree.glb",
+   "bytes": 47164,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_fallen_tree: the spruce across the pass road: trunk, snowy boughs and the root plate (sawn into logs in code); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "78d487b4345a3cad1a3d9a1ce52dc056e81037220c59ec5574c4e2a62cb614ad"
+  },
+  {
    "path": "../public/models/rs_garage.glb",
    "bytes": 94520,
    "tools": "MeshCraft",
@@ -215,6 +247,22 @@
    "status": "shipped",
    "notes": "rs_lantern: rebuilt from the storybook palette (art/rockslide-palette.json); validated and engine-checked (art/pipeline/6_verify_shipped.py)",
    "sha256": "85ec0d5bf0db1e3450a02c46f08f77aa883e99c1a862420b9821aeb2545c183b"
+  },
+  {
+   "path": "../public/models/rs_lift_tower.glb",
+   "bytes": 34116,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_lift_tower: Tannberg chairlift tower (420 tris): six-sided column, ladder, crossarm with sheave trains; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "0ec278a697d4f1b72e3cb7cd2a68591530ab0232789144d0a698f5942333a2e0"
+  },
+  {
+   "path": "../public/models/rs_lift_tower_end.glb",
+   "bytes": 38320,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_lift_tower_end: Tannberg chairlift end tower with the bullwheel (476 tris); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "d6fc991801325c61d3c73502a815bf0c05b2b8ea91c9b6cc9e4a355156707d79"
   },
   {
    "path": "../public/models/rs_mast.glb",
@@ -281,6 +329,14 @@
    "sha256": "1fb4fb8e5c7cb9224ded226994ea9bea16b164ad77301b53653cbdeffec75a18"
   },
   {
+   "path": "../public/models/rs_van.glb",
+   "bytes": 71588,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_van: the van in the drift: cream panel van with its blue band, windows, wheels and the drift it slid into; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "c21ba187041b5b775dde3629c65cd2ef2a4d66b941f9f8f1cfee89d545d70e6e"
+  },
+  {
    "path": "../public/og-image.jpg",
    "bytes": 140680,
    "tools": "DesignCraft layout, PhotoCraft JPEG",
@@ -289,6 +345,6 @@
    "sha256": "f2c222aad1fbb293f2060e75e69267afa0d53dce2c5366395ebda9fef13331db"
   }
  ],
- "files": 36,
+ "files": 43,
  "updated": "2026-11-04"
 }

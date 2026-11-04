@@ -19,8 +19,12 @@ export type BuildingId = (typeof BUILDING_IDS)[number];
 /** The patrol station's yard buildings (not the lodge): used only when every one loaded. */
 export const YARD_IDS = ['rs_garage', 'rs_hangar', 'rs_equipment', 'rs_doghouse', 'rs_mast'] as const;
 export type YardId = (typeof YARD_IDS)[number];
+/** The mission props (Pepper, the van, the fallen spruce, the pass barrier): each used when it loaded. */
+export const PROP_IDS = ['rs_cat', 'rs_van', 'rs_fallen_tree', 'rs_barrier'] as const;
+/** The Tannberg chairlift: towers, end towers and the chair, used only when all three loaded. */
+export const LIFT_IDS = ['rs_lift_tower', 'rs_lift_tower_end', 'rs_chair'] as const;
 
-export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS] as const;
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS, ...PROP_IDS, ...LIFT_IDS] as const;
 export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
 export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
 

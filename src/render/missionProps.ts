@@ -3,9 +3,17 @@ import { Debris } from '../sim/debris';
 import type { Terrain } from '../world/terrain';
 import { PatrollerMesh } from './characterMesh';
 import { ball, box, cyl, mat, PAL } from './kit';
+import { mountAtPivot, paintModel, type PatrolModels } from './patrolModels';
 
-/** Pepper: a small grey cat with a white chin and a tail held high. */
-export function catMesh(): THREE.Group {
+/** A MeshCraft prop, painted with the game's materials in the colours it was modelled in. */
+const prop = (src: THREE.Object3D) => paintModel(src, {}, (hex) => mat(hex));
+
+/**
+ * Pepper: a small grey cat with a white chin and a tail held high. The MeshCraft tabby
+ * (public/models/rs_cat.glb) when it loaded; the code-built cat otherwise.
+ */
+export function catMesh(model?: THREE.Object3D): THREE.Group {
+  if (model) return prop(model);
   const g = new THREE.Group();
   const grey = mat(0x6d7178);
   const body = ball(0.16, grey, 0, 0.18, 0, 10);
@@ -103,7 +111,10 @@ export class MissionProps {
     return [this.greta, this.nils, this.driver].map((p) => p.useModel(model)).every(Boolean);
   }
 
-  constructor(private terrain: Terrain) {
+  constructor(
+    private terrain: Terrain,
+    models: PatrolModels = {},
+  ) {
     const t = terrain;
     this.greta = new PatrollerMesh(true);
     this.greta.setLook(0x3c6b4a, 0xe8dcc8, 'hat-bobble', 0xe9c46a, 0xf3efe6, 0x222222, 0);
@@ -115,20 +126,27 @@ export class MissionProps {
     this.driver.setLook(0xf07a1a, 0x262a30, 'hat-beanie', 0x262a30, 0x262a30, 0x222222, 0);
     this.driver.group.position.set(268, t.height(268, 238), 238);
     this.driver.group.rotation.y = 2.4;
-    this.pepper = catMesh();
+    this.pepper = catMesh(models.rs_cat);
     this.glove = box(0.25, 0.12, 0.3, 0xd8382a, 606, t.height(606, -327) + 0.06, -327);
-    this.van = vanMesh();
+    this.van = models.rs_van ? prop(models.rs_van) : vanMesh();
     this.van.position.set(262, t.height(262, 232) - 0.2, 232);
     this.van.rotation.set(0.05, 0.9, 0.12);
-    this.tree = fallenTree();
+    this.tree = models.rs_fallen_tree ? prop(models.rs_fallen_tree) : fallenTree();
     this.tree.position.set(-112, t.height(-112, 30), 30);
     this.tree.rotation.y = 0.6;
     // the pass barrier: a red and white arm on a post
     const gate = new THREE.Group();
-    gate.add(cyl(0.18, 0.22, 1.3, 8, PAL.dark, 0, 0.65, 0));
     this.gateArm = new THREE.Group();
-    for (let i = 0; i < 6; i++) this.gateArm.add(box(1.2, 0.18, 0.12, i % 2 ? PAL.white : PAL.red, 0.6 + i * 1.2, 0, 0));
     this.gateArm.position.y = 1.25;
+    if (models.rs_barrier) {
+      // the MeshCraft barrier: its arm is a node on the pivot the game swings it about
+      const m = prop(models.rs_barrier);
+      gate.add(m);
+      mountAtPivot(m.getObjectByName('arm')!, this.gateArm);
+    } else {
+      gate.add(cyl(0.18, 0.22, 1.3, 8, PAL.dark, 0, 0.65, 0));
+      for (let i = 0; i < 6; i++) this.gateArm.add(box(1.2, 0.18, 0.12, i % 2 ? PAL.white : PAL.red, 0.6 + i * 1.2, 0, 0));
+    }
     gate.add(this.gateArm);
     gate.position.set(-156, t.height(-156, -36), -36);
     gate.rotation.y = -0.85;
