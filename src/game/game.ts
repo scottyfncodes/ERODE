@@ -12,7 +12,7 @@ import { BADGES, item, RANKS, type Group } from '../progress/catalog';
 import { available, build, buy, complete, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
 import { PatrollerMesh, type Pose } from '../render/characterMesh';
 import { ForestView } from '../render/forestView';
-import { Particles, Snowfall, Tracks } from '../render/fx';
+import { FX_KIND, Particles, Snowfall, Tracks } from '../render/fx';
 import { HeliMesh } from '../render/heliMesh';
 import { HuskyMesh } from '../render/huskyMesh';
 import { shared } from '../render/materials';
@@ -169,6 +169,7 @@ export class Game {
     this.modelled.props = PROP_IDS.every((id) => models[id]);
     this.modelled.lift = this.world.liftModelled;
     this.particles = new Particles(this.rig.quality.tier === 'low' ? 1600 : 2600);
+    this.loadFxAtlas();
     this.snowfall = new Snowfall(this.rig.quality.snowflakes);
     this.tracks = new Tracks(this.terrain, this.rig.quality.tier === 'low' ? 1100 : 1800);
     scene.add(this.station.group, this.world.group, this.markers.group, this.avView.group, this.props.group, this.particles.points, this.snowfall.points, this.tracks.mesh);
@@ -198,6 +199,8 @@ export class Game {
     window.addEventListener('pagehide', () => this.save());
     // a touch wakes sound the phone put to sleep (a call, the lock screen, another app)
     window.addEventListener('pointerdown', () => this.audio.ready && this.audio.unlock(), { capture: true, passive: true });
+    // the voiced lines speak as their subtitles go up, and the subtitle waits for the voice
+    this.hud.onLine = (_who, text) => this.audio.say(text, (secs) => this.hud.holdRadio(secs + 0.4));
     // iOS reports the new size a beat after it turns
     window.addEventListener('orientationchange', () => setTimeout(() => this.rig.resize(), 250));
     window.visualViewport?.addEventListener('resize', () => this.rig.resize());
@@ -698,14 +701,14 @@ export class Game {
         if (n > 0) this.particles.powder(s.x - fx * 1.9, s.y + 0.4, s.z - fz * 1.9, n, 2.5 + s.slip, 2 + sp * 0.12, -fx * sp * 0.25 + s.vx * 0.3, -fz * sp * 0.25 + s.vz * 0.3, 0.9);
       }
       if (s.landed > 3) {
-        this.particles.powder(s.x, s.y + 0.3, s.z, 14, 6, 3, s.vx * 0.3, s.vz * 0.3, 1.4);
+        this.particles.powder(s.x, s.y + 0.3, s.z, 14, 6, 3, s.vx * 0.3, s.vz * 0.3, 1.4, FX_KIND.powder);
         this.audio.landing(s.landed);
         this.cam.kick(Math.min(1, s.landed / 10));
       }
       if (s.bump > 3) {
         this.audio.bump(s.bump);
         this.cam.kick(Math.min(1, s.bump / 10));
-        this.particles.powder(s.x, s.y + 1, s.z, 10, 4, 2, 0, 0, 1);
+        this.particles.powder(s.x, s.y + 1, s.z, 10, 4, 2, 0, 0, 1, FX_KIND.powder);
       }
     } else if (this.mode === 'skis') {
       const s = this.skis;
@@ -730,14 +733,14 @@ export class Game {
         this.particles.powder(s.x, s.y + 0.2, s.z, n, 1.5, 1.5 + sp * 0.08, (-fz * side * s.slip) * 0.6, (fx * side * s.slip) * 0.6, 0.6);
       }
       if (s.landed > 3) {
-        this.particles.powder(s.x, s.y + 0.2, s.z, 10, 4, 2.5, 0, 0, 1);
+        this.particles.powder(s.x, s.y + 0.2, s.z, 10, 4, 2.5, 0, 0, 1, FX_KIND.powder);
         this.audio.landing(s.landed);
       }
       if (s.bump > 3) {
         this.audio.bump(s.bump);
         this.cam.kick(0.5);
         // a knock you can see: snow shaken loose where you hit
-        this.particles.powder(s.x, s.y + 0.8, s.z, 8, 3, 1.8, 0, 0, 0.9);
+        this.particles.powder(s.x, s.y + 0.8, s.z, 8, 3, 1.8, 0, 0, 0.9, FX_KIND.powder);
       }
     } else if (this.mode === 'heli') {
       const h = this.heli;
@@ -860,7 +863,10 @@ export class Game {
           const s = def.steps[e.index];
           this.hud.toast('Objective done', 'good', 1.6);
           if (s.kind === 'scan') this.hud.radio('Scanner', 'Scanner on. Point the nose at each slope, close and low, and hold it there.', 5);
-          if (s.kind === 'fire') this.hud.radio('Avalanche service', 'Charges set. Get clear of the slope: up on the ridge is safe. Then fire.', 5);
+          if (s.kind === 'fire') {
+            this.audio.warning();
+            this.hud.radio('Avalanche service', 'Charges set. Get clear of the slope: up on the ridge is safe. Then fire.', 5);
+          }
           if (s.kind === 'carry') this.hud.radio('Nils', "Thank you. I really didn't fancy another night out here.", 4);
           if (r.id === 'skier' && s.kind === 'goto' && e.index === 4) this.hud.radio('Tannberg ski patrol', 'The clinic in Hollin is expecting him.', 3.5);
           this.syncMissionVisuals();
@@ -1098,6 +1104,9 @@ export class Game {
     if (id === 'gate-close') this.hud.radio('Dispatch', 'Pass road closed below Kessel Bowl.', 3);
     if (id === 'gate-open') this.hud.radio('Dispatch', 'Pass road open again.', 3);
     if (id === 'aid-nils') this.hud.radio('Nils', 'I heard the dog first. I thought I was dreaming.', 4);
+    if (id === 'unload') this.hud.radio('Greta', "Oh, bless you both. Mind the step, it's icy.", 3);
+    if (id === 'pepper-home') this.hud.radio('Greta', 'Pepper! You silly thing. Come here, you are frozen.', 3);
+    if (id === 'dig') this.hud.radio('Van driver', "That's it, she's free! Thank you. I'd still be sat here at midnight.", 3.5);
     if (id === 'pepper') this.audio.whine();
     const ev = interact(r, id);
     this.handle(ev);
@@ -1287,7 +1296,36 @@ export class Game {
     }
   }
 
+  /** The FXCraft flipbook atlas for the particles (Light, or a failed load, keeps the plain discs). */
+  private fxAtlas: THREE.Texture | null = null;
+  private loadFxAtlas() {
+    if (!this.rig.quality.fx) return this.particles.setAtlas(null);
+    if (this.fxAtlas) return this.particles.setAtlas(this.fxAtlas);
+    new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}fx/kessel-fx.png`,
+      (t) => {
+        t.flipY = false;
+        t.colorSpace = THREE.NoColorSpace;
+        t.generateMipmaps = false;
+        t.minFilter = THREE.LinearFilter;
+        this.fxAtlas = t;
+        if (this.rig.quality.fx) this.particles.setAtlas(t);
+      },
+      undefined,
+      () => this.particles.setAtlas(null),
+    );
+  }
+
+  private hearthFlame = 0;
+  private readonly hearthPos = new THREE.Vector3();
+
   private smoke(dt: number) {
+    // the hearth burns while you are in the lodge to see it
+    if (this.indoors > 0.5 && inLodge(this.walker.x, this.walker.z)) {
+      this.hearthFlame += dt * (this.rig.quality.tier === 'low' ? 14 : 24);
+      if (this.hearthFlame >= 1) this.station.hearthAt(this.hearthPos);
+      for (; this.hearthFlame >= 1; this.hearthFlame--) this.particles.flame(this.hearthPos.x, this.hearthPos.y, this.hearthPos.z);
+    }
     this.smokeT -= dt;
     if (this.smokeT > 0) return;
     this.smokeT = this.rig.quality.tier === 'low' ? 0.35 : 0.2;
@@ -1390,7 +1428,15 @@ export class Game {
       outdoors: 1 - this.indoors * 0.7,
       day: 1 - this.rig.night,
       talking: this.hud.talking,
+      intensity: this.musicIntensity(),
     });
+  }
+
+  /** How hard the theme plays: the patrol bed, a call in hand, the avalanche about to go or going. */
+  private musicIntensity(): 0 | 1 | 2 {
+    const a = this.p.active;
+    if ((this.pack.fired && !this.pack.done) || (a?.id === 'release' && currentStep(a)?.kind === 'fire')) return 2;
+    return a ? 1 : 0;
   }
 
   // ------------------------------------------------------------------ screens
@@ -1494,6 +1540,7 @@ export class Game {
     this.audio.setMusic(s.music);
     if (q) {
       this.rig.quality = detectQuality(s.quality);
+      this.loadFxAtlas();
       this.rig.resize();
     }
     this.save();
@@ -1534,6 +1581,15 @@ export class Game {
       /** the Kessel kit (QA): how much is placed, in how many draw calls, and the pieces nearest a point */
       /** which code-built meshes the MeshCraft models replaced */
       models: () => ({ ...this.modelled }),
+      /** the audio files (QA): format, theme on, intensity, how many voice lines have played */
+      audio: () => this.audio.stats(),
+      hearth: () => ({ at: this.station.hearthAt(new THREE.Vector3()).toArray(), indoors: this.indoors, particles: this.particles.count, atlas: this.particles.uniforms.uUseAtlas.value }),
+      /** set an effect off where you are looking (QA and the trailer): a charge, or the powder cloud */
+      fx: (what: 'blast' | 'cloud', x: number, z: number) => {
+        const y = this.terrain.height(x, z);
+        if (what === 'blast') this.particles.blast(x, y, z);
+        else for (let i = 0; i < 160; i++) this.particles.cloud(x + (Math.random() - 0.5) * 30, y + 1, z + (Math.random() - 0.5) * 30, 0, 8, 1);
+      },
       /** the forest's level of detail: cells near and far, and a switch for A/B checks */
       forest: (lod?: boolean) => {
         if (lod !== undefined) this.forest.setLod(lod);

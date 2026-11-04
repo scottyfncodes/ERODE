@@ -10,6 +10,8 @@ Everything here can be regenerated; nothing in this folder is loaded by the game
 | `3d/scripts/kessel_kit.py` | The Kessel kit: nine hand-directed Blender builds, run inside MeshCraft (`run_script`) |
 | `pipeline/` | The production run, step by step (drives the GITCRAFT MCP servers through their guard and sandbox) |
 | `MANIFEST.json` | Every shipped asset: path, SHA-256, bytes, the tools that made it |
+| `audio/` | The voice lines, the Kessel theme and the stingers: AudioCraft requests and `build_audio.sh` (see `audio/README.md`) |
+| `fx/` | The particle atlas from FXCraft flipbooks: `build_fx.py` (see `fx/README.md`) |
 | `kessel-art-bible.pdf` | Emblem, art direction, palette and the kit contact sheet (DesignCraft layout, PDFCraft assembly) |
 
 ## Art direction: the storybook valley

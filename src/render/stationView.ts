@@ -63,6 +63,9 @@ interface Room {
  * Kessel Patrol Station. The lodge (mission room, hearth, bunk, wardrobe, Koda's bed), the garage,
  * the pad, the dog house, and every building the operation adds as it grows.
  */
+/** from the middle coded flame to the mouth of the firebox (the hearth faces +x into the room) */
+const HEARTH_MOUTH = new THREE.Vector3(0.35, -0.12, 0);
+
 export class StationView {
   readonly group = new THREE.Group();
   readonly upgrades = new Map<UpgradeId, THREE.Object3D>();
@@ -711,6 +714,15 @@ export class StationView {
         w.obj.visible = !(inside && facing);
       }
     }
+  }
+
+  /** Where the flames sit in the hearth, in world space (the FXCraft fire is emitted here). */
+  hearthAt(out: THREE.Vector3): THREE.Vector3 {
+    // the mouth of the firebox, just in front of the coded flames
+    // (the lodge bake moves the flames up to the interior's group, so work from the flame itself)
+    const f = this.fire[1];
+    f.parent!.updateWorldMatrix(true, false);
+    return f.parent!.localToWorld(out.copy(f.position).add(HEARTH_MOUTH));
   }
 
   update(dt: number, night: number) {

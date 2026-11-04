@@ -377,6 +377,14 @@ export class Hud {
     return this.radioT > 0;
   }
 
+  /** Hears each line as it goes up (the game speaks the voiced ones). */
+  onLine: ((who: string, text: string) => void) | null = null;
+
+  /** Keep the line that is up on screen for at least `secs` more (its voice is still talking). */
+  holdRadio(secs: number) {
+    if (this.radioT > 0) this.radioT = Math.max(this.radioT, secs);
+  }
+
   /** A line on the radio, subtitled; lines queue. */
   radio(who: string, text: string, secs = 4.5) {
     this.queue.push({ who, text, secs });
@@ -394,6 +402,7 @@ export class Hud {
     this.radioEl.innerHTML = `<span class="who">${n.who}</span>${n.text}`;
     this.radioEl.classList.add('on');
     this.radioT = n.secs;
+    this.onLine?.(n.who, n.text);
     return true;
   }
 

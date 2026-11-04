@@ -8,6 +8,8 @@ export interface Quality {
   shadowSize: number;
   trees: number;
   snowflakes: number;
+  /** particles drawn from the FXCraft flipbook atlas (false: the procedural soft disc, for Light) */
+  fx: boolean;
 }
 
 export function detectQuality(force: 'auto' | 'low' | 'high' = 'auto'): Quality {
@@ -15,9 +17,11 @@ export function detectQuality(force: 'auto' | 'low' | 'high' = 'auto'): Quality 
   const mobile = /iPhone|iPad|iPod|Android/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
   const dpr = window.devicePixelRatio || 1;
   const low = force === 'low' || (force === 'auto' && (mobile || Math.min(window.innerWidth, window.innerHeight) < 600));
+  // phones keep the flipbook particles on the low budget; Light (forced) falls back to plain discs
+  const fx = force !== 'low';
   return low
-    ? { tier: 'low', pixelRatio: Math.min(dpr, 1.5), shadowSize: 1024, trees: 0.55, snowflakes: 1400 }
-    : { tier: 'high', pixelRatio: Math.min(dpr, 2), shadowSize: 2048, trees: 1, snowflakes: 3000 };
+    ? { tier: 'low', pixelRatio: Math.min(dpr, 1.5), shadowSize: 1024, trees: 0.55, snowflakes: 1400, fx }
+    : { tier: 'high', pixelRatio: Math.min(dpr, 2), shadowSize: 2048, trees: 1, snowflakes: 3000, fx };
 }
 
 const SKY_VERT = /* glsl */ `

@@ -1,0 +1,278 @@
+{
+ "note": "AudioCraft voice request (GITCRAFT studiocraft audiocraft_voice). Radio lines are post-processed by art/audio/build_audio.sh.",
+ "radio": [
+  "dispatch_morning",
+  "dispatch_koda",
+  "dispatch_grounded",
+  "dispatch_data",
+  "dispatch_road_closed",
+  "dispatch_road_open",
+  "dispatch_rounds_alert",
+  "dispatch_rounds_done",
+  "dispatch_drift_alert",
+  "dispatch_drift_done",
+  "avy_recon_alert",
+  "avy_recon_done",
+  "avy_release_alert",
+  "avy_release_done",
+  "avy_clear",
+  "avy_fire",
+  "avy_secondary",
+  "avy_down_road",
+  "avy_down_berm",
+  "ski_alert",
+  "ski_clinic",
+  "ski_done",
+  "road_tree_alert",
+  "road_tree_done",
+  "greta_wood_alert",
+  "greta_pepper_alert"
+ ],
+ "request": {
+  "cast": {
+   "dispatch": "bf_isabella",
+   "avalanche": "bm_george",
+   "skipatrol": "am_michael",
+   "roadcrew": "bm_lewis",
+   "greta": "bf_emma",
+   "nils": "bm_fable",
+   "driver": "am_eric"
+  },
+  "lines": [
+   {
+    "id": "dispatch_morning",
+    "character": "dispatch",
+    "text": "Morning, Kessel Patrol. Forty centimetres up high overnight. There is a call on your mission table.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_koda",
+    "character": "dispatch",
+    "text": "Koda is already at the door.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_grounded",
+    "character": "dispatch",
+    "text": "Nobody flies in this. Wait for it to pass.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_data",
+    "character": "dispatch",
+    "text": "Data coming through. Nice work.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_road_closed",
+    "character": "dispatch",
+    "text": "Pass road closed below Kessel Bowl.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_road_open",
+    "character": "dispatch",
+    "text": "Pass road open again.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_rounds_alert",
+    "character": "dispatch",
+    "text": "The Grauhorn weather station stopped transmitting overnight.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_rounds_done",
+    "character": "dispatch",
+    "text": "Station is transmitting again. Thanks. Fresh numbers: forty centimetres overnight up there.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_drift_alert",
+    "character": "dispatch",
+    "text": "A van has slid into a drift on the Tannberg road.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "dispatch_drift_done",
+    "character": "dispatch",
+    "text": "Van is back on the road. The driver waved. Mostly.",
+    "lang": "en-gb",
+    "speed": 1.02
+   },
+   {
+    "id": "avy_recon_alert",
+    "character": "avalanche",
+    "text": "Heavy loading reported above the pass road. Recon flight requested.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_recon_done",
+    "character": "avalanche",
+    "text": "Report filed. Slopes A and C are loaded. We bring them down tomorrow, or today if you are up for it.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_release_alert",
+    "character": "avalanche",
+    "text": "Slopes A and C above the pass road are ready to go. Bring them down on our terms.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_release_done",
+    "character": "avalanche",
+    "text": "Clean release, the berm held, the road is open. That is how it is done.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_clear",
+    "character": "avalanche",
+    "text": "Charges set. Get clear of the slope: up on the ridge is safe. Then fire.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_fire",
+    "character": "avalanche",
+    "text": "Fire in the hole.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_secondary",
+    "character": "avalanche",
+    "text": "Secondary release on the next slope over. That is fine, let it run.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_down_road",
+    "character": "avalanche",
+    "text": "It is down. A little over the road, but the barrier did its job.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_down_berm",
+    "character": "avalanche",
+    "text": "It is down. The berm caught the lot. Beautiful.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "ski_alert",
+    "character": "skipatrol",
+    "text": "A skier missed the last chair. Last seen at the top station heading for the trees.",
+    "lang": "en-us",
+    "speed": 1.05
+   },
+   {
+    "id": "ski_clinic",
+    "character": "skipatrol",
+    "text": "The clinic in Hollin is expecting him.",
+    "lang": "en-us",
+    "speed": 1.05
+   },
+   {
+    "id": "ski_done",
+    "character": "skipatrol",
+    "text": "Nils is warm, splinted and eating soup. He says Koda is the best dog he has ever met.",
+    "lang": "en-us",
+    "speed": 1.05
+   },
+   {
+    "id": "road_tree_alert",
+    "character": "roadcrew",
+    "text": "A spruce has come down across the pass road below Kessel Bowl.",
+    "lang": "en-gb",
+    "speed": 1
+   },
+   {
+    "id": "road_tree_done",
+    "character": "roadcrew",
+    "text": "Pass road clear. Thanks for the quick work.",
+    "lang": "en-gb",
+    "speed": 1
+   },
+   {
+    "id": "greta_wood_alert",
+    "character": "greta",
+    "text": "Kessel Patrol, it's Greta at the Kettle. I'm down to my last logs and there's snow on the way.",
+    "lang": "en-gb",
+    "speed": 0.95
+   },
+   {
+    "id": "greta_wood_thanks",
+    "character": "greta",
+    "text": "Oh, bless you both. Mind the step, it's icy.",
+    "lang": "en-gb",
+    "speed": 0.95
+   },
+   {
+    "id": "greta_wood_done",
+    "character": "greta",
+    "text": "That's the stove sorted for a week. Come in for a hot chocolate any time.",
+    "lang": "en-gb",
+    "speed": 0.95
+   },
+   {
+    "id": "greta_pepper_alert",
+    "character": "greta",
+    "text": "It's Greta again. Pepper went out before the snow and she hasn't come home.",
+    "lang": "en-gb",
+    "speed": 0.95
+   },
+   {
+    "id": "greta_pepper_thanks",
+    "character": "greta",
+    "text": "Pepper! You silly thing. Come here, you are frozen.",
+    "lang": "en-gb",
+    "speed": 0.95
+   },
+   {
+    "id": "greta_pepper_done",
+    "character": "greta",
+    "text": "Pepper is on the windowsill pretending none of this happened.",
+    "lang": "en-gb",
+    "speed": 0.95
+   },
+   {
+    "id": "nils_aid",
+    "character": "nils",
+    "text": "I heard the dog first. I thought I was dreaming.",
+    "lang": "en-gb",
+    "speed": 0.95
+   },
+   {
+    "id": "nils_carry",
+    "character": "nils",
+    "text": "Thank you. I really didn't fancy another night out here.",
+    "lang": "en-gb",
+    "speed": 0.95
+   },
+   {
+    "id": "driver_thanks",
+    "character": "driver",
+    "text": "That's it, she's free! Thank you. I'd still be sat here at midnight.",
+    "lang": "en-us",
+    "speed": 1.08
+   }
+  ],
+  "formats": [
+   "wav"
+  ]
+ }
+}
