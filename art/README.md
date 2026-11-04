@@ -76,7 +76,25 @@ replaces, so it lands in the same place at the same size; moving parts are nodes
 | --- | --- | --- | --- |
 | `rs_sled` | `SledMesh` shape (`src/render/sledMesh.ts`) | `sled_body`, `sled_ski_L/R` (steer) | 1,964 |
 | `rs_heli` | `HeliMesh` shape (`src/render/heliMesh.ts`) | `heli_body`, `heli_rotor`, `heli_tail_rotor` | 2,784 |
-| `rs_spruce_a/b` | the procedural conifer (`src/render/conifer.ts`) in the instanced forest | `spruce_crown`, `spruce_trunk` | 62 / 60 (was 76) |
+| `rs_spruce_a/b` | the procedural conifer (`src/render/conifer.ts`) in the instanced forest; snow caps on the three broad lower tiers (the smaller ones are painted white) | `spruce_crown`, `spruce_trunk` | 65 / 63 (was 76) |
+| `rs_patroller` | `PatrollerMesh` (`src/render/characterMesh.ts`): the patroller and the villagers | skinned, 25 bones (below) | 2,606 drawn (was 2,558) |
+| `rs_koda` | `HuskyMesh` (`src/render/huskyMesh.ts`) | skinned, 21 bones (below) | 1,284 drawn (was 1,324) |
+
+**The patroller and Koda** (`3d/scripts/patrol_people.py`) are skinned meshes on skeletons of the
+code's own joints: the same names, at the same pivots, with zero rest rotation (every bone points
+straight up with roll 0, so each glTF joint node's rotation is identity, the frame of the code's
+`THREE.Group`). `useModel()` hands those bones to the existing animation code in place of its groups,
+so the leg solver, springs and jiggles move them exactly as before; `tests/people.test.ts` drives a
+code-built and a modelled figure through every pose with the same random seed and checks every joint's
+world matrix on every frame. Every piece is rigidly bound (weight 1) to the joint that carried it.
+Things the game shows and hides are their own skinned meshes: the four hats, skis on the feet or the
+pack, poles, the patrol gear (villagers go without); Koda's open and shut eyes, tongue, harness,
+saddlebags and bandana.
+
+- Patroller bones: `body`, `pelvis`, `spine`, `chest`, `neck`, `head`, `hip/knee/ankle_L/R`,
+  `shoulder/elbow_L/R`, `pack`, `eye_L/R` (blink), `pom_beanie`, `pom_bobble`, `scarf_a/b_0/1`.
+- Koda bones: `body`, `front`, `rear`, `chest` (breathes), `head`, `jaw`, `tongue`, `ear_L/R`,
+  `tail_0..3`, `leg_FL/FR/RL/RR_upper/lower`.
 
 Materials are palette roles; the vehicles map each role back onto the game's own materials, so paint
 jobs and the storybook grade still apply. Lamps, glows, nav lights, the rotor disc, the searchlight

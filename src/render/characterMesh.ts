@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { ball, box, cyl, facet, facetPaint, gem, PAL, repaint } from './kit';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { cullAsCharacter, dressModel, retire } from './patrolModels';
 import { ANKLE, cycleLength, footAt, legIK, LEG, pelvisBob, runBlend, SHIN, Spring, THIGH, type Foot, type LegAngles } from './gait';
 
 export type Pose = 'idle' | 'walk' | 'run' | 'ride' | 'ski' | 'pilot' | 'work' | 'pet' | 'carry' | 'sleep';
@@ -104,11 +106,11 @@ function ribbon(w0: number, w1: number, len: number, m: THREE.Material, y = 0): 
 }
 
 interface Side {
-  hip: THREE.Group;
-  knee: THREE.Group;
-  ankle: THREE.Group;
-  shoulder: THREE.Group;
-  elbow: THREE.Group;
+  hip: THREE.Object3D;
+  knee: THREE.Object3D;
+  ankle: THREE.Object3D;
+  shoulder: THREE.Object3D;
+  elbow: THREE.Object3D;
   s: Record<'hip' | 'hipRoll' | 'knee' | 'ankle' | 'arm' | 'armRoll' | 'elbow', Spring>;
 }
 
@@ -127,12 +129,12 @@ const CIVVY_SCARVES = [PAL.mint, PAL.powder, PAL.lavender, PAL.blush, PAL.mustar
 export class PatrollerMesh {
   readonly group = new THREE.Group();
   /** leans with turns, inside the group the game places */
-  private body = new THREE.Group();
-  private pelvis = new THREE.Group();
-  private spine = new THREE.Group();
-  private chest = new THREE.Group();
-  private neck = new THREE.Group();
-  private head = new THREE.Group();
+  private body: THREE.Object3D = new THREE.Group();
+  private pelvis: THREE.Object3D = new THREE.Group();
+  private spine: THREE.Object3D = new THREE.Group();
+  private chest: THREE.Object3D = new THREE.Group();
+  private neck: THREE.Object3D = new THREE.Group();
+  private head: THREE.Object3D = new THREE.Group();
   private L: Side;
   private R: Side;
   private jacket: THREE.MeshLambertMaterial;
@@ -140,15 +142,20 @@ export class PatrollerMesh {
   private hatMain: THREE.MeshLambertMaterial;
   private hatSecond: THREE.MeshLambertMaterial;
   private lens: THREE.MeshLambertMaterial;
-  private hats: Record<string, THREE.Group> = {};
-  private poms: THREE.Group[] = [];
-  private skisOnBack = new THREE.Group();
-  private feetSkis: THREE.Group[] = [];
-  private poles: THREE.Group[] = [];
+  /** the game's material for each palette role the MeshCraft model is painted with */
+  private roles: Record<string, THREE.Material> = {};
+  /** true once the MeshCraft model (public/models/rs_patroller.glb) is in */
+  modelled = false;
+  private readonly civilian: boolean;
+  private hats: Record<string, THREE.Object3D> = {};
+  private poms: THREE.Object3D[] = [];
+  private skisOnBack: THREE.Object3D = new THREE.Group();
+  private feetSkis: THREE.Object3D[] = [];
+  private poles: THREE.Object3D[] = [];
   private skiMat: THREE.MeshLambertMaterial;
   private held = new THREE.Group();
-  private pack = new THREE.Group();
-  private tails: { a: THREE.Group; b: THREE.Group; ja: Jiggle; jb: Jiggle; off: number }[] = [];
+  private pack: THREE.Object3D = new THREE.Group();
+  private tails: { a: THREE.Object3D; b: THREE.Object3D; ja: Jiggle; jb: Jiggle; off: number }[] = [];
   private t = 0;
   private phase = 0;
   private lastStride = 0;
@@ -195,6 +202,7 @@ export class PatrollerMesh {
   private readonly fR: Foot = { fwd: 0, lift: 0, pitch: 0, planted: true };
 
   constructor(civilian = false) {
+    this.civilian = civilian;
     this.jacket = facetPaint(PAL.red);
     this.trim = facetPaint(PAL.white);
     this.hatMain = facetPaint(PAL.red);
@@ -211,6 +219,33 @@ export class PatrollerMesh {
     const skin = facet(SKIN);
     const hair = facet(PAL.hair);
     const scarf = facet(civilian ? CIVVY_SCARVES[Math.floor(Math.random() * CIVVY_SCARVES.length)] : PAL.green);
+    this.roles = {
+      jacket: this.jacket,
+      trim: this.trim,
+      hatMain: this.hatMain,
+      hatSecond: this.hatSecond,
+      lens: this.lens,
+      ski: this.skiMat,
+      trousers,
+      boot,
+      sole,
+      gaiter,
+      glove,
+      strap: strapMat,
+      dark,
+      skin,
+      hair,
+      scarf,
+      patchWhite: facet(PAL.white),
+      patchRed: facet(PAL.red),
+      pack: facet(PAL.pack),
+      packDark: facet(PAL.packDark),
+      nose: facet(0xe3a283),
+      eye: facet(0x1d1d1d),
+      cheek: facet(0xeea295),
+      smile: facet(0x8e3f4c),
+      metal: facet(PAL.metal),
+    };
 
     this.group.add(this.body);
     this.body.add(this.pelvis);
@@ -442,6 +477,99 @@ export class PatrollerMesh {
       const m = o as THREE.Mesh;
       if (m.isMesh) m.castShadow = true;
     });
+  }
+
+  /**
+   * Swap the code-built figure for the MeshCraft model (public/models/rs_patroller.glb): a skinned
+   * mesh on a skeleton whose bones are this figure's joints (same names, pivots and zero rest pose),
+   * so every line of the animation below drives the bones exactly as it drove the groups. Hats, skis,
+   * poles and the patrol gear are separate meshes the same toggles show and hide. The whole figure
+   * changes at once; if the model is unusable nothing changes and false is returned.
+   */
+  useModel(source: THREE.Object3D | undefined): boolean {
+    if (!source) return false;
+    const root = cloneSkinned(source);
+    const bones = ['body', 'pelvis', 'spine', 'chest', 'neck', 'head', 'pack', 'eye_L', 'eye_R', 'pom_beanie', 'pom_bobble'];
+    for (const s of ['L', 'R']) bones.push(`hip_${s}`, `knee_${s}`, `ankle_${s}`, `shoulder_${s}`, `elbow_${s}`);
+    for (const i of [0, 1]) bones.push(`scarf_a_${i}`, `scarf_b_${i}`);
+    const parts = ['pat_body', 'pat_gear', 'pat_skis_back', 'pat_ski_L', 'pat_ski_R', 'pat_pole_L', 'pat_pole_R', 'pat_hat_beanie', 'pat_hat_helmet', 'pat_hat_trapper', 'pat_hat_bobble'];
+    const n = dressModel(root, [...bones, ...parts], this.roles);
+    if (!n) return false;
+    // one sphere that holds every pose: the poles, swung while skiing, reach furthest (~2 m)
+    cullAsCharacter(root, new THREE.Vector3(0, 0.9, 0), 2.3);
+    // carry the current look across
+    const hat = Object.entries(this.hats).find(([, h]) => h.visible)?.[0] ?? 'hat-beanie';
+    const onFeet = this.feetSkis[0]?.visible ?? false;
+    const backOn = this.skisOnBack.visible;
+    // every joint picks up exactly where the code-built one is (its offset in full precision, its pose)
+    const pairs: [THREE.Object3D, string][] = [
+      [this.body, 'body'],
+      [this.pelvis, 'pelvis'],
+      [this.spine, 'spine'],
+      [this.chest, 'chest'],
+      [this.neck, 'neck'],
+      [this.head, 'head'],
+      [this.pack, 'pack'],
+      [this.eyes[0], 'eye_L'],
+      [this.eyes[1], 'eye_R'],
+      [this.poms[0], 'pom_beanie'],
+      [this.poms[1], 'pom_bobble'],
+      [this.tails[0].a, 'scarf_a_0'],
+      [this.tails[0].b, 'scarf_b_0'],
+      [this.tails[1].a, 'scarf_a_1'],
+      [this.tails[1].b, 'scarf_b_1'],
+    ];
+    for (const [side, s] of [
+      [this.L, 'L'],
+      [this.R, 'R'],
+    ] as const)
+      for (const j of ['hip', 'knee', 'ankle', 'shoulder', 'elbow'] as const) pairs.push([side[j], `${j}_${s}`]);
+    for (const [a, name] of pairs) {
+      const b = n[name];
+      b.position.copy(a.position);
+      b.rotation.copy(a.rotation);
+      b.scale.copy(a.scale);
+    }
+    // the cat (or whatever is held) stays in the right glove
+    n.elbow_R.add(this.held);
+    retire([this.body]);
+    this.group.add(root);
+    this.body = n.body;
+    this.pelvis = n.pelvis;
+    this.spine = n.spine;
+    this.chest = n.chest;
+    this.neck = n.neck;
+    this.head = n.head;
+    this.pack = n.pack;
+    for (const [side, s] of [
+      [this.L, 'L'],
+      [this.R, 'R'],
+    ] as const) {
+      side.hip = n[`hip_${s}`];
+      side.knee = n[`knee_${s}`];
+      side.ankle = n[`ankle_${s}`];
+      side.shoulder = n[`shoulder_${s}`];
+      side.elbow = n[`elbow_${s}`];
+    }
+    this.eyes = [n.eye_L, n.eye_R];
+    this.poms = [n.pom_beanie, n.pom_bobble];
+    this.tails[0].a = n.scarf_a_0;
+    this.tails[0].b = n.scarf_b_0;
+    this.tails[1].a = n.scarf_a_1;
+    this.tails[1].b = n.scarf_b_1;
+    this.hats = { 'hat-beanie': n.pat_hat_beanie, 'hat-helmet': n.pat_hat_helmet, 'hat-trapper': n.pat_hat_trapper, 'hat-bobble': n.pat_hat_bobble };
+    for (const [k, h] of Object.entries(this.hats)) h.visible = k === hat;
+    this.feetSkis = [n.pat_ski_L, n.pat_ski_R];
+    this.poles = [n.pat_pole_L, n.pat_pole_R];
+    if (this.civilian) {
+      // the villagers carry no pack, straps or cross (and so no skis on their backs)
+      retire([n.pat_gear, n.pat_skis_back]);
+      this.skisOnBack = new THREE.Group();
+    } else this.skisOnBack = n.pat_skis_back;
+    this.setSkis(onFeet);
+    if (!onFeet) this.backSkis(backOn);
+    this.modelled = true;
+    return true;
   }
 
   setLook(jacket: number, trim: number, hatId: string, hatMain: number, hatSecond: number, lens: number, skis: number) {

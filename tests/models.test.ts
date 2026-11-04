@@ -40,7 +40,7 @@ function shapeBounds(root: THREE.Object3D): THREE.Box3 {
 
 describe('the patrol models (GITCRAFT MeshCraft)', () => {
   it('ships every model, each loading in the game three.js within a phone budget', async () => {
-    const budget = { rs_sled: 2500, rs_heli: 3500, rs_spruce_a: 77, rs_spruce_b: 77 };
+    const budget = { rs_sled: 2500, rs_heli: 3500, rs_spruce_a: 77, rs_spruce_b: 77 /* the procedural tree was 76 */, rs_patroller: 3400, rs_koda: 1800 /* every hat and gear piece included */ };
     for (const id of PATROL_MODEL_IDS) {
       const scene = await load(id);
       expect(tris(scene), `${id} triangles`).toBeGreaterThan(0);
@@ -104,12 +104,16 @@ describe('the patrol models (GITCRAFT MeshCraft)', () => {
       // trunk from the ground up, as before
       v.trunk.computeBoundingBox();
       expect(Math.abs(v.trunk.boundingBox!.min.y)).toBeLessThan(0.01);
-      // some of the crown is snow (bright), most of it is spruce
+      // snow-loaded (caps, notches and crown points are snow) with the spruce still showing at the tips
       const c = v.crown.getAttribute('color');
       let snow = 0;
-      for (let i = 0; i < c.count; i++) if (c.getX(i) > 0.6) snow++;
-      expect(snow / c.count).toBeGreaterThan(0.15);
-      expect(snow / c.count).toBeLessThan(0.6);
+      let green = 0;
+      for (let i = 0; i < c.count; i++) {
+        if (c.getX(i) > 0.6) snow++;
+        if (c.getY(i) < 0.4) green++;
+      }
+      expect(snow / c.count).toBeGreaterThan(0.5);
+      expect(green / c.count).toBeGreaterThan(0.2);
     }
   });
 

@@ -98,6 +98,11 @@ export class MissionProps {
   private logs: THREE.InstancedMesh;
   private logBodies: { b: ReturnType<Debris['add']> }[] = [];
 
+  /** The villagers wear the patroller model too (without the patrol's gear). */
+  usePeople(model: THREE.Object3D | undefined): boolean {
+    return [this.greta, this.nils, this.driver].map((p) => p.useModel(model)).every(Boolean);
+  }
+
   constructor(private terrain: Terrain) {
     const t = terrain;
     this.greta = new PatrollerMesh(true);

@@ -205,6 +205,7 @@ def heli():
 # The game's own conifer colours (src/render/conifer.ts, linear rgb) and its snow, so the new trees
 # sit in the same forest light. Spruce / Snow from the palette keep the materials honest on their own.
 DARK, MID, TIP, SNOW = (0.09, 0.2, 0.2), (0.16, 0.32, 0.29), (0.3, 0.46, 0.38), (0.98, 0.965, 0.95)
+SHADE = (0.83, 0.8, 0.92)  # the tree snow's lavender shade (the valley's Snow Shade), for the cap edges
 
 
 def lerp(a, b, t):
@@ -216,7 +217,13 @@ def spruce(seed, points, slender):
     alternates drooping bough tips and tucked-in notches (2 x points triangles a tier, fewer points on
     the small upper tiers). Snow lies on the upper, inner part of every tier, the way the game's snowy
     conifer paints it. ~10,000 of these stand in the valley, so a tree costs no more than the
-    procedural one did (62 triangles against 76)."""
+    procedural one did.
+
+    Snow caps: the three broad lower tiers carry a three-sided cap of the game's tree snow lying on
+    their upper faces (the small upper tiers are painted white, notches and crown points), so the
+    forest reads as snow-loaded from the helicopter. 63-65 triangles with a four-sided trunk: under the
+    procedural tree's 76 and about what the uncapped spruce cost, since ~10,000 of them stand in the
+    valley."""
     tiers = len(points)
     mats = K.Materials(pal, {"spruce": "Spruce", "bark": "Log Dark"}, prefix="RS")
     rng = random.Random(seed)
@@ -235,16 +242,32 @@ def spruce(seed, points, slender):
             a = phase + math.tau * i / n
             if i % 2 == 0:  # a bough tip: out and drooping
                 rr = r * (0.95 + rng.random() * 0.1); yy = y - 0.05 * (1 - f * 0.4)
-                c = lerp(DARK, MID, 0.25 + f * 0.3)
+                c = lerp(lerp(DARK, MID, 0.25 + f * 0.3), SNOW, 0.12)  # a dusting on the tips
             else:           # a notch: in and up, holding snow
                 rr = r * 0.6; yy = y + h * 0.18
-                c = lerp(lerp(MID, TIP, f), SNOW, 0.45)
+                c = lerp(lerp(MID, TIP, f), SNOW, 0.8)
             rim.append(bm.verts.new((math.cos(a) * rr, yy, math.sin(a) * rr))); rc.append(c)
-        ac = lerp(lerp(MID, TIP, 0.6), SNOW, 0.8 if t < tiers - 1 else 0.92)
+        ac = lerp(lerp(MID, TIP, 0.6), SNOW, 0.95)
         for i in range(n):
             j = (i + 1) % n
             bm.faces.new((apex, rim[j], rim[i]))
             cols.append((ac, rc[j], rc[i]))
+        if t < tiers - 3:
+            # the cap: a low three-sided pyramid of snow just proud of the tier's upper face,
+            # reaching most of the way to the notches where snow collects
+            top = y + h
+            capex = bm.verts.new((0, top + 0.012, 0))
+            cr = []
+            for k in range(3):
+                a = phase + math.tau * (2 * k * points[t] // 3 + 1) / n
+                reach = 1.0
+                # the tier's face at this reach (apex to notch), lifted a hair so it never z-fights
+                yy = top + (y + h * 0.18 - top) * reach + 0.015
+                rr = r * 0.6 * reach  # along the line from the crown point to the notch
+                cr.append(bm.verts.new((math.cos(a) * rr, yy, math.sin(a) * rr)))
+            for k in range(3):
+                bm.faces.new((capex, cr[(k + 1) % 3], cr[k]))
+                cols.append((SNOW, lerp(SNOW, SHADE, 0.2), lerp(SNOW, SHADE, 0.2)))
     # winding: outward and up, so the normals read like the game's
     me = bpy.data.meshes.new("spruce_crown"); bm.to_mesh(me); bm.free()
     crown = K.link(bpy.data.objects.new("spruce_crown", me)); K.assign(crown, mats["spruce"])
@@ -255,7 +278,7 @@ def spruce(seed, points, slender):
     me.color_attributes.active_color = attr
     # the trunk: five sides, open ends (the crown hides the top, the snow the bottom)
     tb = bmesh.new()
-    bmesh.ops.create_cone(tb, cap_ends=False, segments=5, radius1=0.03, radius2=0.014, depth=0.42)
+    bmesh.ops.create_cone(tb, cap_ends=False, segments=4, radius1=0.03, radius2=0.014, depth=0.42)
     bmesh.ops.rotate(tb, cent=(0, 0, 0), matrix=Matrix.Rotation(-math.pi / 2, 3, "X"), verts=tb.verts)  # z -> y
     bmesh.ops.translate(tb, vec=(0, 0.21, 0), verts=tb.verts)
     tm = bpy.data.meshes.new("spruce_trunk"); tb.to_mesh(tm); tb.free()
@@ -271,8 +294,8 @@ def spruce(seed, points, slender):
 BUILD = {
     "rs_sled": sled,
     "rs_heli": heli,
-    "rs_spruce_a": lambda: spruce(11, (5, 5, 5, 4, 4, 3), 1.0),
-    "rs_spruce_b": lambda: spruce(47, (5, 5, 4, 4, 4, 3), 0.92),
+    "rs_spruce_a": lambda: spruce(11, (5, 5, 4, 4, 3, 3), 1.0),
+    "rs_spruce_b": lambda: spruce(47, (5, 4, 4, 4, 3, 3), 0.92),
 }
 
 objs, mats = BUILD[asset]()

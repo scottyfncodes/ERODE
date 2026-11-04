@@ -2,17 +2,18 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 /**
- * The patrol's own models: the snowmobile, the helicopter and the Kessel spruce, built by GITCRAFT's
- * MeshCraft from art/3d/scripts/patrol_models.py and shipped in public/models/.
+ * The patrol's own models, built by GITCRAFT's MeshCraft and shipped in public/models/: the
+ * snowmobile, the helicopter and the Kessel spruce (art/3d/scripts/patrol_models.py), and the patroller
+ * and Koda (art/3d/scripts/patrol_people.py).
  *
  * They replace code-built meshes, so each is modelled in the game's own coordinates (metres, +Y up,
- * vehicles nose to -Z) with its moving parts as named nodes whose origin is the pivot the code turns
- * them about. Every material carries a palette role (glTF extras -> userData.gitcraft_role); the
+ * forward -Z) with its moving parts on the pivots the code turns them about: named nodes for the
+ * vehicles, a skeleton of the code's own joints for the patroller and Koda. Every material carries a palette role (glTF extras -> userData.gitcraft_role); the
  * vehicle meshes map each role back onto the game's own materials, so paint jobs and the storybook
  * grade work as before. If a file is missing or broken it is reported and skipped, and the code-built
  * version it would have replaced stays in place.
  */
-export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b'] as const;
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_patroller', 'rs_koda'] as const;
 export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
 export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
 
@@ -80,6 +81,21 @@ export function dressModel(
     m.castShadow = true;
   }
   return found;
+}
+
+/**
+ * Skinned meshes are culled against their bind pose by default, which says little once the bones move.
+ * A rigged character never strays far from its root, so give each skinned mesh one fixed sphere (in
+ * the model's own space) that holds every pose, and keep culling on: characters out of view, like the
+ * villagers down in Hollin, cost nothing.
+ */
+export function cullAsCharacter(root: THREE.Object3D, center: THREE.Vector3, radius: number) {
+  root.traverse((o) => {
+    const m = o as THREE.SkinnedMesh;
+    if (!m.isSkinnedMesh) return;
+    m.boundingSphere = new THREE.Sphere(center.clone(), radius);
+    m.frustumCulled = true;
+  });
 }
 
 /** Re-home a pivot node under a group that already sits on the same pivot. */
