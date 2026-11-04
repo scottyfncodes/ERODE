@@ -332,7 +332,8 @@ describe('Koda model (MeshCraft, skinned)', () => {
         expect(Math.abs(a.max[k] - b.max[k]), `${anim} max ${k}`).toBeLessThan(0.06);
       }
     }
-    expect(visibleTris(model.group)).toBeLessThanOrEqual(visibleTris(code.group));
+    // the face pass (eyes with catchlights, brow spots, cheek ruff) is allowed what the patroller's is
+    expect(visibleTris(model.group)).toBeLessThan(visibleTris(code.group) * 1.05);
   });
 
   it('keeps the gear toggles, and the code-built Koda when the model is unusable', async () => {

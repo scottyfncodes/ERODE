@@ -88,6 +88,10 @@ export class Rig {
   private skyU: Record<string, THREE.IUniform>;
   quality: Quality;
   private scale = 1;
+  /** current render scale: 1 is full resolution; adapt() lowers it toward 0.6 when frames run slow */
+  get renderScale() {
+    return this.scale;
+  }
   private slow = 0;
   private fast = 0;
   readonly sunDir = new THREE.Vector3(0.4, 0.7, 0.3).normalize();

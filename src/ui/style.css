@@ -1774,3 +1774,19 @@ body.booted .title-screen .inner {
     height: 26px;
   }
 }
+
+/* the ?stats performance readout: small, in the bottom-left corner below where the characters are framed;
+   it never takes a touch, so the stick works through it */
+.stats {
+  position: fixed;
+  left: max(8px, env(safe-area-inset-left));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 60;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(42, 22, 34, 0.72);
+  color: #f6ecdc;
+  font: 11px/1.35 'Courier Prime', ui-monospace, monospace;
+  white-space: pre;
+  pointer-events: none;
+}
