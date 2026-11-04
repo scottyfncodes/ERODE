@@ -202,6 +202,41 @@ describe('the patroller model (MeshCraft, skinned)', () => {
     expect(villager.group.getObjectByName('pat_skis_back')).toBeUndefined();
   });
 
+  it('shows the face under every hat, and blinks each eye about its own centre', async () => {
+    const p = new PatrollerMesh();
+    p.useModel(await load('rs_patroller'));
+    p.group.updateMatrixWorld(true);
+    const eye = p.group.getObjectByName('eye_L')!;
+    const at = new THREE.Vector3();
+    eye.getWorldPosition(at);
+    // every hat stops above the brows: nothing of it comes down over the front of the face (the
+    // trapper's ear flaps hang beside it, which is the point of them)
+    for (const hat of ['hat-beanie', 'hat-helmet', 'hat-trapper', 'hat-bobble']) {
+      let lowest = Infinity;
+      const v = new THREE.Vector3();
+      p.group.getObjectByName(`pat_${hat.replace('-', '_')}`)!.traverse((o) => {
+        const sm = o as THREE.SkinnedMesh;
+        if (!sm.isSkinnedMesh) return;
+        sm.skeleton.update();
+        const pos = sm.geometry.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          sm.applyBoneTransform(i, v.fromBufferAttribute(pos, i)).applyMatrix4(sm.matrixWorld);
+          if (v.z < at.z + 0.06 && Math.abs(v.x) < 0.13) lowest = Math.min(lowest, v.y);
+        }
+      });
+      expect(lowest, `${hat} clears the eyes`).toBeGreaterThan(at.y + 0.03);
+    }
+    // a blink squashes the eye where it is: its centre does not move
+    const eyeMesh = p.group.getObjectByName('pat_body')!;
+    const before = drawnBounds(eyeMesh);
+    eye.scale.y = 0.15;
+    p.group.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    eye.getWorldPosition(v);
+    expect(v.distanceTo(at)).toBeLessThan(1e-9);
+    expect(drawnBounds(eyeMesh).min.y).toBeCloseTo(before.min.y, 6);
+  });
+
   it('keeps the code-built figure when the model is missing or broken', async () => {
     const p = new PatrollerMesh();
     expect(p.useModel(undefined)).toBe(false);
