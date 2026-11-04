@@ -80,6 +80,21 @@ replaces, so it lands in the same place at the same size; moving parts are nodes
 | `rs_patroller` | `PatrollerMesh` (`src/render/characterMesh.ts`): the patroller and the villagers | skinned, 25 bones (below) | 2,606 drawn (was 2,558) |
 | `rs_koda` | `HuskyMesh` (`src/render/huskyMesh.ts`) | skinned, 21 bones (below) | 1,284 drawn (was 1,324) |
 
+**The far forest.** Trees are drawn in 250 m cells. Past about 150 m from the camera a cell draws
+`rs_spruce_a/b_far` (four tiers, 28 triangles, no trunk) with a cheaper foliage material (no per-pixel
+noise, plain diffuse light) and no shadows; nearer cells draw the full spruce as before
+(`src/render/forestView.ts`, `tests/forest.test.ts`).
+
+**The valley's buildings** (`3d/scripts/valley_buildings.py`): Hollin's houses, the Kettle, the baker,
+the clinic and the chapel; the Tannberg base lodge and top-station hut; the weather-station hut,
+Fernhut cabin, the boathouse and the pass barrier hut (not the patrol station). Chalets come in three
+sizes (`rs_chalet`, `rs_chalet_wide`, `rs_chalet_small`) with `body`, `roof`, `balcony`, `door` and
+`chimney` nodes that `WorldView` fits to each house's exact width and depth; `rs_cabin` is fitted to the
+top-station hut too. Every part is a palette role painted with the game's own material for that
+building (its wall and roof colours, the lit windows), so each region still bakes into one mesh per
+material. All or nothing: if any building model is missing the whole valley stays code-built
+(`tests/buildings.test.ts`).
+
 **The patroller and Koda** (`3d/scripts/patrol_people.py`) are skinned meshes on skeletons of the
 code's own joints: the same names, at the same pivots, with zero rest rotation (every bone points
 straight up with roll 0, so each glTF joint node's rotation is identity, the frame of the code's

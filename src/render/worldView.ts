@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { mulberry32 } from '../sim/noise';
 import { BOWL, LAKE, LIFT, pad, VILLAGE } from '../world/places';
 import { routeSamples, type Terrain } from '../world/terrain';
-import { bakeInPlace, ball, bake, box, cyl, gable, glow, logWall, mat, PAL, snowRoof, windowPane } from './kit';
+import { bakeInPlace, ball, bake, box, cyl, gable, glow, logWall, mat, PAL, shade, snowRoof, windowPane } from './kit';
+import { BUILDING_IDS, roleOf, type BuildingId, type PatrolModels } from './patrolModels';
 import { sign } from './stationView';
 
 /**
@@ -22,8 +23,17 @@ export class WorldView {
   private stationLight: THREE.Mesh | null = null;
   stationWorking = false;
   private t = 0;
+  /** the MeshCraft buildings, when every one of them loaded (otherwise the code builds them all) */
+  private bm: Record<BuildingId, THREE.Object3D> | null;
+  /** true when the valley's buildings are the MeshCraft models */
+  readonly modelled: boolean;
 
-  constructor(private terrain: Terrain) {
+  constructor(
+    private terrain: Terrain,
+    models: PatrolModels = {},
+  ) {
+    this.bm = BUILDING_IDS.every((id) => models[id]) ? (Object.fromEntries(BUILDING_IDS.map((id) => [id, models[id]!])) as unknown as Record<BuildingId, THREE.Object3D>) : null;
+    this.modelled = !!this.bm;
     this.windows = new THREE.MeshLambertMaterial({ color: PAL.window, emissive: 0xffa040, emissiveIntensity: 0.2 });
     this.streetLights = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
     // each place is built, then merged into a handful of meshes of its own (so it still culls)
@@ -48,8 +58,85 @@ export class WorldView {
     return this.terrain.height(x, z);
   }
 
+  /**
+   * A copy of a MeshCraft building, painted with the game's own materials: each part carries a
+   * palette role, and `paint` says which material that role is for this building (its wall and roof
+   * colours, the lit windows). Roles not named take the valley's standard material for them. So a
+   * region still bakes into one mesh per material, as the code-built version did.
+   */
+  private building(id: BuildingId, paint: Record<string, THREE.Material> = {}): THREE.Group {
+    const std: Record<string, THREE.Material> = {
+      stone: mat(PAL.stone),
+      stoneDark: mat(PAL.stoneDark),
+      trim: mat(PAL.white),
+      logDark: mat(PAL.logDark),
+      logLight: mat(PAL.logLight),
+      roofSnow: mat(PAL.roofSnow),
+      window: this.windows,
+      door: mat(0x6b4428),
+      log: mat(PAL.log),
+      logShade: mat(shade(PAL.log, 0.92)),
+      grain: mat(0xd6b38a),
+      dome: mat(PAL.mustard),
+      spire: mat(PAL.yellow),
+      belfry: mat(0x262a30),
+      boat: mat(0x6b4428),
+      boatDark: mat(0x3d2a1c),
+      wall: mat(PAL.white),
+      plank: mat(shade(PAL.white, 0.9)),
+      roof: mat(PAL.roof),
+      shutter: mat(PAL.green),
+    };
+    const g = this.bm![id].clone(true) as THREE.Group;
+    g.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const role = roleOf(m);
+      m.material = paint[role] ?? std[role] ?? mat(parseInt(String((m.material as THREE.Material).userData?.gitcraft_color ?? '#cccccc').slice(1), 16));
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    return g;
+  }
+
+  /**
+   * The MeshCraft chalet fitted to a house: the body and roof stretch to its width and depth (the roof
+   * pitch follows the shorter side, as the code's did), the balcony moves to its front wall, the door
+   * keeps its size. The wide model serves the big houses, the small one the single-storey huts.
+   */
+  private modelChalet(w: number, d: number, wall: number, roofCol: number, floors: number, balcony: boolean): THREE.Group {
+    const [id, w0, d0] = floors < 2 ? (['rs_chalet_small', 4, 3.5] as const) : w >= 8.5 ? (['rs_chalet_wide', 10, 7.5] as const) : (['rs_chalet', 6, 5] as const);
+    const g = this.building(id, {
+      wall: mat(wall),
+      plank: mat(shade(wall, 0.88)),
+      roof: mat(roofCol),
+      shutter: mat(wall === PAL.mint ? PAL.burgundy : PAL.green),
+    });
+    const sx = w / w0;
+    const sz = d / d0;
+    const node = (n: string) => g.getObjectByName(n)!;
+    node('body').scale.set(sx, 1, sz);
+    node('roof').scale.set(sx, Math.min(w, d) / Math.min(w0, d0), sz);
+    // the door keeps its size; it moves to the house's front, to one side (clear of the signs)
+    const door = node('door');
+    door.position.set(w * 0.28 - w0 * 0.22, 0, (d - d0) / 2);
+    const bal = g.getObjectByName('balcony');
+    if (bal) {
+      bal.position.z = d / 2;
+      bal.scale.x = sx;
+      bal.visible = balcony && floors > 1;
+    }
+    // the chimney is placed by whoever adds the smoke (buildVillage); hidden until then
+    const chimney = node('chimney');
+    chimney.visible = false;
+    g.userData.chimney = chimney;
+    g.userData.door = door;
+    return g;
+  }
+
   /** An alpine chalet: stone ground floor, timber upper, a balcony, a deep snowy roof. */
   private chalet(w: number, d: number, wall: number, roofCol: number, floors = 2, balcony = true): THREE.Group {
+    if (this.bm) return this.modelChalet(w, d, wall, roofCol, floors, balcony);
     const g = new THREE.Group();
     const h1 = 2.6;
     g.add(box(w, h1, d, PAL.stone, 0, h1 / 2, 0));
@@ -115,6 +202,8 @@ export class WorldView {
           s.position.set(0, 2.3, 3.07);
           b.add(s);
           b.add(box(1.4, 2.1, 0.1, 0x6f8fbf, 0, 1.05, 3.05));
+          // the clinic has its glass door; the model's own front door would be a second one
+          if (b.userData.door) b.userData.door.visible = false;
           break;
         }
         case 'shop': {
@@ -125,6 +214,10 @@ export class WorldView {
           break;
         }
         case 'chapel': {
+          if (this.bm) {
+            b = this.building('rs_chapel', { wall: mat(PAL.powder), roof: mat(PAL.burgundy) });
+            break;
+          }
           b = new THREE.Group();
           b.add(box(5, 4.2, 8, PAL.powder, 0, 2.1, 0));
           const r = snowRoof(5.8, 8.8, 2.4, PAL.burgundy);
@@ -150,8 +243,12 @@ export class WorldView {
         const cx = v.x + Math.cos(v.rot) * 1.2;
         const cz = v.z - Math.sin(v.rot) * 1.2;
         this.smokeSources.push(new THREE.Vector3(cx, y + 8.2, cz));
-        const ch = box(0.7, 2.5, 0.7, PAL.stone, 1.2, 6.8, 0);
-        b.add(ch);
+        if (b.userData.chimney) {
+          // the model's chimney, where the code put its own (and the smoke)
+          const ch = b.userData.chimney as THREE.Object3D;
+          ch.position.set(1.2, 5.55, 0);
+          ch.visible = true;
+        } else b.add(box(0.7, 2.5, 0.7, PAL.stone, 1.2, 6.8, 0));
       }
       // wood piles and a sled by the door
       if (v.kind === 'house') {
@@ -203,6 +300,16 @@ export class WorldView {
     this.group.add(lodge);
     this.smokeSources.push(new THREE.Vector3(base.x + 19, yb + 9, base.z + 14));
     // top station hut
+    if (this.bm) {
+      // the MeshCraft log cabin fitted to the hut: 6 x 4 m, walls 2.6 m, its roof 7 x 5.4 m, pitch 1.6
+      const hut = this.building('rs_cabin');
+      hut.getObjectByName('body')!.scale.set(6 / 5, 2.6 / 2.3, 1);
+      const roof = hut.getObjectByName('roof')!;
+      roof.position.y = 2.6;
+      roof.scale.set(7 / 6, 1.6 / 1.7, 5.4 / 5.6);
+      hut.position.set(top.x + 10, this.ground(top.x, top.z), top.z - 6 + 2);
+      this.group.add(hut);
+    } else {
     const hut = new THREE.Group();
     const L = logWall(6, 2.6);
     hut.add(L);
@@ -220,6 +327,7 @@ export class WorldView {
     hut.add(r);
     hut.position.set(top.x + 10, this.ground(top.x, top.z), top.z - 6);
     this.group.add(hut);
+    }
     const ts = sign('TOP STATION', 3, 0.6, { bg: '#2f5f9e', fg: '#f3efe6' });
     ts.position.set(top.x + 10, this.ground(top.x, top.z) + 3.4, top.z - 1.8);
     this.group.add(ts);
@@ -314,6 +422,12 @@ export class WorldView {
 
   private buildCabin() {
     const c = pad('cabin');
+    if (this.bm) {
+      const cabin = this.building('rs_cabin');
+      cabin.position.set(c.x, this.ground(c.x, c.z), c.z);
+      this.group.add(cabin);
+      return;
+    }
     const g = new THREE.Group();
     for (const [len, x, z, rot] of [
       [5, 0, -2, 0],
@@ -341,6 +455,13 @@ export class WorldView {
     const x = -342;
     const z = 392;
     const y = this.ground(x, z);
+    if (this.bm) {
+      const bh = this.building('rs_boathouse');
+      bh.position.set(x, y, z);
+      bh.rotation.y = 0.5;
+      this.group.add(bh);
+      return;
+    }
     const g = new THREE.Group();
     g.add(box(5, 2.4, 7, 0x6b4428, 0, 1.2, 0));
     const r = snowRoof(5.8, 7.8, 1.8, 0x5b3a2a);
@@ -372,11 +493,13 @@ export class WorldView {
       this.group.add(g);
     }
     // the barrier hut beside the pass road
-    const hut = new THREE.Group();
-    hut.add(box(2, 2.2, 2, 0xf3efe6, 0, 1.1, 0));
-    const r = snowRoof(2.6, 2.6, 0.7, PAL.red, 0.2);
-    r.position.y = 2.2;
-    hut.add(r);
+    const hut = this.bm ? this.building('rs_barrier_hut', { trim: mat(0xf3efe6), roof: mat(PAL.red) }) : new THREE.Group();
+    if (!this.bm) {
+      hut.add(box(2, 2.2, 2, 0xf3efe6, 0, 1.1, 0));
+      const r = snowRoof(2.6, 2.6, 0.7, PAL.red, 0.2);
+      r.position.y = 2.2;
+      hut.add(r);
+    }
     hut.position.set(gx - 8, this.ground(gx - 8, gz), gz + 2);
     this.group.add(hut);
     // the berm's marker posts
