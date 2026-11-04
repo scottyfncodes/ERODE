@@ -1,8 +1,8 @@
 # Credits
 
 ROCKSLIDE: Mountain Patrol is original work. Everything it ships is made in this repository or with
-[GITCRAFT](https://github.com/scottyfncodes/GITCRAFT), the shared production toolchain, from no
-third-party samples, models or images. Every tool below is free and open source; none of their
+[GITCRAFT](https://github.com/scottyfncodes/GITCRAFT), the shared production toolchain, except two
+CC0 scanned textures from Poly Haven (listed below); no other third-party samples, models or images. Every tool below is free and open source; none of their
 licences extends to what they produced.
 
 ## Code
@@ -12,6 +12,13 @@ licences extends to what they produced.
 | [three.js](https://threejs.org) | MIT |
 | [Rapier](https://rapier.rs) (`@dimforge/rapier3d-deterministic-compat`) | Apache-2.0 |
 | Fonts: [Jost](https://fonts.google.com/specimen/Jost), [Courier Prime](https://fonts.google.com/specimen/Courier+Prime), [IBM Plex Mono](https://fonts.google.com/specimen/IBM+Plex+Mono) (Google Fonts) | SIL Open Font License 1.1 |
+
+## Third-party assets (CC0)
+
+| Asset | Where | Source | Licence |
+| --- | --- | --- | --- |
+| Granite relief and grain (exposed rock) | `public/tex/rock_detail.jpg` | [Tiger Rock](https://polyhaven.com/a/tiger_rock) by Dario Barresi, Poly Haven, fetched and checked with GITCRAFT MaterialCraft `fetch`; packed to 512 px | CC0-1.0, no attribution required (credited anyway) |
+| Wind-packed snow relief | `public/tex/snow_normal.jpg` | [Snow 02](https://polyhaven.com/a/snow_02) by Rob Tuytel, Poly Haven, via MaterialCraft `fetch`; 512 px | CC0-1.0, no attribution required (credited anyway) |
 
 ## Assets made with GITCRAFT
 
@@ -23,6 +30,8 @@ licences extends to what they produced.
 | The Kessel theme (patrol, mission and emergency layers) | `public/audio/music/` | AudioCraft `music` (GITCRAFT's own synth, no samples) + FFmpeg | Owned by this project |
 | Stingers: mission complete, rank up, avalanche warning | `public/audio/sting/` | AudioCraft `music`, `sfx` and `layer` + FFmpeg | Owned by this project |
 | Impact sounds: boots on snow (6 takes), heavy snow and timber landing (4 takes) | `public/audio/sfx/` | AudioCraft `sfx` (`footstep`, `thud`; GITCRAFT's own synth, no samples) + FFmpeg | Owned by this project |
+| The range around the valley (an eroded heightfield) | `src/world/frontRange.ts` | WorldCraft `terrain` (preset mountains, 40 hydraulic + 80 thermal erosion passes, seed 14), downsampled with `art/world/build_range.py` | Owned by this project |
+| High-altitude wind bed | `public/audio/amb/` | AudioCraft `ambience` (wind, seamless 24 s loop) + FFmpeg | Owned by this project |
 | Particle atlas (powder puff, powder burst, charge blast, hearth fire) | `public/fx/kessel-fx.png` | StudioCraft FXCraft `flipbook` (NumPy, Pillow) + `art/fx/build_fx.py` | Owned by this project |
 | Teaser trailer (not shipped in the game) | `docs/trailer/` | CinematicCraft `capture`, `title_card`, `assemble` (Playwright, Chromium, FFmpeg/x264) | Owned by this project |
 
