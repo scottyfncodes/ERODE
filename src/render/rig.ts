@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { Conditions } from '../world/weather';
 import { shared } from './materials';
+import { FOG_GLOW, FOG_SUN, installAtmosphere } from './atmosphere';
+
+// the high-country air replaces three's fog in every shader (before anything compiles)
+installAtmosphere();
 
 export interface Quality {
   tier: 'low' | 'high';
@@ -112,7 +116,8 @@ export class Rig {
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap; // three r18x folds PCFSoft into PCF (and warns when asked for it)
-    this.camera = new THREE.PerspectiveCamera(55, 1, 0.25, 2600);
+    // far enough to see the range that rings the valley (it stands 2-5 km out)
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.25, 7000);
     this.fog = new THREE.Fog(0xcfe0ee, 300, 1700);
     this.scene.fog = this.fog;
 
@@ -129,7 +134,7 @@ export class Rig {
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.4;
     this.scene.add(this.sun, this.sun.target);
-    this.hemi = new THREE.HemisphereLight(0xcfe6ff, 0xe9eef5, 1.1);
+    this.hemi = new THREE.HemisphereLight(0x9fbbe6, 0xd2dbe8, 0.85);
     this.scene.add(this.hemi);
 
     this.skyU = {
@@ -210,38 +215,48 @@ export class Rig {
     const cloud = c.cloud;
     this.night = 1 - day;
     const lerpC = (a: number, b: number, t: number) => new THREE.Color(a).lerp(new THREE.Color(b), t);
-    // clear-sky colours across the day
-    // storybook sky: powder blue over a blush horizon; apricot and lavender at the golden hours; plum at night
-    const zen = lerpC(0x1d1f3d, 0x69aee6, day).lerp(new THREE.Color(0x8d84bd), golden * 0.55);
-    const hor = lerpC(0x3a3157, 0xf2e8e2, day).lerp(new THREE.Color(0xf7b38c), golden * 0.75);
-    // cloud flattens it toward grey
-    const grey = lerpC(0x2a2438, 0xd6d0d4, day);
+    // Colorado high country: thin, dry air at 3,000 m. A deep cobalt zenith over a pale, cool horizon by
+    // day; alpenglow at the ends of the day (peach on the horizon, violet overhead); ink-blue nights.
+    const zen = lerpC(0x0a1022, 0x2c68b8, day).lerp(new THREE.Color(0x5a5f9e), golden * 0.5);
+    const hor = lerpC(0x1a2140, 0xc6d8ea, day).lerp(new THREE.Color(0xf2b089), golden * 0.7);
+    // cloud flattens it toward a cold grey
+    const grey = lerpC(0x1e2230, 0xbfc6cf, day);
     zen.lerp(grey, cloud * 0.85);
-    hor.lerp(grey.clone().multiplyScalar(1.05), cloud * 0.8);
+    hor.lerp(grey.clone().multiplyScalar(1.04), cloud * 0.8);
     (this.skyU.uZenith.value as THREE.Color).copy(zen);
     (this.skyU.uHorizon.value as THREE.Color).copy(hor);
-    (this.skyU.uGround.value as THREE.Color).copy(hor).multiplyScalar(0.92);
+    (this.skyU.uGround.value as THREE.Color).copy(hor).multiplyScalar(0.9);
     this.skyU.uNight.value = this.night;
     this.skyU.uCloud.value = cloud;
     // the sun (or the moon at night)
     if (day > 0.05) this.sunDir.set(Math.cos(c.sunEl) * Math.sin(c.sunAz), Math.max(0.08, Math.sin(c.sunEl)), Math.cos(c.sunEl) * Math.cos(c.sunAz)).normalize();
     else this.sunDir.set(-0.3, 0.75, -0.5).normalize();
-    const sunCol = lerpC(0x9a9ad8, 0xffeed6, day).lerp(new THREE.Color(0xffa978), golden * 0.65);
+    // a hard, warm sun: at altitude the direct light is strong and the shadows are deep and blue
+    const sunCol = lerpC(0x8090c8, 0xfff0dc, day).lerp(new THREE.Color(0xff9e62), golden * 0.7);
     this.sun.color.copy(sunCol);
     (this.skyU.uSunColor.value as THREE.Color).copy(sunCol);
-    this.sun.intensity = (day > 0.05 ? 3.0 * day : 0.5) * (1 - cloud * 0.7) + 0.05;
-    // shade reads lavender, the snow bounces a warm blush back up
-    this.hemi.color.copy(lerpC(0x3a3560, 0xd6def4, day));
-    this.hemi.groundColor.copy(lerpC(0x2a2236, 0xf6ebe4, day));
-    this.hemi.intensity = 0.55 + day * 0.5 + cloud * 0.45;
-    // fog: visibility falls in snow and storms; indoors it pulls in a little
-    const near = THREE.MathUtils.lerp(320, 25, c.fog);
-    const far = THREE.MathUtils.lerp(1800, 230, c.fog);
+    this.sun.intensity = (day > 0.05 ? 3.6 * day : 0.45) * (1 - cloud * 0.72) + 0.05;
+    // skylight: cold blue from above, snow bouncing a little of it back; kept low so form reads
+    this.hemi.color.copy(lerpC(0x28305a, 0x9fbbe6, day));
+    this.hemi.groundColor.copy(lerpC(0x1c2034, 0xd2dbe8, day));
+    this.hemi.intensity = 0.45 + day * 0.38 + cloud * 0.55;
+    // visibility: long on a clear day, closing right in for snow and storms
+    const near = THREE.MathUtils.lerp(260, 15, c.fog);
+    const far = THREE.MathUtils.lerp(7200, 260, c.fog);
     this.fog.near = near;
     this.fog.far = far * (1 - indoors * 0.2);
-    this.fogColor.copy(hor).lerp(grey, c.fog * 0.6);
+    // aerial perspective: the far haze is a cold, slightly lifted blue, greyer in weather
+    this.fogColor.copy(hor).lerp(new THREE.Color(0x9fb8d6).lerp(new THREE.Color(0x101830), 1 - day), 0.45).lerp(grey, c.fog * 0.7);
     this.fog.color.copy(this.fogColor);
-    this.renderer.toneMappingExposure = 0.95 + (1 - day) * 0.35;
+    FOG_SUN[0] = this.sunDir.x;
+    FOG_SUN[1] = this.sunDir.y;
+    FOG_SUN[2] = this.sunDir.z;
+    FOG_SUN[3] = (day > 0.05 ? 1 : 0.15) * (1 - cloud * 0.6) * (1 + golden * 0.8);
+    FOG_GLOW[0] = sunCol.r;
+    FOG_GLOW[1] = sunCol.g;
+    FOG_GLOW[2] = sunCol.b;
+    // snow is bright: hold exposure down so it keeps its form instead of burning out
+    this.renderer.toneMappingExposure = 0.86 + (1 - day) * 0.4;
     shared.wind.value = 0.6 + c.wind * 2.2;
   }
 

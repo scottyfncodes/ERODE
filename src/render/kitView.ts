@@ -133,6 +133,10 @@ export function createKitMaterial(): THREE.MeshStandardMaterial {
           float g1 = eNoise3(vKitWP * 2.3);
           float g2 = eNoise3(vKitWP * 9.0 + 4.0);
           diffuseColor.rgb *= mix(1.0, (0.82 + 0.3 * g1) * (0.92 + 0.14 * g2), rocky);
+          // Colorado granite: the model's storybook pink settles to a cold grey with a little iron in it
+          float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+          vec3 granite = lum * mix(vec3(0.97, 0.99, 1.04), vec3(1.08, 0.98, 0.9), smoothstep(0.35, 0.75, eNoise3(vKitWP * 0.21)));
+          diffuseColor.rgb = mix(diffuseColor.rgb, granite, rocky * 0.8);
           // a cool blue in the shade of the snow caps, to match the slopes
           diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.93, 0.96, 1.02), 1.0 - rocky);
         }`,
