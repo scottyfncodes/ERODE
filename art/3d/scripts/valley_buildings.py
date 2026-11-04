@@ -41,6 +41,11 @@ ROLES = {
     "boards": "#8FBFA8", "batten": "#729988", "header": "#64857A", "floor": "#9C9A94", "rolled": "#E9E2D0",
     "roofDark": "#4A4F55", "steel": "#6E7A85", "rib": "#58626A", "arch": "#4F5A64", "red": "Patrol Red",
     "white": "Paper", "metal": "Steel", "hut": "#5E6266", "dark": "#1A1512",
+    # mission props and the chairlift
+    "catGrey": "#6D7178", "catStripe": "#555960", "catWhite": "#F4F2EE", "catEye": "#C8E05A", "pupil": "#15171A",
+    "nose": "#E8A0A8", "van": "#E9E2D0", "vanStripe": "#2F5F9E", "glass": "Nav Cyan", "tyre": "#1D1F22",
+    "lamp": "Lamp Glow", "bark": "#5E3A22", "barkDark": "#4A2D1A", "needles": "#2B4A33", "soil": "#6B4428",
+    "snow": "Kessel Snow", "post": "Aubergine", "liftSteel": "#6E7A85", "chair": "#2F5F9E", "cushion": "#24497A",
 }
 mats = K.Materials(pal, ROLES, prefix="RS")
 M = mats.__getitem__
@@ -511,6 +516,129 @@ def mast():
     return [finish(p + hut, "mast")]
 
 
+# ------------------------------------------------------------------ mission props
+# (src/render/missionProps.ts: Pepper, the van in its drift, the spruce across the pass road, the barrier)
+def gem(role, r, pos, scale=(1, 1, 1), sub=1, rot=(0, 0, 0)):
+    o = K.ico("g", r, (0, 0, 0), None, sub=sub + 1)
+    o.scale = scale
+    return place(o, pos, rot, role)
+
+
+def cat():
+    """Pepper: a small grey tabby with a white chin, bib and socks, green eyes, a pink nose, and her
+    tail held high in a curl. Faceted like Koda. Same size and pose as the code's cat (nose to -z)."""
+    p = [gem("catGrey", 0.16, (0, 0.18, 0), (0.9, 0.85, 1.4)),
+         gem("catWhite", 0.1, (0, 0.14, -0.12), (0.8, 0.8, 1.0)),
+         gem("catGrey", 0.12, (0, 0.34, -0.2), (1.05, 0.95, 1.0)),
+         gem("catWhite", 0.065, (0, 0.295, -0.28), (1.1, 0.75, 0.9), sub=0),
+         gem("nose", 0.016, (0, 0.33, -0.32), sub=0)]
+    for sx in (-1, 1):
+        p += [place(K.cylinder("ear", 0.0001, 0.09, (0, 0, 0), axis="Y", verts=4, r2=0.045), (sx * 0.06, 0.46, -0.2), (0, 0, -sx * 0.15), "catGrey"),
+              gem("catEye", 0.022, (sx * 0.045, 0.36, -0.305), (1, 0.8, 0.6), sub=0),
+              gem("pupil", 0.01, (sx * 0.045, 0.36, -0.318), (0.5, 1.1, 0.5), sub=0)]
+    for z in (-0.08, 0.0, 0.08):  # tabby stripes over the back
+        p.append(B("catStripe", 0.26, 0.03, 0.035, (0, 0.31, z), (0.1, 0, 0)))
+    for x, z in ((-0.07, -0.12), (0.07, -0.12), (-0.07, 0.12), (0.07, 0.12)):
+        p += [C("catGrey", 0.03, 0.025, 0.1, 5, (x, 0.07, z)), gem("catWhite", 0.032, (x, 0.02, z - 0.01), (1, 0.6, 1.2), sub=0)]
+    # the tail: up from the rump and curling forward at the tip
+    for i, (y, z, a) in enumerate(((0.26, 0.24, -0.5), (0.41, 0.27, -0.15), (0.54, 0.24, 0.45))):
+        p.append(C("catGrey" if i < 2 else "catStripe", 0.022, 0.027, 0.17, 5, (0, y, z), (a, 0, 0)))
+    return [finish(p, "cat")]
+
+
+def van():
+    """The van in the drift: a cream panel van with a blue stripe, a cab with its windscreen, side
+    windows, headlamps and a bumper, wheel arches and tyres, a roof rack, and the drift it slid into."""
+    p = [B("van", 2.1, 2.0, 4.6, (0, 1.4, 0.2), bevel=0.12), B("van", 2.0, 1.3, 1.4, (0, 1.05, -2.6), bevel=0.15),
+         B("vanStripe", 2.13, 0.35, 4.62, (0, 1.6, 0.2)), B("glass", 1.9, 0.7, 0.08, (0, 1.45, -3.32), (-0.15, 0, 0)),
+         B("tyre", 2.04, 0.25, 0.2, (0, 0.55, -3.33)), B("roofSnow", 2.0, 0.18, 4.4, (0, 2.48, 0.2), bevel=0.05)]
+    for sx in (-1, 1):
+        p += [B("glass", 0.06, 0.55, 0.9, (sx * 1.0, 1.55, -2.45)), B("glass", 0.06, 0.5, 1.1, (sx * 1.06, 1.9, -1.2)),
+              B("lamp", 0.35, 0.18, 0.06, (sx * 0.72, 0.95, -3.32)), B("logDark", 0.06, 0.06, 0.25, (sx * 1.08, 1.7, -1.9))]
+    for x, z in ((-1.05, -2.3), (1.05, -2.3), (-1.05, 1.6), (1.05, 1.6)):
+        p += [C("tyre", 0.42, 0.42, 0.3, 10, (x, 0.42, z), (0, 0, math.pi / 2)), C("metal", 0.2, 0.2, 0.32, 8, (x, 0.42, z), (0, 0, math.pi / 2))]
+    for x in (-0.8, 0.8):
+        p.append(B("metal", 0.05, 0.08, 3.6, (x, 2.5, 0.2)))
+    for z in (-1.2, 0.2, 1.6):
+        p.append(B("metal", 1.7, 0.06, 0.06, (0, 2.55, z)))
+    drift = K.sphere("drift", 2.6, (0, 0, 0), None, segs=12, rings=7)
+    K.deform(drift, lambda v: Vector((v.x * 1.0, v.z * 0.45, -v.y * 1.6)))
+    p.append(place(drift, (1.4, 0.2, 0.5), (0, 0, 0), "snow"))
+    return [finish(p, "van")]
+
+
+def fallen_tree():
+    """The spruce across the pass road: a 14 m trunk (the top toward -x), broken branch stubs, tiers of
+    snow-loaded boughs lying on their side, and the root plate torn up at +x with its roots and soil."""
+    p = [C("bark", 0.35, 0.5, 14, 8, (0, 0.5, 0), (0, 0, math.pi / 2))]
+    for i in range(6):
+        x = -5 + i * 2.2
+        a = i * 1.7
+        p.append(C("barkDark", 0.06, 0.1, 0.7, 5, (x, 0.5 + math.cos(a) * 0.45, math.sin(a) * 0.45), (a, 0, 0)))
+    for i in range(5):
+        x = -2 - i * 1.5
+        r = 1.5 - i * 0.2
+        bough = place(K.cylinder("tier", 0.0001, 2.2, (0, 0, 0), axis="Y", verts=7, r2=r), (x, 0.9, 0), (0, 0, math.pi / 2), "needles")
+        snow = place(K.cylinder("cap", 0.0001, 1.6, (0, 0, 0), axis="Y", verts=7, r2=r * 0.8), (x, 1.4, 0), (0, 0, math.pi / 2), "snow")
+        snow.scale = (1, 0.55, 1)
+        p += [bough, snow]
+    p += [C("soil", 1.6, 1.6, 0.5, 10, (7, 1.2, 0), (0, 0, math.pi / 2)), C("snow", 1.4, 1.5, 0.12, 10, (7.18, 1.5, 0), (0, 0, math.pi / 2))]
+    for k in range(7):
+        a = k * math.tau / 7
+        p.append(C("barkDark", 0.04, 0.12, 1.3, 5, (7.3, 1.2 + math.cos(a) * 1.3, math.sin(a) * 1.3), (a, 0, math.pi / 2 - 0.3)))
+    for k, (y, z) in enumerate(((0.5, 0.8), (1.9, -0.6), (0.9, -1.1))):
+        p.append(gem("stoneDark", 0.22, (7.3, y, z), (1, 0.8, 1.1), sub=0))
+    return [finish(p, "tree")]
+
+
+def barrier():
+    """The pass barrier: a post with its motor housing and counterweight, a rest fork at the far end,
+    and the red and white arm on its pivot (a node of its own: the game swings it up and down)."""
+    base = [C("post", 0.18, 0.22, 1.3, 8, (0, 0.65, 0)), B("post", 0.5, 0.5, 0.45, (0, 1.05, 0), bevel=0.04),
+            B("red", 0.52, 0.12, 0.47, (0, 1.32, 0)), C("stoneDark", 0.35, 0.4, 0.15, 8, (0, 0.07, 0)),
+            C("post", 0.06, 0.06, 1.1, 6, (7.0, 0.55, 0)), B("post", 0.3, 0.08, 0.08, (7.0, 1.1, 0)),
+            B("post", 0.06, 0.2, 0.08, (6.88, 1.2, 0)), B("post", 0.06, 0.2, 0.08, (7.12, 1.2, 0))]
+    arm = [B("post", 0.5, 0.3, 0.3, (-0.45, 1.25, 0), bevel=0.03)]
+    for i in range(6):
+        arm.append(B("white" if i % 2 else "red", 1.2, 0.18, 0.12, (0.6 + i * 1.2, 1.25, 0)))
+    return [finish(base, "barrier"), finish(arm, "arm", (0, 1.25, 0))]
+
+
+# ------------------------------------------------------------------ the Tannberg chairlift
+def lift_tower(h, end):
+    """A lift tower: a tapering steel column on a footing, a ladder, and at the top the crossarm with a
+    sheave train under each end (the cable runs over them). The end towers carry the bullwheel."""
+    p = [C("stoneDark", 0.6, 0.7, 0.4, 8, (0, 0.2, 0)), C("liftSteel", 0.22, 0.32, h, 8, (0, h / 2, 0))]
+    for i in range(int(h / 0.45)):
+        p.append(B("metal", 0.3, 0.035, 0.035, (0, 0.6 + i * 0.45, 0.3)))
+    p += [B("metal", 0.035, h - 0.8, 0.035, (0.14, h / 2 + 0.2, 0.3)), B("metal", 0.035, h - 0.8, 0.035, (-0.14, h / 2 + 0.2, 0.3))]
+    p.append(B("liftSteel", 3.4, 0.3, 0.4, (0, h, 0), bevel=0.03))
+    if end:
+        p += [place(K.torus("bull", 1.5, 0.15, (0, 0, 0), axis="Y", major=16, minor=6), (0, h, 0), (0, 0, 0), "post"),
+              C("liftSteel", 0.25, 0.25, 0.5, 8, (0, h + 0.3, 0)), B("roofSnow", 0.6, 0.12, 0.5, (0, h + 0.6, 0))]
+    else:
+        for sx in (-1, 1):
+            p += [B("liftSteel", 0.9, 0.12, 0.2, (sx * 1.5, h - 0.25, 0)),
+                  C("post", 0.12, 0.12, 0.08, 8, (sx * 1.5 - 0.3, h - 0.38, 0), (math.pi / 2, 0, 0)),
+                  C("post", 0.12, 0.12, 0.08, 8, (sx * 1.5 + 0.3, h - 0.38, 0), (math.pi / 2, 0, 0))]
+        p.append(B("roofSnow", 3.3, 0.1, 0.36, (0, h + 0.2, 0)))
+    return [finish(p, "tower")]
+
+
+def chair():
+    """A double chair: the grip at the cable (the origin), the hanger down to the seat, a padded seat
+    and back in Tannberg blue, armrests, the safety bar and a footrest. Faces +z (the code's chair)."""
+    p = [B("metal", 0.2, 0.12, 0.25, (0, 0, 0)), C("post", 0.03, 0.03, 1.5, 6, (0, -0.8, 0)),
+         B("post", 1.25, 0.05, 0.05, (0, -1.55, 0)),
+         B("chair", 1.2, 0.1, 0.5, (0, -1.6, 0)), B("cushion", 1.1, 0.06, 0.44, (0, -1.53, 0)),
+         B("chair", 1.2, 0.6, 0.08, (0, -1.3, 0.25)), B("cushion", 1.1, 0.5, 0.05, (0, -1.3, 0.2))]
+    for sx in (-1, 1):
+        p += [B("post", 0.05, 0.3, 0.05, (sx * 0.62, -1.42, 0.0)), B("post", 0.05, 0.05, 0.5, (sx * 0.62, -1.28, -0.02))]
+    p += [B("post", 1.25, 0.04, 0.04, (0, -1.15, -0.5)), B("post", 0.04, 0.04, 0.5, (0, -1.15, -0.25)),
+          B("post", 0.04, 0.5, 0.04, (0, -1.4, -0.5)), B("post", 1.0, 0.04, 0.2, (0, -1.65, -0.55))]
+    return [finish(p, "chair")]
+
+
 BUILD = {
     "rs_chalet": lambda: chalet(6.0, 5.0, 2, 2),
     "rs_chalet_wide": lambda: chalet(10.0, 7.5, 2, 3),
@@ -524,6 +652,13 @@ BUILD = {
     "rs_equipment": equipment,
     "rs_doghouse": doghouse,
     "rs_mast": mast,
+    "rs_cat": cat,
+    "rs_van": van,
+    "rs_fallen_tree": fallen_tree,
+    "rs_barrier": barrier,
+    "rs_lift_tower": lambda: lift_tower(10, False),
+    "rs_lift_tower_end": lambda: lift_tower(6, True),
+    "rs_chair": chair,
 }
 objs = BUILD[asset]()
 bpy.ops.wm.save_as_mainfile(filepath=A["out"])
