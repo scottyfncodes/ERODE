@@ -3,6 +3,7 @@ import { BADGES } from '../progress/catalog';
 import type { Terrain } from '../world/terrain';
 import { EQUIP, GARAGE, HANGAR, KENNEL, LODGE, MAST, PAD, SPOTS, WING, type UpgradeId } from '../world/station';
 import { bakeInPlace, ball, box, cyl, gable, glow, logWall, mat, PAL, shade, snowRoof, windowPane } from './kit';
+import { paintModel, YARD_IDS, type PatrolModels, type YardId } from './patrolModels';
 
 /** A painted sign: chunky letters on a board. */
 export function signTexture(text: string, bg = '#7b2f3b', fg = '#f6ecdc', w = 512, h = 128, accent?: string): THREE.CanvasTexture {
@@ -80,8 +81,14 @@ export class StationView {
   private gate: THREE.Object3D | null = null;
   private t = 0;
   readonly y: number;
+  /** the MeshCraft yard buildings (garage, hangar, equipment room, Koda's house, the mast), when every one loaded */
+  private ym: Record<YardId, THREE.Object3D> | null;
+  /** true when the yard's buildings are the MeshCraft models (the lodge and its wing stay code-built) */
+  readonly modelled: boolean;
 
-  constructor(t: Terrain, topo: HTMLCanvasElement) {
+  constructor(t: Terrain, topo: HTMLCanvasElement, models: PatrolModels = {}) {
+    this.ym = YARD_IDS.every((id) => models[id]) ? (Object.fromEntries(YARD_IDS.map((id) => [id, models[id]!])) as unknown as Record<YardId, THREE.Object3D>) : null;
+    this.modelled = !!this.ym;
     this.y = t.height(LODGE.x, LODGE.z);
     const y = this.y;
     this.windows = new THREE.MeshLambertMaterial({ color: PAL.window, emissive: 0xffa040, emissiveIntensity: 0.2 });
@@ -322,6 +329,11 @@ export class StationView {
     return { group: g, roof, walls, x: L.x, z: L.z };
   }
 
+  /** A MeshCraft yard building, painted with the game's own materials (see paintModel). */
+  private yard(id: YardId, paint: Record<string, THREE.Material>): THREE.Group {
+    return paintModel(this.ym![id], { roofSnow: mat(PAL.roofSnow), logDark: mat(PAL.logDark), stoneDark: mat(PAL.stoneDark), red: mat(PAL.red), white: mat(PAL.white), metal: mat(PAL.metal), trim: mat(PAL.white), ...paint }, (hex) => mat(hex));
+  }
+
   private buildGarage(y: number): Room {
     const G = GARAGE;
     const g = new THREE.Group();
@@ -330,8 +342,44 @@ export class StationView {
     const hd = G.d / 2;
     // the garage: painted mint boards
     const plank = 0x8fbfa8;
-    g.add(box(G.w, 0.15, G.d, 0x9c9a94, 0, 0.07, 0));
     const walls: Room['walls'] = [];
+    let roof: THREE.Group;
+    if (this.ym) {
+      // the MeshCraft garage: each wall, the front and the roof its own node, for the cut-away
+      const m = this.yard('rs_garage', {
+        boards: mat(plank),
+        batten: mat(shade(plank, 0.8)),
+        header: mat(shade(plank, 0.7)),
+        floor: mat(0x9c9a94),
+        rolled: mat(0xe9e2d0),
+        roofDark: mat(0x4a4f55),
+        window: this.windows,
+      });
+      const node = (n: string) => m.getObjectByName(n)!;
+      g.add(node('floor'));
+      for (const [n, nx, nz] of [
+        ['wall_n', 0, -1],
+        ['wall_s', 0, 1],
+        ['wall_e', 1, 0],
+      ] as const) {
+        const o = new THREE.Group();
+        o.add(node(n));
+        g.add(o);
+        walls.push({ obj: o, nx, nz });
+      }
+      const front = new THREE.Group();
+      front.add(node('front'));
+      const s = sign('GARAGE', 2.6, 0.55, { bg: '#7b2f3b', fg: '#f6ecdc' });
+      s.position.set(-hw - 0.22, G.wallH + 0.4, 0);
+      s.rotation.y = -Math.PI / 2;
+      front.add(s);
+      g.add(front);
+      walls.push({ obj: front, nx: -1, nz: 0 });
+      roof = new THREE.Group();
+      roof.add(node('roof'));
+      g.add(roof);
+    } else {
+    g.add(box(G.w, 0.15, G.d, 0x9c9a94, 0, 0.07, 0));
     const wall = (w: number, d: number, x: number, z: number, nx: number, nz: number) => {
       const o = new THREE.Group();
       o.add(box(w, G.wallH, d, plank, x, G.wallH / 2, z));
@@ -361,7 +409,7 @@ export class StationView {
     front.add(s);
     g.add(front);
     walls.push({ obj: front, nx: -1, nz: 0 });
-    const roof = new THREE.Group();
+    roof = new THREE.Group();
     const r = snowRoof(G.w + 1.2, G.d + 1.2, 1.8, 0x4a4f55);
     r.position.y = G.wallH;
     roof.add(r);
@@ -371,6 +419,7 @@ export class StationView {
       roof.add(ge);
     }
     g.add(roof);
+    }
     // inside: the explosives locker, oil drums, a bench
     const locker = new THREE.Group();
     locker.add(box(1.2, 1.8, 0.6, PAL.red, 0, 0.9, 0));
@@ -442,14 +491,20 @@ export class StationView {
   private buildKennel(y: number, upgraded: boolean): THREE.Group {
     const g = new THREE.Group();
     g.position.set(KENNEL.x, y, KENNEL.z);
-    const house = new THREE.Group();
     const s = upgraded ? 1.25 : 1;
-    house.add(box(1.8 * s, 1.1 * s, 2.2 * s, upgraded ? 0x7a4f2e : 0x8a603a, 0, 0.55 * s, 0));
+    const wood = upgraded ? 0x7a4f2e : 0x8a603a;
+    const house = this.ym
+      ? this.yard('rs_doghouse', { wall: mat(wood), plank: mat(shade(wood, 0.85)), roof: mat(upgraded ? PAL.red : PAL.roof), dark: mat(0x1a1512) })
+      : new THREE.Group();
+    if (this.ym) house.scale.setScalar(s);
+    else {
+    house.add(box(1.8 * s, 1.1 * s, 2.2 * s, wood, 0, 0.55 * s, 0));
     const r = snowRoof(2.4 * s, 2.6 * s, 0.8 * s, upgraded ? PAL.red : PAL.roof, 0.18);
     r.rotation.y = Math.PI / 2;
     r.position.y = 1.1 * s;
     house.add(r);
     house.add(box(0.75 * s, 0.75 * s, 0.05, 0x1a1512, 0, 0.42 * s, 1.11 * s));
+    }
     g.add(house);
     // bowl (and a name board when upgraded)
     g.add(cyl(0.22, 0.17, 0.12, 12, 0x2f5f9e, SPOTS.bowl.x - KENNEL.x, 0.06, SPOTS.bowl.z - KENNEL.z));
@@ -481,6 +536,9 @@ export class StationView {
     const g = new THREE.Group();
     g.position.set(H.x, y, H.z);
     const steel = 0x6e7a85;
+    if (this.ym) {
+      g.add(this.yard('rs_hangar', { steel: mat(steel), rib: mat(shade(steel, 0.8)), arch: mat(0x4f5a64), floor: mat(0x9c9a94), hut: mat(0x5e6266) }));
+    } else {
     g.add(box(H.w, 0.15, H.d, 0x9c9a94, 0, 0.07, 0));
     g.add(box(H.w - 2, H.wallH, 0.3, steel, 1, H.wallH / 2, -H.d / 2), box(H.w - 2, H.wallH, 0.3, steel, 1, H.wallH / 2, H.d / 2), box(0.3, H.wallH, H.d, steel, H.w / 2, H.wallH / 2, 0));
     for (let i = 0; i < 10; i++) {
@@ -498,6 +556,7 @@ export class StationView {
     snow.scale.copy(roof.scale);
     snow.position.copy(roof.position);
     g.add(roof, snow);
+    }
     const s = sign('HANGAR 1', 4, 0.8, { bg: '#5a4f6e', fg: '#e0b042' });
     s.position.set(-H.w / 2 + 1.2, H.wallH + 1.6, 0);
     s.rotation.y = -Math.PI / 2;
@@ -511,12 +570,16 @@ export class StationView {
     const E = EQUIP;
     const g = new THREE.Group();
     g.position.set(E.x, y, E.z);
+    if (this.ym) {
+      g.add(this.yard('rs_equipment', { boat: mat(0x7a4f2e), boatDark: mat(0x5e3a22), roof: mat(PAL.roof), window: this.windows }));
+    } else {
     g.add(box(E.w, E.wallH, E.d, 0x7a4f2e, 0, E.wallH / 2, 0));
     for (let i = 0; i < 12; i++) g.add(box(0.08, E.wallH, E.d + 0.04, 0x5e3a22, -E.w / 2 + 0.4 + i * 0.75, E.wallH / 2, 0));
     const r = snowRoof(E.w + 1, E.d + 1, 1.4);
     r.position.y = E.wallH;
     g.add(r);
     g.add(box(1.4, 2.2, 0.1, 0x3d2a1c, 0, 1.1, E.d / 2 + 0.05));
+    }
     const s = sign('EQUIPMENT', 3, 0.55, { bg: '#9cc9b3', fg: '#3a2632' });
     s.position.set(0, E.wallH - 0.4, E.d / 2 + 0.08);
     g.add(s);
@@ -567,6 +630,9 @@ export class StationView {
     const g = new THREE.Group();
     g.position.set(MAST.x, y, MAST.z);
     const H = 20;
+    if (this.ym) {
+      g.add(this.yard('rs_mast', { hut: mat(0x5e6266), roofDark: mat(0x4a4f55) }));
+    } else {
     for (let i = 0; i < 8; i++) {
       const c = i % 2 ? PAL.white : PAL.red;
       const seg = cyl(0.55 - i * 0.04, 0.6 - i * 0.04, H / 8, 4, c, 0, (i + 0.5) * (H / 8), 0);
@@ -578,9 +644,10 @@ export class StationView {
     dish.rotation.z = Math.PI / 2;
     dish.position.set(-0.6, 12, 0);
     g.add(dish);
+    g.add(box(2.2, 1.8, 1.8, 0x5e6266, 1.6, 0.9, 1.6));
+    }
     const beacon = ball(0.3, glow(0xff3020), 0, H + 0.3, 0, 8);
     g.add(beacon);
-    g.add(box(2.2, 1.8, 1.8, 0x5e6266, 1.6, 0.9, 1.6));
     return { group: g, beacon };
   }
 

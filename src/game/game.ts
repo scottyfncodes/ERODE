@@ -121,7 +121,7 @@ export class Game {
   private fps = 60;
   private kitLoaded: string[] = [];
   /** which code-built meshes the MeshCraft models replaced (QA) */
-  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false, buildings: false };
+  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false, buildings: false, yard: false };
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
   /** the ?stats performance readout (off unless asked for) */
@@ -156,7 +156,8 @@ export class Game {
     this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z), this.rig.quality.tier === 'high');
     scene.add(this.kitView.group);
     progress(0.7, 'Lighting the stove');
-    this.station = new StationView(this.terrain, this.topo);
+    this.station = new StationView(this.terrain, this.topo, models);
+    this.modelled.yard = this.station.modelled;
     this.world = new WorldView(this.terrain, models);
     this.modelled.buildings = this.world.modelled;
     this.markers = new Markers(this.terrain);
