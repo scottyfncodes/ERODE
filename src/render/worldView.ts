@@ -388,8 +388,8 @@ export class WorldView {
         const geo = geos.length === 1 ? geos[0] : mergeGeometries(geos.map((g) => (g.index ? g.toNonIndexed() : g)), false)!;
         const inst = new THREE.InstancedMesh(geo, material, chairs);
         inst.castShadow = true;
-        // the chairs travel the whole line: cull them as a lot, not by their first places
-        inst.frustumCulled = false;
+        // the chairs travel the whole line: cull them as a lot, by a sphere round the whole lift
+        inst.boundingSphere = new THREE.Sphere(towers[0].clone().lerp(towers[n], 0.5), towers[0].distanceTo(towers[n]) / 2 + 6);
         this.chairInst.push(inst);
         this.group.add(inst);
       }
