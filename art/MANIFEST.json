@@ -130,11 +130,11 @@
   },
   {
    "path": "../public/models/rs_patroller.glb",
-   "bytes": 164320,
+   "bytes": 166516,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_patroller: the patroller (and villagers), skinned on a 25-bone skeleton of the code's own joints (same names, pivots, zero rest pose); 2606 tris drawn with the beanie and gear (code-built 2558), welded vertices (1839 in all) for cheap skinning; hats/skis/poles/gear as toggled meshes; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched to the code-built figure in tests/people.test.ts",
-   "sha256": "7c4b5a29482cb0a6b8e586d0003ade6e533795f802d4943415b05c2bb146f525"
+   "notes": "rs_patroller: the patroller (and villagers), skinned on a 25-bone skeleton of the code's own joints; face pass: eyes with catchlights blinking about their own centres, visible brows, button nose, blush discs, a smile crescent, rounded ears, temple tufts; hats cut as shells that stop above the brows; 2642 tris drawn with the beanie and gear; art/3d/scripts/patrol_people.py; Khronos 0 errors, engine-checked (three@0.170), motion matched to the code-built figure in tests/people.test.ts",
+   "sha256": "1af970847d34ae4f81a558474202f53e6f41819f5bce46065c7d5a531dcee6d0"
   },
   {
    "path": "../public/models/rs_sled.glb",
@@ -178,5 +178,5 @@
   }
  ],
  "files": 22,
- "updated": "2026-11-03"
+ "updated": "2026-11-04"
 }

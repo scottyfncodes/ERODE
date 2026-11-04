@@ -510,8 +510,6 @@ export class PatrollerMesh {
       [this.neck, 'neck'],
       [this.head, 'head'],
       [this.pack, 'pack'],
-      [this.eyes[0], 'eye_L'],
-      [this.eyes[1], 'eye_R'],
       [this.poms[0], 'pom_beanie'],
       [this.poms[1], 'pom_bobble'],
       [this.tails[0].a, 'scarf_a_0'],
@@ -530,6 +528,10 @@ export class PatrollerMesh {
       b.rotation.copy(a.rotation);
       b.scale.copy(a.scale);
     }
+    // the model's eyes sit lower on its face (clear of the hat band) and blink about their own
+    // centres, so their bones keep the model's pivots and only take the current blink
+    n.eye_L.scale.copy(this.eyes[0].scale);
+    n.eye_R.scale.copy(this.eyes[1].scale);
     // the cat (or whatever is held) stays in the right glove
     n.elbow_R.add(this.held);
     retire([this.body]);

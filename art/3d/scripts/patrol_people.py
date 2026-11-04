@@ -77,10 +77,16 @@ def G(n, r, pos, detail=1, scale=(1, 1, 1), rot=(0, 0, 0)):
     return place(K.ico(n, r, (0, 0, 0), None, sub=detail + 1), pos, rot, scale)
 
 
-def S(n, r, pos, seg=9, scale=(1, 1, 1)):
-    """three's SphereGeometry(r, seg, round(seg * 0.7)), poles on y."""
+def P(n, outline, depth, pos, rot=(0, 0, 0)):
+    """An outline [(x, y), ...] in the xy plane, extruded along z (depth)."""
+    return place(K.prism(n, outline, depth, (0, 0, 0), axis="Z"), pos, rot)
+
+
+def S(n, r, pos, seg=9, scale=(1, 1, 1), floor=None):
+    """three's SphereGeometry(r, seg, round(seg * 0.7)), poles on y. `floor` (in the sphere's own
+    units, before scaling) flattens everything below it: a dome with no underside."""
     o = K.sphere(n, r, (0, 0, 0), None, segs=seg, rings=max(4, round(seg * 0.7)))
-    K.deform(o, lambda v: Vector((v.x, v.z, -v.y)))
+    K.deform(o, lambda v: Vector((v.x, v.z if floor is None else max(v.z, floor), -v.y)))
     return place(o, pos, (0, 0, 0), scale)
 
 
@@ -176,8 +182,10 @@ def patroller():
         r.bone(f"elbow_{s}", f"shoulder_{s}", (0, -0.29, 0))
     r.bone("neck", "chest", (0, 0.4, 0))
     r.bone("head", "neck", (0, 0.13, 0))
-    r.bone("eye_L", "head", (-0.064, 0.15, -0.165))
-    r.bone("eye_R", "head", (0.064, 0.15, -0.165))
+    # the eyes sit lower than the code-built figure's (out from under the hat band); they blink about
+    # their own centres, so the bones move with them
+    r.bone("eye_L", "head", (-0.062, 0.127, -0.17))
+    r.bone("eye_R", "head", (0.062, 0.127, -0.17))
     r.bone("pom_beanie", "head", (0, 0.21 + H * 0.88, 0.01))
     r.bone("pom_bobble", "head", (0, 0.225 + H * 1.08, 0.01))
     tails = ((0, -0.03, 0.2), (1, 0.035, 0.17))
@@ -233,38 +241,49 @@ def patroller():
     hd = lambda p: J("head", p)  # noqa: E731
     r.add(body, "head", G("face", 0.185, hd((0, 0.13, 0)), 1, (0.95, 1.06, 1)), "skin")
     r.add(body, "head", G("hairCap", 0.19, hd((0, 0.165, 0.035)), 1), "hair")
-    for i, (x, z) in enumerate(((-0.07, -0.15), (0.0, -0.165), (0.075, -0.15))):
-        r.add(body, "head", G(f"fringe{i}", 0.04, hd((x, 0.275, z)), 0, (1.2, 0.6, 0.8)), "hair")
-    r.add(body, "head", G("nose", 0.037, hd((0, 0.105, -0.185)), 0, (0.9, 1.1, 1.15)), "nose")
-    r.add(body, "eye_L", G("eyeL", 0.022, hd((-0.064, 0.15, -0.165)), 0), "eye")
-    r.add(body, "eye_R", G("eyeR", 0.022, hd((0.064, 0.15, -0.165)), 0), "eye")
-    r.add(body, "head", B("browL", 0.065, 0.014, 0.012, hd((-0.064, 0.193, -0.168)), (0, 0, -0.12)), "hair")
-    r.add(body, "head", B("browR", 0.065, 0.014, 0.012, hd((0.064, 0.193, -0.168)), (0, 0, 0.12)), "hair")
-    r.add(body, "head", G("cheekL", 0.03, hd((-0.1, 0.09, -0.145)), 0), "cheek")
-    r.add(body, "head", G("cheekR", 0.03, hd((0.1, 0.09, -0.145)), 0), "cheek")
-    for i in range(3):  # the smile: a short arc of three facets
-        a = math.pi * (0.25 + 0.25 * i)
-        r.add(body, "head", B(f"smile{i}", 0.026, 0.012, 0.01, hd((math.cos(a) * 0.032, 0.07 - math.sin(a) * 0.022, -0.172)), (0, 0, (a - math.pi / 2) * 0.8)), "smile")
-    r.add(body, "head", G("earL", 0.04, hd((-0.178, 0.125, 0)), 0), "skin")
-    r.add(body, "head", G("earR", 0.04, hd((0.178, 0.125, 0)), 0), "skin")
+    # A face that reads at phone size: eyes, brows, nose, blush and smile all below the hat band.
+    # tufts of hair at the temples, under the band (the old fringe poked out through the hat)
+    for sx in (-1, 1):
+        r.add(body, "head", G(f"tuft{sx}", 0.045, hd((sx * 0.162, 0.135, -0.04)), 0, (0.55, 1.25, 0.9), (0, 0, sx * 0.25)), "hair")
+    # eyes: dark ovals with a catchlight; each blinks (squashes) about its own centre
+    for s_, sx in (("L", -1), ("R", 1)):
+        e = f"eye_{s_}"
+        r.add(body, e, G(f"eye{s_}", 0.024, J(e, (0, 0, 0.003)), 0, (0.82, 1.3, 0.45)), "eye")
+        r.add(body, e, B(f"glint{s_}", 0.011, 0.011, 0.006, J(e, (0.007, 0.01, -0.0075)), (0, 0, 0.6)), "patchWhite")
+        # brows: a soft arch just under the band, lifted at the inner end (friendly, a little keen)
+        r.add(body, "head", B(f"brow{s_}", 0.046, 0.009, 0.01, hd((sx * 0.064, 0.16, -0.177)), (-0.25, sx * 0.15, sx * 0.14)), "hair")
+    # a button nose
+    r.add(body, "head", G("nose", 0.026, hd((0, 0.098, -0.19)), 0, (1, 0.85, 0.95)), "nose")
+    # blush: flat discs lying on the cheeks
+    for sx in (-1, 1):
+        # on the face's own surface there (x 0.098, 4.5 cm below its centre), facing the way it does
+        r.add(body, "head", C(f"blush{sx}", 0.026, 0.026, 0.005, 6, hd((sx * 0.096, 0.085, -0.146)), (math.pi / 2, 0, sx * 0.63), (1, 1, 0.75)), "cheek")
+    # the smile: one crescent, tipped to follow the face down toward the chin
+    arc = [(math.cos(a) * 0.036, math.sin(a) * 0.02) for a in (math.pi * (1.1 + 0.2 * i) for i in range(5))]
+    inner = [(x * 0.86, y * 0.62 + 0.002) for x, y in arc[::-1]]  # a thin, upturned line: a smile, not lips
+    r.add(body, "head", P("smile", arc + inner, 0.01, hd((0, 0.073, -0.177)), (-0.32, 0, 0)), "smile")
+    # rounded ears
+    for sx in (-1, 1):
+        r.add(body, "head", S(f"ear{sx}", 0.045, hd((sx * 0.178, 0.122, 0.005)), 6, (0.42, 1, 0.78)), "skin")
     # goggles pushed up on the brow
     r.add(body, "head", C("gStrap", 0.19, 0.19, 0.04, 9, hd((0, 0.225, 0.01))), "dark")
     r.add(body, "head", B("gFrame", 0.25, 0.085, 0.05, hd((0, 0.232, -0.165)), bevel=0.01), "dark")
     r.add(body, "head", B("gLens", 0.225, 0.065, 0.06, hd((0, 0.232, -0.17))), "lens")
 
-    # ---- hats (one shows at a time); pom-poms on their own joints
-    r.add("pat_hat_beanie", "head", S("dome", H, hd((0, 0.21, 0.01)), 9, (1, 0.92, 1)), "hatMain")
-    r.add("pat_hat_beanie", "head", C("band", H + 0.008, H + 0.012, 0.08, 9, hd((0, 0.205, 0.01))), "hatSecond")
+    # ---- hats (one shows at a time); pom-poms on their own joints. Each crown is a dome with no
+    # underside (floor) that stops inside its band, so it never covers the face or shows through
+    r.add("pat_hat_beanie", "head", S("dome", H, hd((0, 0.21, 0.01)), 9, (1, 0.92, 1), floor=-0.035 / 0.92), "hatMain")
+    r.add("pat_hat_beanie", "head", C("band", H + 0.016, H + 0.02, 0.08, 9, hd((0, 0.205, 0.01))), "hatSecond")
     r.add("pat_hat_beanie", "pom_beanie", G("pom", 0.05, J("pom_beanie", (0, 0.05 * 0.75, 0)), 1), "hatSecond")
-    r.add("pat_hat_helmet", "head", S("shell", H + 0.02, hd((0, 0.195, 0.01)), 10, (1, 0.95, 1.06)), "hatMain")
+    r.add("pat_hat_helmet", "head", S("shell", H + 0.02, hd((0, 0.195, 0.01)), 10, (1, 0.95, 1.06), floor=-0.028 / 0.95), "hatMain")
     r.add("pat_hat_helmet", "head", B("ridge", 0.05, 0.04, 0.27, hd((0, 0.39, 0.01))), "hatSecond")
     r.add("pat_hat_helmet", "head", B("badge", 0.08, 0.08, 0.015, hd((0, 0.245, 0.215))), "hatSecond")
-    r.add("pat_hat_trapper", "head", S("cap", H + 0.006, hd((0, 0.205, 0.01)), 9, (1, 0.9, 1)), "hatMain")
-    r.add("pat_hat_trapper", "head", C("brim", H + 0.014, H + 0.014, 0.08, 9, hd((0, 0.195, 0.01))), "hatSecond")
+    r.add("pat_hat_trapper", "head", S("cap", H + 0.006, hd((0, 0.205, 0.01)), 9, (1, 0.9, 1), floor=-0.04 / 0.9), "hatMain")
+    r.add("pat_hat_trapper", "head", C("brim", H + 0.024, H + 0.024, 0.08, 9, hd((0, 0.204, 0.01))), "hatSecond")
     for sx in (-1, 1):
         r.add("pat_hat_trapper", "head", G(f"earflap{sx}", 0.09, hd((sx * 0.185, 0.1, 0.01)), 0, (0.42, 1, 0.8)), "hatSecond")
-    r.add("pat_hat_bobble", "head", S("bdome", H, hd((0, 0.225, 0.01)), 9, (1, 1.14, 1)), "hatMain")
-    r.add("pat_hat_bobble", "head", C("bband", H + 0.008, H + 0.012, 0.07, 9, hd((0, 0.195, 0.01))), "hatSecond")
+    r.add("pat_hat_bobble", "head", S("bdome", H, hd((0, 0.225, 0.01)), 9, (1, 1.14, 1), floor=-0.065 / 1.14), "hatMain")
+    r.add("pat_hat_bobble", "head", C("bband", H + 0.016, H + 0.02, 0.07, 9, hd((0, 0.195, 0.01))), "hatSecond")
     r.add("pat_hat_bobble", "pom_bobble", G("bpom", 0.085, J("pom_bobble", (0, 0.085 * 0.75, 0)), 1), "hatSecond")
 
     # ---- the patrol's gear (the villagers go without): straps, radio, the cross, the pack
