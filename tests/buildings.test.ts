@@ -17,7 +17,7 @@ function load(id: string): Promise<THREE.Group> {
 // The signs paint their lettering on a canvas; the test runner has none, so give it a stand-in that
 // draws nothing (the signs are not what is under test here).
 const ctx2d = new Proxy({} as Record<string, unknown>, {
-  get: (t, k) => (k in t ? t[k] : k === 'measureText' ? () => ({ width: 10 }) : () => {}),
+  get: (t, k) => (typeof k === 'string' && k in t ? t[k] : k === 'measureText' ? () => ({ width: 10 }) : () => {}),
   set: (t, k, v) => ((t[k as string] = v), true),
 });
 (globalThis as { document?: unknown }).document ??= {
