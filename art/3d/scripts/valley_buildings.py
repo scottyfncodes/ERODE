@@ -608,9 +608,10 @@ def barrier():
 def lift_tower(h, end):
     """A lift tower: a tapering steel column on a footing, a ladder, and at the top the crossarm with a
     sheave train under each end (the cable runs over them). The end towers carry the bullwheel."""
-    p = [C("stoneDark", 0.6, 0.7, 0.4, 8, (0, 0.2, 0)), C("liftSteel", 0.22, 0.32, h, 8, (0, h / 2, 0))]
-    for i in range(int(h / 0.45)):
-        p.append(B("metal", 0.3, 0.035, 0.035, (0, 0.6 + i * 0.45, 0.3)))
+    # (light enough for eleven of them on a phone: six-sided column and footing, a rung every 0.9 m)
+    p = [C("stoneDark", 0.6, 0.7, 0.4, 6, (0, 0.2, 0)), C("liftSteel", 0.22, 0.32, h, 6, (0, h / 2, 0))]
+    for i in range(int(h / 0.9)):
+        p.append(B("metal", 0.3, 0.035, 0.035, (0, 0.6 + i * 0.9, 0.3)))
     p += [B("metal", 0.035, h - 0.8, 0.035, (0.14, h / 2 + 0.2, 0.3)), B("metal", 0.035, h - 0.8, 0.035, (-0.14, h / 2 + 0.2, 0.3))]
     p.append(B("liftSteel", 3.4, 0.3, 0.4, (0, h, 0), bevel=0.03))
     if end:
@@ -619,8 +620,8 @@ def lift_tower(h, end):
     else:
         for sx in (-1, 1):
             p += [B("liftSteel", 0.9, 0.12, 0.2, (sx * 1.5, h - 0.25, 0)),
-                  C("post", 0.12, 0.12, 0.08, 8, (sx * 1.5 - 0.3, h - 0.38, 0), (math.pi / 2, 0, 0)),
-                  C("post", 0.12, 0.12, 0.08, 8, (sx * 1.5 + 0.3, h - 0.38, 0), (math.pi / 2, 0, 0))]
+                  C("post", 0.12, 0.12, 0.08, 6, (sx * 1.5 - 0.3, h - 0.38, 0), (math.pi / 2, 0, 0)),
+                  C("post", 0.12, 0.12, 0.08, 6, (sx * 1.5 + 0.3, h - 0.38, 0), (math.pi / 2, 0, 0))]
         p.append(B("roofSnow", 3.3, 0.1, 0.36, (0, h + 0.2, 0)))
     return [finish(p, "tower")]
 

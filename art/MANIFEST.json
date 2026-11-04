@@ -250,19 +250,19 @@
   },
   {
    "path": "../public/models/rs_lift_tower.glb",
-   "bytes": 45948,
+   "bytes": 34116,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_lift_tower: Tannberg chairlift tower: tapering column, ladder, crossarm with sheave trains; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
-   "sha256": "bfaea6cbf30d94af5152d32561797a83424ad31cf2a4c8e8b77350afebae417d"
+   "notes": "rs_lift_tower: Tannberg chairlift tower (420 tris): six-sided column, ladder, crossarm with sheave trains; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "0ec278a697d4f1b72e3cb7cd2a68591530ab0232789144d0a698f5942333a2e0"
   },
   {
    "path": "../public/models/rs_lift_tower_end.glb",
-   "bytes": 45064,
+   "bytes": 38320,
    "tools": "MeshCraft",
    "status": "shipped",
-   "notes": "rs_lift_tower_end: Tannberg chairlift end tower with the bullwheel; art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
-   "sha256": "c83d1fe69a6ae17a7b68d4dbb535d2700f96ebcaeb37851c878490c577354618"
+   "notes": "rs_lift_tower_end: Tannberg chairlift end tower with the bullwheel (476 tris); art/3d/scripts/valley_buildings.py; Khronos 0 errors, engine-checked (three@0.170)",
+   "sha256": "d6fc991801325c61d3c73502a815bf0c05b2b8ea91c9b6cc9e4a355156707d79"
   },
   {
    "path": "../public/models/rs_mast.glb",
