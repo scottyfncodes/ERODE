@@ -1,6 +1,6 @@
-import { FAMILY_LABEL, mission, MISSIONS } from '../missions/catalog';
+import { FAMILY_LABEL, mission, MISSIONS, slopeList } from '../missions/catalog';
 import { BADGES, GROUP_LABEL, GROUP_SLOTS, item, ITEMS, RANKS, SLOT_LABEL, type Group } from '../progress/catalog';
-import { available, blockReason, done, rank, upgradeBlock, type Profile, type Settings } from '../progress/profile';
+import { available, blockReason, done, nextGoal, rank, upgradeBlock, type Profile, type Settings } from '../progress/profile';
 import { mapUV } from '../render/topoMap';
 import { MapView } from './mapView';
 import { UPGRADES } from '../world/station';
@@ -65,6 +65,8 @@ export class Panels {
     });
   }
 
+  private returnFocus: HTMLElement | null = null;
+
   get open() {
     return !!this.wrap;
   }
@@ -77,6 +79,10 @@ export class Panels {
     this.kind = '';
     const f = this.onClose;
     this.onClose = null;
+    const back = this.returnFocus;
+    this.returnFocus = null;
+    if (back?.isConnected) back.focus({ preventScroll: true });
+    else (document.activeElement as HTMLElement | null)?.blur?.();
     f?.();
   }
 
@@ -88,7 +94,9 @@ export class Panels {
     const wrap = document.createElement('div');
     // re-drawn in place (a tab, a purchase) it stays put; opened fresh it rises in
     wrap.className = again ? 'panel-wrap' : 'panel-wrap enter';
-    wrap.innerHTML = `<div class="panel"><header><h2>${title}</h2>${extra}<button class="x" aria-label="Close">✕</button></header><div class="body"></div></div>`;
+    // a modal dialog named by its title; focus comes back to where it was when it closes
+    if (!again) this.returnFocus = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    wrap.innerHTML = `<div class="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title"><header><h2 id="panel-title">${title}</h2>${extra}<button class="x" aria-label="Close">✕</button></header><div class="body"></div></div>`;
     wrap.dataset.kind = kind;
     this.parent.appendChild(wrap);
     this.wrap = wrap;
@@ -155,7 +163,10 @@ export class Panels {
     const { body, header } = this.shell('Mission table', `<span class="funds">${p.funds} funds</span>`);
     const tabs = document.createElement('div');
     tabs.className = 'tabs';
-    tabs.innerHTML = `<button class="tab ${tab === 'calls' ? 'on' : ''}" data-t="calls">Calls and forecast</button><button class="tab ${tab === 'station' ? 'on' : ''}" data-t="station">Build the station</button><button class="tab ${tab === 'log' ? 'on' : ''}" data-t="log">Patrol log</button>`;
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Mission table');
+    const tb = (t: string, label: string) => `<button class="tab ${tab === t ? 'on' : ''}" role="tab" aria-selected="${tab === t}" data-t="${t}">${label}</button>`;
+    tabs.innerHTML = tb('calls', 'Calls and forecast') + tb('station', 'Build the station') + tb('log', 'Patrol log');
     header.after(tabs);
     tabs.querySelectorAll('.tab').forEach((b) => ((b as HTMLElement).onclick = () => this.board(p, c, danger, onAccept, onBuild, (b as HTMLElement).dataset.t as 'calls', sel)));
     if (tab === 'station') {
@@ -163,7 +174,7 @@ export class Panels {
       for (const u of UPGRADES) {
         const why = upgradeBlock(p, u.id);
         const built = why === 'Built';
-        h += `<button class="item ${built ? 'eq' : why ? 'locked' : ''}" data-u="${u.id}"><div style="flex:1"><div class="nm">${u.name}</div><div class="st">${u.blurb}</div><div class="st" style="color:#cfe6f5">Opens: ${u.opens}</div>${!built && why ? `<div class="st" style="color:#f2b33d">${why}</div>` : ''}</div><div class="pr">${built ? 'Built' : u.cost}</div></button>`;
+        h += `<button class="item ${built ? 'eq' : why ? 'locked' : ''}" data-u="${u.id}"><div style="flex:1"><div class="nm">${u.name}</div><div class="st">${u.blurb}</div><div class="st opens">Opens: ${u.opens}</div>${!built && why ? `<div class="st why">${why}</div>` : ''}</div><div class="pr">${built ? 'Built' : u.cost}</div></button>`;
       }
       body.innerHTML = h + '</div>';
       body.querySelectorAll('[data-u]').forEach((b) => ((b as HTMLElement).onclick = () => onBuild((b as HTMLElement).dataset.u!)));
@@ -172,8 +183,9 @@ export class Panels {
     if (tab === 'log') {
       const doneN = MISSIONS.filter((m) => !m.dynamic && done(p, m.id)).length;
       const story = MISSIONS.filter((m) => !m.dynamic).length;
-      let h = `<div class="label">Patrol</div><div style="font-size:15px;margin:4px 0 12px">${RANKS[rank(p)].name}. ${p.rep} reputation. Day ${p.weather.day}.</div>`;
-      h += `<div class="label">Missions</div><div style="font-size:15px;margin:4px 0 12px">${doneN} of ${story} story missions done. ${Object.entries(p.completed).filter(([id]) => mission(id)?.dynamic).reduce((a, [, n]) => a + n, 0)} callouts answered.</div>`;
+      let h = `<div class="label">Patrol</div><div style="font-size:15px;margin:4px 0 12px">${RANKS[rank(p)].name}. ${p.rep} reputation. Day ${p.weather.day}.</div>${goalLine(p)}`;
+      const callouts = Object.entries(p.completed).filter(([id]) => mission(id)?.dynamic && !mission(id)?.bowl).reduce((a, [, n]) => a + n, 0);
+      h += `<div class="label">Missions</div><div style="font-size:15px;margin:4px 0 12px">${doneN} of ${story} story missions done. ${callouts} callouts answered.${p.bowlDays ? ` Kessel Bowl brought down ${p.bowlDays} ${p.bowlDays === 1 ? 'time' : 'times'} since, ${p.cleanReads} clean ${p.cleanReads === 1 ? 'read' : 'reads'}.` : ''}</div>`;
       h += `<div class="label">Old patrol badges: ${p.badges.length} of ${BADGES.length}</div><div class="mlist" style="margin-top:6px">`;
       for (const b of BADGES) h += `<div class="mrow ${p.badges.includes(b.id) ? 'done' : 'locked'}"><div class="nm">${p.badges.includes(b.id) ? b.name : 'Not found yet'}</div><div class="tag">${p.badges.includes(b.id) ? 'Found' : ''}</div></div>`;
       body.innerHTML = h + '</div>';
@@ -189,11 +201,12 @@ export class Panels {
       fcH += `<div class="fc ${now ? 'now' : ''}"><div class="label">${f.name}</div>${skyGlyph(f.sky)}<div class="t">${SKY_LABEL[f.sky]}</div><div class="t">${f.temp}° · ${f.wind} km/h</div></div>`;
     });
     fcH += '</div>';
+    const goal = goalLine(p);
     const dl = `<div class="dangerline"><div class="lvl d${danger}">${danger}</div><div><div class="label">Avalanche danger</div>${DANGER_LABEL[danger]}${p.weather.controlled ? ', Kessel Bowl controlled' : `, ${Math.round(p.weather.freshSnow)} cm new snow`}</div></div>`;
     let list = '<div class="mlist">';
     for (const id of ids) {
       const m = mission(id);
-      list += `<button class="mrow ${id === chosen ? 'sel' : ''}" data-m="${id}"><div><div class="nm">${m.title}</div><div class="fm">${FAMILY_LABEL[m.family]}${m.dynamic ? ' · callout' : ''}</div></div><div class="tag">+${m.reward.funds}</div></button>`;
+      list += `<button class="mrow ${id === chosen ? 'sel' : ''}" data-m="${id}" aria-pressed="${id === chosen}"><div><div class="nm">${m.title}</div><div class="fm">${FAMILY_LABEL[m.family]}${m.bowl ? ' · Kessel Bowl' : m.dynamic ? ' · callout' : ''}</div></div><div class="tag">${m.graded ? 'up to ' : ''}+${m.reward.funds}</div></button>`;
     }
     for (const m of story) {
       if (ids.includes(m.id)) continue;
@@ -208,12 +221,23 @@ export class Panels {
       const m = mission(chosen);
       const active = p.active?.id === chosen;
       const block = m.family === 'recon' && c.grounded ? 'The helicopter is grounded in this storm. Try later in the day.' : '';
-      detail = `<div class="mdetail"><div class="from">${FAMILY_LABEL[m.family]} · from ${m.from}</div><h3>${m.title}</h3><p>${m.brief}</p><div class="rw">Reward: ${m.reward.funds} funds, ${m.reward.rep} reputation · ${m.steps.length} steps</div>${block ? `<p style="color:#a8321f">${block}</p>` : ''}<div class="row"><button class="btn red" data-go ${block || active ? 'disabled' : ''}>${active ? 'In progress' : p.active ? 'Switch to this' : 'Take this call'}</button><button class="btn ghost" data-free>Free patrol</button></div></div>`;
+      const read = m.id === 'bowl-control' ? `<p class="read">${p.marked.length ? `Recon flagged ${slopeList(p.marked)} as loaded.` : `No recon flown today: the wind was ${p.loadWind || 'up'} overnight, and the rest is your read.`}</p>` : m.id === 'bowl-recon' ? `<p class="read">${Math.round(p.weather.freshSnow)} cm of new snow on a ${p.loadWind || 'shifting'} wind.</p>` : '';
+      detail = `<div class="mdetail"><div class="from">${FAMILY_LABEL[m.family]} · from ${m.from}</div><h3>${m.title}</h3><p>${m.brief}</p>${read}<div class="rw">Reward: ${m.graded ? 'up to ' : ''}${m.reward.funds} funds, ${m.reward.rep} reputation · ${m.steps.length} steps</div>${block ? `<p class="block">${block}</p>` : ''}<div class="row"><button class="btn red" data-go ${block || active ? 'disabled' : ''}>${active ? 'In progress' : p.active ? 'Switch to this' : 'Take this call'}</button><button class="btn ghost" data-free>Free patrol</button></div></div>`;
     } else {
-      detail = '<div class="mdetail"><h3>All quiet</h3><p>No calls right now. Ride, fly, ski or walk the valley; calls come in over the radio. Old patrol badges are hidden all over the mountain, and Koda can smell them.</p><div class="row"><button class="btn ghost" data-free>Free patrol</button></div></div>';
+      const bowlNote = done(p, 'release') ? ` Kessel Bowl loads up again after enough new snow: watch the forecast, and the avalanche service will call it in.` : '';
+      detail = `<div class="mdetail"><h3>All quiet</h3><p>No calls right now. Ride, fly, ski or walk the valley; calls come in over the radio. Old patrol badges are hidden all over the mountain, and Koda can smell them.${bowlNote}</p><div class="row"><button class="btn ghost" data-free>Free patrol</button></div></div>`;
     }
-    const pins = ids.map((id) => ({ ...mission(id).where, label: mission(id).title, sel: id === chosen }));
-    body.innerHTML = `<div class="board"><div>${this.mapCard(null, pins)}</div><div>${fcH}${dl}${list}${detail}</div></div>`;
+    // calls at the same place share one pin (Kessel Bowl's recon and control)
+    const pins: { x: number; z: number; label: string; sel: boolean }[] = [];
+    for (const id of ids) {
+      const w = mission(id).where;
+      const same = pins.find((q) => Math.hypot(q.x - w.x, q.z - w.z) < 1);
+      if (same) {
+        same.label = w.label;
+        same.sel ||= id === chosen;
+      } else pins.push({ x: w.x, z: w.z, label: mission(id).title, sel: id === chosen });
+    }
+    body.innerHTML = `<div class="board"><div>${this.mapCard(null, pins)}</div><div>${goal}${fcH}${dl}${list}${detail}</div></div>`;
     this.wireMaps(body);
     body.querySelectorAll('[data-m]').forEach((b) => ((b as HTMLElement).onclick = () => this.board(p, c, danger, onAccept, onBuild, 'calls', (b as HTMLElement).dataset.m)));
     const go = body.querySelector('[data-go]') as HTMLButtonElement | null;
@@ -229,7 +253,9 @@ export class Panels {
     if (groups.length > 1) {
       const tabs = document.createElement('div');
       tabs.className = 'tabs';
-      tabs.innerHTML = groups.map((k) => `<button class="tab ${k === g ? 'on' : ''}" data-g="${k}">${GROUP_LABEL[k]}</button>`).join('');
+      tabs.setAttribute('role', 'tablist');
+      tabs.setAttribute('aria-label', title);
+      tabs.innerHTML = groups.map((k) => `<button class="tab ${k === g ? 'on' : ''}" role="tab" aria-selected="${k === g}" data-g="${k}">${GROUP_LABEL[k]}</button>`).join('');
       header.after(tabs);
       tabs.querySelectorAll('.tab').forEach((b) => ((b as HTMLElement).onclick = () => this.outfit(title, groups, p, onBuy, onEquip, (b as HTMLElement).dataset.g as Group)));
     }
@@ -269,7 +295,7 @@ export class Panels {
   pause(s: Settings, apply: (s: Settings) => void, onTitle: () => void, onReset: () => void) {
     const { body, panel } = this.shell('Paused');
     panel.style.width = 'min(520px, 100%)';
-    const seg = (key: string, opts: [string, string][], cur: string) => `<div class="seg" data-k="${key}">${opts.map(([v, l]) => `<button class="${v === cur ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
+    const seg = (key: string, opts: [string, string][], cur: string) => `<div class="seg" role="group" aria-label="${SET_LABEL[key] ?? key}" data-k="${key}">${opts.map(([v, l]) => `<button class="${v === cur ? 'on' : ''}" aria-pressed="${v === cur}" data-v="${v}">${l}</button>`).join('')}</div>`;
     body.innerHTML = `
       <div class="setrow"><span>Sound</span>${seg('sound', [['1', 'On'], ['0', 'Off']], s.sound ? '1' : '0')}</div>
       <div class="setrow"><span>Music</span>${seg('music', [['1', 'On'], ['0', 'Off']], s.music ? '1' : '0')}</div>
@@ -312,7 +338,7 @@ export class Panels {
   debrief(title: string, line: string, funds: number, rep: number, rankUp: string | null, unlocked: string[], extra: string, onDone: () => void) {
     const { body, panel } = this.shell('Mission complete');
     panel.style.width = 'min(520px, 100%)';
-    body.innerHTML = `<div class="debrief"><div class="label" style="color:var(--green)">Done</div><h3>${title}</h3><p>${line}</p>${extra ? `<p style="color:#cfe6f5">${extra}</p>` : ''}<div class="rw"><div><b>+${funds}</b>funds</div><div><b>+${rep}</b>reputation</div></div>${rankUp ? `<p><strong>Promoted: ${rankUp}.</strong> New gear and buildings are open.</p>` : ''}${unlocked.length ? `<p>New on the mission table: ${unlocked.join(', ')}</p>` : ''}<button class="btn red" data-a="ok">Back to patrol</button></div>`;
+    body.innerHTML = `<div class="debrief"><div class="label" style="color:var(--green)">Done</div><h3>${title}</h3><p>${line}</p>${extra ? `<p class="extra">${extra}</p>` : ''}<div class="rw"><div><b>+${funds}</b>funds</div><div><b>+${rep}</b>reputation</div></div>${rankUp ? `<p><strong>Promoted: ${rankUp}.</strong> New gear and buildings are open.</p>` : ''}${unlocked.length ? `<p>New on the mission table: ${unlocked.join(', ')}</p>` : ''}<button class="btn red" data-a="ok">Back to patrol</button></div>`;
     (body.querySelector('[data-a=ok]') as HTMLElement).onclick = () => {
       this.close();
       onDone();
@@ -320,12 +346,33 @@ export class Panels {
   }
 
   /** The morning: a new day's forecast after sleeping. */
-  morning(day: number, c: Conditions, danger: number, bonus: number) {
+  morning(day: number, c: Conditions, danger: number, bonus: number, note = '') {
     const { body, panel } = this.shell(`Day ${day}`);
     panel.style.width = 'min(560px, 100%)';
     const fc = forecast(day);
-    body.innerHTML = `<div class="forecast">${fc.map((f) => `<div class="fc"><div class="label">${f.name}</div>${skyGlyph(f.sky)}<div class="t">${SKY_LABEL[f.sky]}</div><div class="t">${f.temp}°</div></div>`).join('')}</div><div class="dangerline"><div class="lvl d${danger}">${danger}</div><div><div class="label">Avalanche danger</div>${DANGER_LABEL[danger]}</div></div>${bonus ? `<p>Night shift bonus from the lodge wing: +${bonus} funds.</p>` : ''}<p style="color:#d6e0e8">Koda is waiting by the door.</p><button class="btn red" data-a="ok">Head out</button>`;
+    body.innerHTML = `<div class="forecast">${fc.map((f) => `<div class="fc"><div class="label">${f.name}</div>${skyGlyph(f.sky)}<div class="t">${SKY_LABEL[f.sky]}</div><div class="t">${f.temp}°</div></div>`).join('')}</div><div class="dangerline"><div class="lvl d${danger}">${danger}</div><div><div class="label">Avalanche danger</div>${DANGER_LABEL[danger]}</div></div>${bonus ? `<p>Night shift bonus from the lodge wing: +${bonus} funds.</p>` : ''}${note ? `<p class="note">${note}</p>` : ''}<p class="aside">Koda is waiting by the door.</p><button class="btn red" data-a="ok">Head out</button>`;
     (body.querySelector('[data-a=ok]') as HTMLElement).onclick = () => this.close();
     void c;
   }
 }
+
+/** The next rank and how far off it is: one line and a thin bar, the long goal always in sight. */
+function goalLine(p: Profile): string {
+  const g = nextGoal(p);
+  if (!g.next) return `<div class="goal"><div class="label">Rank</div><div class="gl">${g.rank}: the top of the patrol. Kessel Bowl and the callouts still need you.</div></div>`;
+  const pct = Math.round(Math.max(0, Math.min(1, g.progress)) * 100);
+  return `<div class="goal"><div class="label">Next rank</div><div class="gl">${g.next} in ${g.need} reputation</div><div class="bar" role="progressbar" aria-label="Reputation towards ${g.next}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div></div>`;
+}
+
+/** What each pause setting is called, for the toggle groups' accessible names. */
+const SET_LABEL: Record<string, string> = {
+  sound: 'Sound',
+  music: 'Music',
+  look: 'Look speed',
+  invertY: 'Look up and down',
+  quality: 'Graphics',
+  vibrate: 'Vibration',
+  heliAssist: 'Helicopter hover and landing',
+  sledAssist: 'Sled hill hold',
+  routeLine: 'Route line',
+};

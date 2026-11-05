@@ -38,6 +38,12 @@ export class FollowCamera {
   portrait = 0;
   /** the weather's wind 0..1: a little buffet on an exposed mountain */
   wind = 0;
+  /** the player asked for reduced motion: no handheld breathing or wind buffet, a quarter of the shake */
+  reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** how strong a shake can get (1, or 0.25 with reduced motion) */
+  get shakeScale() {
+    return this.reduced ? 0.25 : 1;
+  }
   private clock = 0;
 
   constructor(private cam: THREE.PerspectiveCamera, private terrain: Terrain) {}
@@ -54,7 +60,7 @@ export class FollowCamera {
   }
 
   kick(amount: number) {
-    this.shake = Math.max(this.shake, amount);
+    this.shake = Math.max(this.shake, amount * this.shakeScale);
   }
 
   /** Turn by a look drag (pixels). */
@@ -118,7 +124,7 @@ export class FollowCamera {
     // a held camera: on foot it breathes, slow and barely there, more when you stand still, and the
     // wind nudges it on an exposed day. Never enough to fight the controls.
     this.clock += dt;
-    if (this.mode === 'foot') {
+    if (this.mode === 'foot' && !this.reduced) {
       const t = this.clock;
       const still = 1 - Math.min(1, speed / 3);
       const a = 0.035 * (0.4 + 0.6 * still) + this.wind * 0.03;

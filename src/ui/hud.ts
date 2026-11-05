@@ -134,6 +134,17 @@ export class Hud {
     this.radioEl = el('div', 'radio housing');
     this.toastEl = el('div', 'toast housing');
     this.alertEl = el('div', 'alert housing');
+    // screen readers: the radio and the toasts are read out as they arrive, an incoming call at once;
+    // the objective is read when it changes (it is only rewritten when it does)
+    this.radioEl.setAttribute('role', 'log');
+    this.radioEl.setAttribute('aria-live', 'polite');
+    this.radioEl.setAttribute('aria-label', 'Radio');
+    this.toastEl.setAttribute('role', 'status');
+    this.toastEl.setAttribute('aria-live', 'polite');
+    this.alertEl.setAttribute('role', 'alertdialog');
+    this.alertEl.setAttribute('aria-live', 'assertive');
+    this.alertEl.setAttribute('aria-label', 'Incoming call');
+    this.task.setAttribute('aria-live', 'polite');
     this.scanEl = el('div', 'scan', '<div class="ret"></div><div class="bar housing"><div class="l"></div><div class="p"><i></i></div></div>');
     this.altEl = el('div', 'alt housing hidden');
     this.hintEl = el('div', 'hint', '<div class="ghost"></div><div>Drag on the left to move<br/>Drag on the right to look</div>');
@@ -406,7 +417,7 @@ export class Hud {
       this.radioEl.classList.remove('on');
       return false;
     }
-    this.radioEl.innerHTML = `<span class="who">${n.who}</span>${n.text}`;
+    this.radioEl.innerHTML = `<span class="who">${n.who}<span class="sr">: </span></span>${n.text}`;
     this.radioEl.classList.add('on');
     this.radioT = n.secs;
     this.onLine?.(n.who, n.text);

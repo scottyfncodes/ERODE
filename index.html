@@ -39,11 +39,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400..800&family=Courier+Prime:wght@400;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <canvas id="view" aria-label="The mountain"></canvas>
+    <main aria-label="ROCKSLIDE: Mountain Patrol">
+    <canvas id="view" role="img" aria-label="The Kessel valley in 3D: you, Koda and the mountain. Your objective, the radio and every control are in the panels around it."></canvas>
     <div id="grade" aria-hidden="true"></div>
     <div id="ui"></div>
 
-    <div id="loading" class="screen">
+    <div id="loading" class="screen" role="status" aria-label="Loading the valley">
       <div class="loading-inner">
         <img class="emblem" src="/icons/icon.svg" alt="" width="96" height="96" />
         <div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div>
@@ -52,6 +53,7 @@
         <div class="loading-text label">Loading the valley</div>
       </div>
     </div>
+    </main>
     <noscript>ROCKSLIDE needs JavaScript and WebGL to run.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>

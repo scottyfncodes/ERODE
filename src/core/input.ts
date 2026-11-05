@@ -47,6 +47,8 @@ export class Input {
     this.knobEl = document.createElement('div');
     this.knobEl.className = 'stick-knob';
     this.stickEl.appendChild(this.knobEl);
+    // the floating stick is drawn where a thumb lands: nothing for a screen reader
+    this.stickEl.setAttribute('aria-hidden', 'true');
     document.body.appendChild(this.stickEl);
     surface.addEventListener('pointerdown', (e) => this.down(e));
     window.addEventListener('pointermove', (e) => this.moveP(e));

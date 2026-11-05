@@ -1,0 +1,685 @@
+{
+ "kind": "rockslide-a11y",
+ "url": "http://localhost:4173/",
+ "when": "2026-11-05T18:04:46.256Z",
+ "axe": "4.10.3",
+ "screens": [
+  {
+   "screen": "title",
+   "viewport": "iphone13",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 30,
+   "incomplete": 1
+  },
+  {
+   "screen": "hud",
+   "viewport": "iphone13",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 27,
+   "incomplete": 1
+  },
+  {
+   "screen": "pause",
+   "viewport": "iphone13",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 34,
+   "incomplete": 1
+  },
+  {
+   "screen": "map",
+   "viewport": "iphone13",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 36,
+   "incomplete": 1
+  },
+  {
+   "screen": "mission table: calls",
+   "viewport": "iphone13",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 40,
+   "incomplete": 1
+  },
+  {
+   "screen": "mission table: station",
+   "viewport": "iphone13",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 36,
+   "incomplete": 1
+  },
+  {
+   "screen": "mission table: log",
+   "viewport": "iphone13",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 37,
+   "incomplete": 1
+  },
+  {
+   "screen": "wardrobe",
+   "viewport": "iphone13",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 34,
+   "incomplete": 1
+  },
+  {
+   "screen": "title",
+   "viewport": "desktop",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 30,
+   "incomplete": 1
+  },
+  {
+   "screen": "hud",
+   "viewport": "desktop",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 27,
+   "incomplete": 1
+  },
+  {
+   "screen": "pause",
+   "viewport": "desktop",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 33,
+   "incomplete": 1
+  },
+  {
+   "screen": "map",
+   "viewport": "desktop",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 36,
+   "incomplete": 1
+  },
+  {
+   "screen": "mission table: calls",
+   "viewport": "desktop",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 40,
+   "incomplete": 1
+  },
+  {
+   "screen": "mission table: station",
+   "viewport": "desktop",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 35,
+   "incomplete": 1
+  },
+  {
+   "screen": "mission table: log",
+   "viewport": "desktop",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 36,
+   "incomplete": 1
+  },
+  {
+   "screen": "wardrobe",
+   "viewport": "desktop",
+   "violations": [
+    {
+     "id": "meta-viewport",
+     "impact": "critical",
+     "help": "Zooming and scaling must not be disabled",
+     "count": 1,
+     "targets": [
+      "meta[name=\"viewport\"]"
+     ]
+    }
+   ],
+   "passes": 33,
+   "incomplete": 1
+  }
+ ],
+ "rules": [
+  {
+   "id": "meta-viewport",
+   "impact": "critical",
+   "help": "Zooming and scaling must not be disabled",
+   "screens": [
+    "title @ iphone13",
+    "hud @ iphone13",
+    "pause @ iphone13",
+    "map @ iphone13",
+    "mission table: calls @ iphone13",
+    "mission table: station @ iphone13",
+    "mission table: log @ iphone13",
+    "wardrobe @ iphone13",
+    "title @ desktop",
+    "hud @ desktop",
+    "pause @ desktop",
+    "map @ desktop",
+    "mission table: calls @ desktop",
+    "mission table: station @ desktop",
+    "mission table: log @ desktop",
+    "wardrobe @ desktop"
+   ],
+   "nodes": 16
+  }
+ ],
+ "checks": [
+  {
+   "area": "keyboard",
+   "what": "the game starts with the keyboard alone (iphone13)",
+   "ok": true
+  },
+  {
+   "area": "screen reader",
+   "what": "radio and toasts are live regions, so new messages are announced (iphone13)",
+   "ok": true,
+   "detail": [
+    {
+     "cls": "task housing free",
+     "live": "polite",
+     "role": null
+    },
+    {
+     "cls": "toast housing",
+     "live": "polite",
+     "role": "status"
+    },
+    {
+     "cls": "radio housing on",
+     "live": "polite",
+     "role": "log"
+    },
+    {
+     "cls": "alert housing",
+     "live": "assertive",
+     "role": "alertdialog"
+    }
+   ]
+  },
+  {
+   "area": "screen reader",
+   "what": "the opening radio call is in the DOM as text (readable, not only voiced)",
+   "ok": true,
+   "detail": "Dispatch: Morning, Kessel Patrol. Forty centimetres up high overnight. There is "
+  },
+  {
+   "area": "touch",
+   "what": "every HUD control on a phone is at least 44 x 44 px",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "area": "text",
+   "what": "HUD text is at least 12 px (iphone13)",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "area": "dialog",
+   "what": "pause is a modal dialog with a name (iphone13)",
+   "ok": true,
+   "detail": {
+    "role": "dialog",
+    "modal": "true",
+    "name": "Paused"
+   }
+  },
+  {
+   "area": "screen reader",
+   "what": "pause toggles say which option is on (aria-pressed) (iphone13)",
+   "ok": true,
+   "detail": {
+    "toggles": 20,
+    "withState": 20
+   }
+  },
+  {
+   "area": "touch",
+   "what": "every pause control on a phone is at least 44 x 44 px",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "area": "keyboard",
+   "what": "Tab stays inside the pause menu and reaches Back to patrol (iphone13)",
+   "ok": true,
+   "detail": [
+    "Close",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "Slow",
+    "Normal",
+    "Fast",
+    "Normal",
+    "Inverted",
+    "Auto",
+    "Light",
+    "Full",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "Back to patrol",
+    "Save and quit to title",
+    "Start over",
+    "Close",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "Slow"
+   ]
+  },
+  {
+   "area": "keyboard",
+   "what": "Esc closes pause (iphone13)",
+   "ok": true
+  },
+  {
+   "area": "keyboard",
+   "what": "the mission table opens with E (iphone13)",
+   "ok": true
+  },
+  {
+   "area": "screen reader",
+   "what": "the mission table tabs are a tab list with the selected tab marked (iphone13)",
+   "ok": true,
+   "detail": {
+    "role": "tablist",
+    "tabs": [
+     {
+      "role": "tab",
+      "selected": "true"
+     },
+     {
+      "role": "tab",
+      "selected": "false"
+     },
+     {
+      "role": "tab",
+      "selected": "false"
+     }
+    ]
+   }
+  },
+  {
+   "area": "screen reader",
+   "what": "the chosen call is marked as selected (iphone13)",
+   "ok": true,
+   "detail": [
+    "true"
+   ]
+  },
+  {
+   "area": "touch",
+   "what": "every mission table control on a phone is at least 44 x 44 px",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "area": "text",
+   "what": "mission table text is at least 12 px (iphone13)",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "area": "focus",
+   "what": "closing a panel does not leave focus on a removed element (iphone13)",
+   "ok": true,
+   "detail": "BODY"
+  },
+  {
+   "area": "keyboard",
+   "what": "Tab from a fresh page lands on the start button",
+   "ok": true,
+   "detail": {
+    "tag": "BUTTON",
+    "name": "Start your patrol",
+    "outline": true,
+    "boxShadow": false,
+    "inPanel": false
+   }
+  },
+  {
+   "area": "focus",
+   "what": "the focused start button shows a visible ring (2 px outline or ring shadow)",
+   "ok": true,
+   "detail": {
+    "tag": "BUTTON",
+    "name": "Start your patrol",
+    "outline": true,
+    "boxShadow": false,
+    "inPanel": false
+   }
+  },
+  {
+   "area": "keyboard",
+   "what": "the game starts with the keyboard alone (desktop)",
+   "ok": true
+  },
+  {
+   "area": "screen reader",
+   "what": "radio and toasts are live regions, so new messages are announced (desktop)",
+   "ok": true,
+   "detail": [
+    {
+     "cls": "task housing free",
+     "live": "polite",
+     "role": null
+    },
+    {
+     "cls": "toast housing",
+     "live": "polite",
+     "role": "status"
+    },
+    {
+     "cls": "radio housing on",
+     "live": "polite",
+     "role": "log"
+    },
+    {
+     "cls": "alert housing",
+     "live": "assertive",
+     "role": "alertdialog"
+    }
+   ]
+  },
+  {
+   "area": "screen reader",
+   "what": "the opening radio call is in the DOM as text (readable, not only voiced)",
+   "ok": true,
+   "detail": "Dispatch: Morning, Kessel Patrol. Forty centimetres up high overnight. There is "
+  },
+  {
+   "area": "text",
+   "what": "HUD text is at least 12 px (desktop)",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "area": "dialog",
+   "what": "pause is a modal dialog with a name (desktop)",
+   "ok": true,
+   "detail": {
+    "role": "dialog",
+    "modal": "true",
+    "name": "Paused"
+   }
+  },
+  {
+   "area": "screen reader",
+   "what": "pause toggles say which option is on (aria-pressed) (desktop)",
+   "ok": true,
+   "detail": {
+    "toggles": 20,
+    "withState": 20
+   }
+  },
+  {
+   "area": "keyboard",
+   "what": "Tab stays inside the pause menu and reaches Back to patrol (desktop)",
+   "ok": true,
+   "detail": [
+    "Close",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "Slow",
+    "Normal",
+    "Fast",
+    "Normal",
+    "Inverted",
+    "Auto",
+    "Light",
+    "Full",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "Back to patrol",
+    "Save and quit to title",
+    "Start over",
+    "Close",
+    "On",
+    "Off",
+    "On",
+    "Off",
+    "Slow"
+   ]
+  },
+  {
+   "area": "keyboard",
+   "what": "Esc closes pause (desktop)",
+   "ok": true
+  },
+  {
+   "area": "keyboard",
+   "what": "the mission table opens with E (desktop)",
+   "ok": true
+  },
+  {
+   "area": "screen reader",
+   "what": "the mission table tabs are a tab list with the selected tab marked (desktop)",
+   "ok": true,
+   "detail": {
+    "role": "tablist",
+    "tabs": [
+     {
+      "role": "tab",
+      "selected": "true"
+     },
+     {
+      "role": "tab",
+      "selected": "false"
+     },
+     {
+      "role": "tab",
+      "selected": "false"
+     }
+    ]
+   }
+  },
+  {
+   "area": "screen reader",
+   "what": "the chosen call is marked as selected (desktop)",
+   "ok": true,
+   "detail": [
+    "true"
+   ]
+  },
+  {
+   "area": "text",
+   "what": "mission table text is at least 12 px (desktop)",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "area": "focus",
+   "what": "closing a panel does not leave focus on a removed element (desktop)",
+   "ok": true,
+   "detail": "BODY"
+  },
+  {
+   "area": "motion",
+   "what": "with reduced motion, nothing on the title loops forever",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "area": "motion",
+   "what": "with reduced motion, the game turns its camera shake and buffet down",
+   "ok": true,
+   "detail": {
+    "reduced": true,
+    "shake": 0.25
+   }
+  },
+  {
+   "area": "motion",
+   "what": "with reduced motion, panels appear without the rise-in animation",
+   "ok": true,
+   "detail": {
+    "wrap": "0s",
+    "panel": "0s"
+   }
+  },
+  {
+   "area": "technical",
+   "what": "no console or page errors during the audit",
+   "ok": true,
+   "detail": []
+  }
+ ],
+ "consoleErrors": []
+}
