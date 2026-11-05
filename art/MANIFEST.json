@@ -1175,8 +1175,96 @@
    "status": "shipped",
    "notes": "High-altitude wind bed (AAC): AudioCraft ambience wind, seed 5; owned by this project",
    "sha256": "937b70ac983af0692580bb0ed7831c51d12452f09b3e485b1bca0ee0da4fd500"
+  },
+  {
+   "path": "../public/models/rs_lodge.glb",
+   "bytes": 477756,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_lodge: Kessel Patrol lodge: plinth and porch, wall_n/s/w/e (cut-away), roof, chimney; notched log corners, shuttered windows through the logs; art/3d/scripts/valley_buildings.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "117380cdd9bf2cb688e2326c8a57b3376d9621a653ad895334426b45917eb8a7"
+  },
+  {
+   "path": "../public/models/rs_lodge_wing.glb",
+   "bytes": 259688,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_lodge_wing: the lodge wing (bunkhouse upgrade): logs, three lit windows, snowy roof, log gables; art/3d/scripts/valley_buildings.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "8059c3af340efcdd6105141a1cd6d9549cd59fe90d491a37c58cda59607f3d6a"
+  },
+  {
+   "path": "../public/models/rs_lodge_furniture.glb",
+   "bytes": 246668,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_lodge_furniture: hearth, mission table, bunk, wardrobe, armchair, shelf, Koda bed, lamp (one node each); art/3d/scripts/valley_buildings.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "621343b6d280c92cdbfaf8c183b2f56e534f6f4cd3c96a78aa36fbff48c584fe"
+  },
+  {
+   "path": "../public/models/rs_snow_fence.glb",
+   "bytes": 18736,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_snow_fence: Kessel Ridge snow fence with its lee drift; art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "5d2dd1d66b37b55bc404dc32dc8170be666c27cecbdc4fa4c8641947dfab7977"
+  },
+  {
+   "path": "../public/models/rs_exploder.glb",
+   "bytes": 61492,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_exploder: remote avalanche exploder: tube, mitred elbow, flared mouth, gas hut, control box; art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "a2c76baf421abb741a3845ff83f762c9e9ea2d6f20629f89621fe032fe5ca189"
+  },
+  {
+   "path": "../public/models/rs_repeater.glb",
+   "bytes": 86520,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_repeater: solar radio repeater: braced lattice mast, antennas, solar panel, battery box; art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "10254dab124b7288d43a253a7cddb372fc5539859337fd6bd31f23b44d74a649"
+  },
+  {
+   "path": "../public/models/rs_warning_sign.glb",
+   "bytes": 22448,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_warning_sign: AVALANCHE AREA sign steel: posts and backing plate (the face is the game canvas); art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "c8bb24630eadc699bdc513a581fba0e4f2bd4688ba35d58052598884be6aa0f4"
+  },
+  {
+   "path": "../public/models/rs_snowcat.glb",
+   "bytes": 145388,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_snowcat: retired grooming snowcat: tracks, road wheels, cab, blade, tiller, snow bank; art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "d3a989479018ace1c4eac388031fbbf25b5b6b2a5314a74fe218b6f2021cb304"
+  },
+  {
+   "path": "../public/models/rs_headframe.glb",
+   "bytes": 102884,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_headframe: silver mine headframe: posts, raking legs, X bracing, ladder, spoked sheave, tailings; art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "80516782be0088aeb989adda881920b165a3f880d844b3397678c150265093a1"
+  },
+  {
+   "path": "../public/models/rs_mine_cabin.glb",
+   "bytes": 74636,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_mine_cabin: collapsed miners cabin: ragged log courses, standing gable, fallen roof, stovepipe; art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "79f12634eb35398ee473b3c562617f65ec08cc7d95a5490e773be79eadf243aa"
+  },
+  {
+   "path": "../public/models/rs_weather_mast.glb",
+   "bytes": 88600,
+   "tools": "MeshCraft",
+   "status": "shipped",
+   "notes": "rs_weather_mast: Grauhorn weather station: mast, guys, vane, shield, panel, logger; anemometer node on the hub; art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
+   "sha256": "404d18139386af2ae026906fac758b359e3f6de762797e8ebcdb13c0e7ebe456"
   }
  ],
  "files": 147,
- "updated": "2026-11-04"
+ "updated": "2026-11-05T04:54:04Z"
 }
