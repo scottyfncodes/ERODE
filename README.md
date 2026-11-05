@@ -41,7 +41,7 @@ The day runs 06:00 to 22:00 in about twenty minutes; weather blends between clea
 | | How it plays |
 | --- | --- |
 | **On foot** | Walk or run: most of the stick's throw is a careful-to-brisk walk, the last part builds through a jog to a full run, and the gait follows the speed you actually have (a run builds over a stride or two and a stop takes a step). Powder slows you, steep slopes push back. Walk into the lodge and the roof lifts away. |
-| **Snowmobile** | The stick: up is throttle, down brakes and reverses, sideways steers. It carves on packed snow and drifts in powder, climbs only what its track can grip (about 31° on packed snow, 23° in powder, more with the deep lug track) and bogs down and slides back on anything steeper, throws a spray, leaves tracks, jumps off crests. Koda rides on the rack. |
+| **Snowmobile** | The stick: up is throttle, down brakes and reverses, sideways steers. A heavy, sprung machine with a strong engine (0 to 50 km/h in about 2.2 s on packed snow). It carves on packed snow and drifts in powder, climbs only what its track can grip (about 30° on packed snow, 20° in powder, 28° in powder with the deep lug track) and bogs down and slides back on anything steeper. The suspension keeps the track on the snow over the road's crests: it only leaves the ground where the snow really falls away (a kicker, a drop, the top of the Tannberg run), comes down sooner than something light would, soaks up the landing and does not bounce out of it into another jump. It throws a spray and leaves tracks. Koda rides on the rack. |
 | **Helicopter** | SKYTRACE's rescue helicopter. The stick moves you over the ground (relative to the camera), Climb and Descend on the right, and the nose follows where you go so the scanner looks ahead. Settle gently to land. |
 | **Skis** | Gravity does the work: tuck down the fall line, carve with the stick, pull back to snowplough. On the flat you pole along; with climbing skins you can walk uphill. |
 
@@ -139,6 +139,7 @@ node scripts/verify.mjs http://localhost:4173/                        # release 
 node scripts/maptouch.mjs http://localhost:4173/ out/map              # map gestures with real multitouch on three iPhone sizes (pinch, pan, flick, double tap, limits)
 node scripts/runcapture.mjs http://localhost:4173/ out/run            # the patroller running and stopping in the game, on the touch stick
 npx tsx scripts/playthrough.ts http://localhost:4173/ docs/playcraft/evidence  # every mission end to end, with an evidence report
+npx tsx scripts/sledlab.ts                                            # the sled on every road and track: jumps, air time, landings, bounces, stalls, speed
 ```
 
 `scripts/playthrough.ts` plays the whole campaign on the production build in a 390x844 touch viewport: every story mission and both callouts, building the workshop and buying an engine (and measuring that the sled really is faster), finding a badge with Koda, quitting mid-mission and continuing after a reload, sleeping to the next day. Every action is real key input or a real click; the long journeys are skipped with the debug teleport and the callout timer is wound down, and the report counts both. It writes `playthrough.json` and `playthrough.md` (each check, pass or fail, with what it saw) and exits 1 on any failure.
