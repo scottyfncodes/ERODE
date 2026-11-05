@@ -37,8 +37,10 @@ export const OPS_MODELS = {
   minecabin: 'rs_mine_cabin',
 } as const;
 export const OPS_IDS = Object.values(OPS_MODELS);
+/** The Grauhorn weather station's mast and its anemometer (same script). */
+export const WEATHER_IDS = ['rs_weather_mast'] as const;
 
-export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_villager', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS, ...PROP_IDS, ...LIFT_IDS, ...LODGE_IDS, ...OPS_IDS] as const;
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_villager', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS, ...PROP_IDS, ...LIFT_IDS, ...LODGE_IDS, ...OPS_IDS, ...WEATHER_IDS] as const;
 export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
 export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
 

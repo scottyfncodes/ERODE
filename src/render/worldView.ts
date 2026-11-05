@@ -4,7 +4,7 @@ import { mulberry32 } from '../sim/noise';
 import { BOWL, LAKE, LIFT, pad, VILLAGE } from '../world/places';
 import { routeSamples, type Terrain } from '../world/terrain';
 import { bakeInPlace, ball, bake, box, cyl, gable, glow, logWall, mat, PAL, shade, snowRoof, windowPane } from './kit';
-import { BUILDING_IDS, LIFT_IDS, paintModel, roleOf, type BuildingId, type PatrolModels } from './patrolModels';
+import { BUILDING_IDS, LIFT_IDS, mountAtPivot, paintModel, roleOf, type BuildingId, type PatrolModels } from './patrolModels';
 import { sign } from './stationView';
 
 /**
@@ -20,6 +20,12 @@ export class WorldView {
   private windows: THREE.MeshLambertMaterial;
   private streetLights: THREE.MeshBasicMaterial;
   private anemo: THREE.Group | null = null;
+  /** the MeshCraft weather-station mast (art/3d/scripts/working_mountain.py), if it loaded */
+  private weatherMast: THREE.Object3D | null = null;
+  /** true when the weather station's mast is the MeshCraft one */
+  get weatherModelled() {
+    return !!this.weatherMast;
+  }
   private stationIce: THREE.Mesh | null = null;
   private stationLight: THREE.Mesh | null = null;
   stationWorking = false;
@@ -43,6 +49,7 @@ export class WorldView {
   ) {
     this.bm = BUILDING_IDS.every((id) => models[id]) ? (Object.fromEntries(BUILDING_IDS.map((id) => [id, models[id]!])) as unknown as Record<BuildingId, THREE.Object3D>) : null;
     this.modelled = !!this.bm;
+    this.weatherMast = models.rs_weather_mast ?? null;
     this.lift = LIFT_IDS.every((id) => models[id]) ? { tower: models.rs_lift_tower!, end: models.rs_lift_tower_end!, chair: models.rs_chair! } : null;
     this.windows = new THREE.MeshLambertMaterial({ color: PAL.window, emissive: 0xffa040, emissiveIntensity: 0.2 });
     this.streetLights = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
@@ -420,37 +427,48 @@ export class WorldView {
     const y = this.ground(x, z);
     const g = new THREE.Group();
     g.position.set(x, y, z);
-    g.add(cyl(0.12, 0.14, 7, 6, PAL.metal, 0, 3.5, 0));
-    for (const a of [0, 2.1, 4.2]) {
-      const guy = cyl(0.02, 0.02, 8, 3, 0x333333, Math.cos(a) * 2, 3.5, Math.sin(a) * 2);
-      guy.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
-      g.add(guy);
-    }
-    // the anemometer: three cups on a hub
-    const an = new THREE.Group();
-    for (let i = 0; i < 3; i++) {
-      const arm = box(0.9, 0.04, 0.04, 0x333333);
-      arm.position.x = 0.45;
-      const cup = ball(0.13, PAL.white, 0.9, 0, 0, 8);
-      const holder = new THREE.Group();
-      holder.add(arm, cup);
-      holder.rotation.y = (i * Math.PI * 2) / 3;
-      an.add(holder);
-    }
-    an.position.y = 7.2;
-    this.anemo = an;
     this.stationIce = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6), new THREE.MeshLambertMaterial({ color: 0xcfe8f5, transparent: true, opacity: 0.85 }));
     this.stationIce.position.y = 7.2;
     this.stationIce.scale.set(1.8, 0.7, 1.8);
-    g.add(an, this.stationIce);
-    // the logger box, a solar panel, a vane
-    g.add(box(0.8, 1.0, 0.4, PAL.white, 0.2, 2.2, 0.15), box(1.4, 0.06, 0.9, 0x1f3a60, -0.2, 4.4, 0));
     this.stationLight = box(0.12, 0.12, 0.05, glow(0xff3020), 0.2, 2.5, 0.37);
-    g.add(this.stationLight);
-    const vane = new THREE.Group();
-    vane.add(box(1.2, 0.05, 0.05, 0x333333, 0, 0, 0), box(0.05, 0.3, 0.35, PAL.red, -0.6, 0, 0));
-    vane.position.y = 6.2;
-    g.add(vane);
+    const wm = this.weatherMast;
+    if (wm) {
+      // the MeshCraft mast; its anemometer is a node on the hub, turned by update() once repaired
+      const m = paintModel(wm, { steel: mat(PAL.metal), steelDark: mat(0x5b5e60), dark: mat(0x333333), antenna: mat(PAL.white), catRed: mat(PAL.red), snow: mat(PAL.snow), panel: mat(0x1f3a60) }, (hex) => mat(hex));
+      const an = new THREE.Group();
+      an.position.y = 7.2;
+      mountAtPivot(m.getObjectByName('anemometer')!, an);
+      this.anemo = an;
+      g.add(m.getObjectByName('mast')!, an, this.stationIce, this.stationLight);
+    } else {
+      g.add(cyl(0.12, 0.14, 7, 6, PAL.metal, 0, 3.5, 0));
+      for (const a of [0, 2.1, 4.2]) {
+        const guy = cyl(0.02, 0.02, 8, 3, 0x333333, Math.cos(a) * 2, 3.5, Math.sin(a) * 2);
+        guy.rotation.set(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5);
+        g.add(guy);
+      }
+      // the anemometer: three cups on a hub
+      const an = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const arm = box(0.9, 0.04, 0.04, 0x333333);
+        arm.position.x = 0.45;
+        const cup = ball(0.13, PAL.white, 0.9, 0, 0, 8);
+        const holder = new THREE.Group();
+        holder.add(arm, cup);
+        holder.rotation.y = (i * Math.PI * 2) / 3;
+        an.add(holder);
+      }
+      an.position.y = 7.2;
+      this.anemo = an;
+      g.add(an, this.stationIce);
+      // the logger box, a solar panel, a vane
+      g.add(box(0.8, 1.0, 0.4, PAL.white, 0.2, 2.2, 0.15), box(1.4, 0.06, 0.9, 0x1f3a60, -0.2, 4.4, 0));
+      g.add(this.stationLight);
+      const vane = new THREE.Group();
+      vane.add(box(1.2, 0.05, 0.05, 0x333333, 0, 0, 0), box(0.05, 0.3, 0.35, PAL.red, -0.6, 0, 0));
+      vane.position.y = 6.2;
+      g.add(vane);
+    }
     // the little hut it reports from
     const hut = this.chalet(4, 3.5, PAL.mustard, PAL.burgundy, 1, false);
     hut.position.set(st.x + 6, this.ground(st.x + 6, st.z + 4), st.z + 4);

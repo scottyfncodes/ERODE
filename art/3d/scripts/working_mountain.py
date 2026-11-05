@@ -87,10 +87,13 @@ def beam(role, a, b, t):
     return o
 
 
-def finish(parts, name):
+def finish(parts, name, pivot=(0, 0, 0)):
     o = K.join(parts, name)
     o.data.transform(o.matrix_world); o.matrix_world = Matrix()
+    pv = Vector(pivot)
+    o.data.transform(Matrix.Translation(-pv))
     o.data.transform(TO_BLENDER)
+    o.location = TO_BLENDER @ pv
     K.shade(o)
     K.bake_vertex_colors(o, mats, jitter=0.05, seed=len(name))
     o["gitcraft_asset"] = asset
@@ -306,7 +309,56 @@ def mine_cabin():
     return [finish(p, "minecabin")]
 
 
+# ------------------------------------------------------------------ the Grauhorn weather station
+def weather_mast():
+    """The Grauhorn automatic weather station (Morning Rounds: de-ice and restart it): a 7 m galvanised
+    mast with flanged joints, three guy wires to anchors in the snow, a lightning rod, the wind vane on its
+    crossarm (6.2 m), a radiation shield for the thermometer, the solar panel on its bracket (4.4 m) and
+    the logger box with its conduit (2.2 m; the game puts its status light on the door). Two nodes:
+    `mast` (still) and `anemometer` (its hub at 7.2 m is the node's origin; the game spins it once the
+    station is repaired). The ice on the cups stays code."""
+    p = [C("steel", 0.12, 0.14, 7, 6, (0, 3.5, 0)), B("concrete", 0.7, 0.3, 0.7, (0, 0.05, 0)), C("steelDark", 0.02, 0.02, 0.9, 4, (0, 7.85, 0))]
+    for y in (2.4, 4.8):
+        p.append(C("steelDark", 0.18, 0.18, 0.08, 6, (0, y, 0)))
+    for a in (0.0, 2.1, 4.2):
+        ax, az = math.cos(a) * 3.2, math.sin(a) * 3.2
+        p += [beam("dark", (0, 6.6, 0), (ax, 0.05, az), 0.02), B("concrete", 0.3, 0.2, 0.3, (ax, 0.0, az)), B("snow", 0.4, 0.08, 0.4, (ax, 0.13, az))]
+    for k in range(14):
+        p.append(B("steelDark", 0.24, 0.03, 0.03, (0, 0.5 + k * 0.42, -0.15)))
+    # crossarm with the vane (tail fin and counterweight) and the radiation shield
+    p += [B("steelDark", 1.3, 0.06, 0.06, (0.3, 6.2, 0)), C("steelDark", 0.03, 0.03, 0.3, 6, (0.9, 6.35, 0)),
+          B("dark", 1.2, 0.05, 0.05, (0.9, 6.5, 0)), B("catRed", 0.05, 0.3, 0.35, (0.3, 6.5, 0)), place(K.sphere("w", 0.07, (0, 0, 0), None, segs=6, rings=4), (1.5, 6.5, 0), (0, 0, 0), "dark")]
+    for k in range(5):
+        p.append(C("antenna", 0.16 - k * 0.01, 0.16 - k * 0.01, 0.04, 8, (-0.45, 5.0 + k * 0.07, 0)))
+    p += [B("steelDark", 0.5, 0.04, 0.04, (-0.2, 5.0, 0))]
+    # solar panel on its bracket, tilted south (+z), and the logger box
+    p += [B("steelDark", 0.06, 0.06, 0.7, (-0.2, 4.4, -0.25)), B("panel", 1.4, 0.06, 0.9, (-0.2, 4.45, 0.1), (-0.5, 0, 0))]
+    for i in range(3):
+        for j in range(2):
+            c = Vector((-0.45 + i * 0.45, 0.035, -0.2 + j * 0.4))
+            c.rotate(Matrix.Rotation(-0.5, 3, "X"))
+            p.append(B("panelCell", 0.4, 0.01, 0.36, tuple(Vector((-0.2, 4.45, 0.1)) + c), (-0.5, 0, 0)))
+    p += [B("antenna", 0.8, 1.0, 0.4, (0.2, 2.2, 0.15), bevel=0.02), B("steelDark", 0.04, 0.9, 0.02, (-0.17, 2.2, 0.36)),
+          B("snow", 0.9, 0.1, 0.5, (0.2, 2.76, 0.15)), C("dark", 0.025, 0.025, 2.4, 4, (0.45, 3.5, 0.05)),
+          mound("snow", 2.0, 0.35, 2.0, (0, -0.05, 0))]
+    mast = finish(p, "mast")
+    # the anemometer: hub, three arms, conical cups open to the wind
+    an = [C("steelDark", 0.07, 0.07, 0.16, 8, (0, 7.2, 0)), C("dark", 0.03, 0.03, 0.25, 6, (0, 7.05, 0))]
+    for i in range(3):
+        a = math.tau * i / 3
+        ex, ez = math.cos(a) * 0.9, -math.sin(a) * 0.9
+        an.append(beam("dark", (0, 7.2, 0), (ex, 7.2, ez), 0.04))
+        # each cup faces along the turn (tangent), so the three of them catch the wind one way
+        cup = C("antenna", 0.13, 0.02, 0.22, 10, (ex, 7.2, ez))
+        tx, tz = -math.sin(a), -math.cos(a)
+        cup.rotation_mode = "QUATERNION"; cup.rotation_quaternion = Vector((0, 1, 0)).rotation_difference(Vector((tx, 0, tz)))
+        an.append(cup)
+    anemo = finish(an, "anemometer", (0, 7.2, 0))
+    return [mast, anemo]
+
+
 BUILD = {
+    "rs_weather_mast": weather_mast,
     "rs_snow_fence": snow_fence,
     "rs_exploder": exploder,
     "rs_repeater": repeater,

@@ -263,10 +263,25 @@ export function shadows(o: THREE.Object3D, cast = true, receive = true): THREE.O
  * Merge a static group into as few meshes as possible (one per material), keeping the group's own
  * placement. Lights and other non-mesh children are not carried over: keep those outside.
  */
-export function bake(g: THREE.Object3D): THREE.Group {
+/** The one vertex-coloured material every colour-baked mesh shares (see bake). */
+let vertexColored: THREE.MeshLambertMaterial | null = null;
+
+/** A plain Lambert colour (no texture, no glow, opaque): one that can become a vertex colour. */
+const plainColor = (m: THREE.Material): m is THREE.MeshLambertMaterial => {
+  const l = m as THREE.MeshLambertMaterial;
+  return !!l.isMeshLambertMaterial && !l.map && !l.vertexColors && !l.transparent && l.emissive.getHex() === 0 && l.side === THREE.FrontSide;
+};
+
+/**
+ * Merge a group's meshes into one mesh per material. With `byColor`, every plain-coloured part (see
+ * plainColor) goes into a single mesh that carries its material's colour per vertex, so a model painted
+ * in many roles still draws in a couple of calls; glows, lit windows and textures keep their own.
+ */
+export function bake(g: THREE.Object3D, byColor = false): THREE.Group {
   g.updateMatrixWorld(true);
   const inv = g.matrixWorld.clone().invert();
   const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const vc = byColor ? (vertexColored ??= new THREE.MeshLambertMaterial({ vertexColors: true })) : null;
   g.traverse((c) => {
     const m = c as THREE.Mesh;
     if (!m.isMesh || Array.isArray(m.material) || (m as THREE.InstancedMesh).isInstancedMesh || !visibleUpTo(m, g)) return;
@@ -275,9 +290,19 @@ export function bake(g: THREE.Object3D): THREE.Group {
     geo.applyMatrix4(inv);
     if (geo.index) geo = geo.toNonIndexed();
     for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') geo.deleteAttribute(k);
-    const list = byMat.get(m.material) ?? [];
+    let into = m.material;
+    if (vc && plainColor(m.material)) {
+      const n = geo.attributes.position.count;
+      const col = new Float32Array(n * 3);
+      const { r, g: gg, b } = m.material.color;
+      for (let i = 0; i < n; i++) col.set([r, gg, b], i * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      geo.deleteAttribute('uv');
+      into = vc;
+    }
+    const list = byMat.get(into) ?? [];
     list.push(geo);
-    byMat.set(m.material, list);
+    byMat.set(into, list);
   });
   const out = new THREE.Group();
   out.position.copy(g.position);
@@ -300,17 +325,21 @@ function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const pos = new Float32Array(count * 3);
   const nor = new Float32Array(count * 3);
   const uv = withUv ? new Float32Array(count * 2) : null;
+  const withColor = geos.every((g) => !!g.attributes.color);
+  const col = withColor ? new Float32Array(count * 3) : null;
   let o = 0;
   for (const g of geos) {
     pos.set(g.attributes.position.array as Float32Array, o * 3);
     if (g.attributes.normal) nor.set(g.attributes.normal.array as Float32Array, o * 3);
     if (uv) uv.set(g.attributes.uv.array as Float32Array, o * 2);
+    if (col) col.set(g.attributes.color.array as Float32Array, o * 3);
     o += g.attributes.position.count;
   }
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   if (uv) out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  if (col) out.setAttribute('color', new THREE.BufferAttribute(col, 3));
   out.computeBoundingSphere();
   return out;
 }
@@ -324,7 +353,7 @@ function visibleUpTo(o: THREE.Object3D, root: THREE.Object3D): boolean {
  * Bake a group in place: everything static inside it becomes one mesh per material, while the
  * objects in `keep` (things that move, blink or toggle) and any lights stay as they are.
  */
-export function bakeInPlace(g: THREE.Object3D, keep: THREE.Object3D[] = []) {
+export function bakeInPlace(g: THREE.Object3D, keep: THREE.Object3D[] = [], byColor = false) {
   g.updateMatrixWorld(true);
   const kept: THREE.Object3D[] = [];
   for (const k of keep) {
@@ -337,7 +366,7 @@ export function bakeInPlace(g: THREE.Object3D, keep: THREE.Object3D[] = []) {
     if (inst || plain) if (!kept.includes(c)) kept.push(c);
   }
   for (const k of kept) g.remove(k);
-  const baked = bake(g);
+  const baked = bake(g, byColor);
   g.clear();
   for (const m of [...baked.children]) g.add(m);
   for (const k of kept) g.add(k);

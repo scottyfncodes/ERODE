@@ -125,15 +125,18 @@ export class StationView {
     this.group.add(this.baseKennel);
     // merge everything that does not move into a few meshes per building
     for (const r of this.rooms) {
-      for (const w of r.walls) bakeInPlace(w.obj);
-      bakeInPlace(r.roof);
+      // the MeshCraft lodge is painted in many roles: bake its plain colours per vertex, so each
+      // cut-away wall still draws in a couple of calls
+      const vc = this.lodgeModelled && r === this.rooms[0];
+      for (const w of r.walls) bakeInPlace(w.obj, [], vc);
+      bakeInPlace(r.roof, [], vc);
       const keep: THREE.Object3D[] = [...r.walls.map((w) => w.obj), r.roof];
       for (const c of r.group.children) if (c.name === 'inside' || c.name === 'supply-crate') keep.push(c);
       const inside = r.group.getObjectByName('inside');
-      if (inside) bakeInPlace(inside, [...this.fire, ...this.badgePins.values()]);
-      bakeInPlace(r.group, keep);
+      if (inside) bakeInPlace(inside, [...this.fire, ...this.badgePins.values()], vc);
+      bakeInPlace(r.group, keep, vc);
     }
-    for (const [id, o] of this.upgrades) bakeInPlace(o, id === 'lights' ? [this.flag] : []);
+    for (const [id, o] of this.upgrades) bakeInPlace(o, id === 'lights' ? [this.flag] : [], id === 'wing' && this.lodgeModelled);
     bakeInPlace(this.baseKennel);
     for (const c of this.group.children) if (c.userData.pad) bakeInPlace(c);
     this.group.traverse((o) => {
