@@ -111,6 +111,7 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 12px;
+  line-height: 1.45; /* a label that wraps (the keys line in Pause) must not crowd */
   color: var(--muted);
 }
 
@@ -1537,7 +1538,7 @@ body.titled #loading .loading-bar {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
@@ -1559,7 +1560,9 @@ body.titled #loading .loading-bar {
   gap: 4px;
 }
 .seg button {
-  height: 34px;
+  /* 44 px: the touch minimum, like every other control */
+  height: 44px;
+  min-width: 52px;
   padding: 0 12px;
   border-radius: 8px;
   border: 1px solid var(--line);
