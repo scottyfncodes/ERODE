@@ -282,7 +282,7 @@ export class Panels {
       <div class="setrow"><span>Sled hill hold<small>Stops the sled sliding back on slopes too steep to climb</small></span>${seg('sledAssist', [['1', 'On'], ['0', 'Off']], s.sledAssist ? '1' : '0')}</div>
       <div class="setrow"><span>Route line<small>Dots on the snow along the roads to your objective</small></span>${seg('routeLine', [['1', 'On'], ['0', 'Off']], s.routeLine ? '1' : '0')}</div>
       <div class="label" style="margin-top:12px">Keys: WASD move, Shift run, E act, F fire, R and C climb and descend, J and L turn the camera, M map, Esc pause</div>
-      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><button class="btn" data-a="back">Back to patrol</button><button class="btn ghost" data-a="title">Save and quit to title</button><button class="btn ghost" data-a="reset" style="margin-left:auto">Start over</button></div>`;
+      <div class="pause-back"><button class="btn" data-a="back">Back to patrol</button></div><div class="pause-more"><button class="btn ghost" data-a="title">Save and quit to title</button><button class="btn ghost" data-a="reset">Start over</button></div>`;
     body.querySelectorAll('.seg').forEach((g) => {
       g.querySelectorAll('button').forEach((b) => {
         b.onclick = () => {

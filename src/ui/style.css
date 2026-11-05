@@ -1533,6 +1533,26 @@ body.titled #loading .loading-bar {
   margin: 0 auto 10px;
   line-height: 1.45;
 }
+/* Pause: the way back to the game stays on screen however long the settings list grows (pinned to
+   the panel's bottom edge while the list scrolls); quitting and starting over stay in the list */
+.pause-back {
+  position: sticky;
+  bottom: -14px; /* the body's bottom padding: flush with the panel's edge */
+  margin: 16px -14px 0;
+  padding: 12px 14px;
+  background: var(--slate);
+  border-top: 1px solid var(--line);
+}
+.pause-back .btn {
+  width: 100%;
+}
+.pause-more {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 4px;
+}
 .setrow {
   display: flex;
   align-items: center;
