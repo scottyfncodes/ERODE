@@ -319,13 +319,20 @@ function modelled(kind: OpsSpot['kind'], src: THREE.Object3D): THREE.Group {
   return g;
 }
 
+/** Which site a piece belongs to: each site is baked on its own, so the camera culls what it cannot see. */
+const SITE: Record<OpsSpot['kind'], string> = { fence: 'ridge', exploder: 'ridge', repeater: 'repeater', sign: 'pass', snowcat: 'top', headframe: 'mine', minecabin: 'mine' };
+
 /**
- * The whole lot, baked to two meshes: every plain-coloured part merged into one vertex-coloured mesh
- * (its material's colour per vertex), and the sign faces (textured) into a second. Two draw calls for
- * the whole working mountain.
+ * The whole lot, baked per site (Kessel Ridge, the repeater, the pass road signs, the top station, the mine) into one
+ * vertex-coloured mesh (every plain-coloured part, its material's colour per vertex) and, for the signs,
+ * one textured mesh for their faces. A handful of draw calls for the whole working mountain, and only
+ * the sites in view are drawn.
  */
 export function buildOps(t: Terrain, models: PatrolModels = {}): THREE.Group {
-  const all = new THREE.Group();
+  const out = new THREE.Group();
+  out.name = 'ops';
+  const vc = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const sites = new Map<string, THREE.Group>();
   for (const s of opsSpots()) {
     const src = models[OPS_MODELS[s.kind]];
     const g = src ? modelled(s.kind, src) : BUILD[s.kind]();
@@ -333,39 +340,41 @@ export function buildOps(t: Terrain, models: PatrolModels = {}): THREE.Group {
     const y = Math.min(t.height(s.x - 1.5, s.z), t.height(s.x + 1.5, s.z), t.height(s.x, s.z - 1.5), t.height(s.x, s.z + 1.5));
     g.position.set(s.x, y + g.position.y, s.z);
     g.rotation.y = s.rot;
-    all.add(g);
+    const site = sites.get(SITE[s.kind]) ?? new THREE.Group();
+    sites.set(SITE[s.kind], site);
+    site.add(g);
   }
-  all.updateMatrixWorld(true);
-  const plain: THREE.BufferGeometry[] = [];
-  const textured = new Map<THREE.Material, THREE.BufferGeometry[]>();
-  all.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    let geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
-    if (geo.index) geo = geo.toNonIndexed();
-    const mt = m.material as THREE.MeshLambertMaterial;
-    if (mt.map) {
-      for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') geo.deleteAttribute(k);
-      textured.set(mt, [...(textured.get(mt) ?? []), geo]);
-      return;
-    }
-    for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal') geo.deleteAttribute(k);
-    const n = geo.getAttribute('position').count;
-    const col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) col.set([mt.color.r, mt.color.g, mt.color.b], i * 3);
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    plain.push(geo);
-  });
-  const out = new THREE.Group();
-  out.name = 'ops';
-  const add = (geo: THREE.BufferGeometry | null, m: THREE.Material) => {
-    if (!geo) return;
-    const mesh = new THREE.Mesh(geo, m);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    out.add(mesh);
-  };
-  add(mergeGeometries(plain, false), new THREE.MeshLambertMaterial({ vertexColors: true }));
-  for (const [m, geos] of textured) add(mergeGeometries(geos, false), m);
+  for (const all of sites.values()) {
+    all.updateMatrixWorld(true);
+    const plain: THREE.BufferGeometry[] = [];
+    const textured = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    all.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      let geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
+      if (geo.index) geo = geo.toNonIndexed();
+      const mt = m.material as THREE.MeshLambertMaterial;
+      if (mt.map) {
+        for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') geo.deleteAttribute(k);
+        textured.set(mt, [...(textured.get(mt) ?? []), geo]);
+        return;
+      }
+      for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal') geo.deleteAttribute(k);
+      const n = geo.getAttribute('position').count;
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) col.set([mt.color.r, mt.color.g, mt.color.b], i * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      plain.push(geo);
+    });
+    const add = (geo: THREE.BufferGeometry | null, m: THREE.Material) => {
+      if (!geo) return;
+      const mesh = new THREE.Mesh(geo, m);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      out.add(mesh);
+    };
+    if (plain.length) add(mergeGeometries(plain, false), vc);
+    for (const [m, geos] of textured) add(mergeGeometries(geos, false), m);
+  }
   return out;
 }

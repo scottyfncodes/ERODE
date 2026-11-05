@@ -91,8 +91,8 @@ figurehead), and its shared 3D library was empty in this container. The one earl
 | # | Batch | Commit | Models | Fallback | Tests |
 | --- | --- | --- | --- | --- | --- |
 | 1 | The lodge, its wing and its furniture | `cdf5366` | `rs_lodge`, `rs_lodge_wing`, `rs_lodge_furniture` | all three or the code lodge | `tests/lodge.test.ts` (footprint, height, chimney smoke point, open door, cut-away on all four walls and the roof, furniture heights and spots, the hearth's flame point unchanged and its firebox clear, wing footprint, draw calls, fallback for each missing file) |
-| 2 | The working mountain | `6ff5436` | `rs_snow_fence`, `rs_exploder`, `rs_repeater`, `rs_warning_sign`, `rs_snowcat`, `rs_headframe`, `rs_mine_cabin` | per piece | `tests/ops.test.ts` (same two draw calls, each kind on its spot at the code piece's height and base, a missing model falls back alone) |
-| 3 | The weather station; colour-baking the lodge | (this branch) | `rs_weather_mast` | the code mast | `tests/weather-station.test.ts` (position, height, hub at 7.2 m, the anemometer turns only once repaired) |
+| 2 | The working mountain | `6ff5436` | `rs_snow_fence`, `rs_exploder`, `rs_repeater`, `rs_warning_sign`, `rs_snowcat`, `rs_headframe`, `rs_mine_cabin` | per piece | `tests/ops.test.ts` (same draw calls as the code pieces, each site small enough to cull, each kind on its spot at the code piece's height and base, a missing model falls back alone) |
+| 3 | The weather station; colour-baking the lodge | `06970df` | `rs_weather_mast` | the code mast | `tests/weather-station.test.ts` (position, height, hub at 7.2 m, the anemometer turns only once repaired) |
 
 Every model also passes MeshCraft `validate_asset` (no failures) and `engine_check`, and is held to a
 triangle budget in `tests/models.test.ts`. `art/MANIFEST.json` lists each file with its SHA-256.
@@ -109,7 +109,8 @@ checked to 1e-6), the dollhouse cut-away and the anemometer's repair.
 - `src/render/stationView.ts`: the lodge comes from `rs_lodge` (walls into the cut-away, roof, base,
   chimney) and `rs_lodge_furniture` (each piece placed where the code's group was); the code-built
   shell moved into `codeLodge()` as the fallback. `lodgeModelled` reports which is in use.
-- `src/render/opsView.ts`: `buildOps(t, models)` uses a model per kind when present and bakes as before.
+- `src/render/opsView.ts`: `buildOps(t, models)` uses a model per kind when present, and bakes per site
+  so the camera culls what it cannot see.
 - `src/render/worldView.ts`: the weather mast and its spinning anemometer; `weatherModelled`.
 - `src/render/kit.ts`: `bake(g, byColor)` merges plain-coloured parts into one vertex-coloured mesh,
   so a model painted in many roles does not multiply draw calls.
@@ -132,7 +133,43 @@ iPhone landscape, SwiftShader):
 
 ## 6. Performance and regression
 
-PERF_TABLE
+Measured with `scripts/perf.mjs` (views added for the lodge, inside it, the exploders and the mine) on
+the phone tier (`low`, iPhone landscape), production builds of `main` and of this branch, same machine.
+SwiftShader renders on the CPU, so draw calls and triangles are exact but frame times are only rough.
+
+| View | Draw calls, main | Branch | Triangles, main | Branch | Change |
+| --- | --- | --- | --- | --- | --- |
+| Station yard | 399 | 361 | 319,300 | 296,686 | -7.1% |
+| The lodge from the yard | 390 | 305 | 277,833 | 273,567 | -1.5% |
+| Inside the lodge | 300 | 231 | 194,148 | 167,748 | -13.6% |
+| Tannberg top station | 179 | 178 | 208,311 | 174,905 | -16.0% |
+| Pass road | 117 | 117 | 178,401 | 161,497 | -9.5% |
+| Kessel Ridge | 111 | 111 | 155,002 | 151,862 | -2.0% |
+| The exploders | 200 | 203 | 278,250 | 278,764 | +0.2% |
+| The mine | 172 | 173 | 231,162 | 201,244 | -12.9% |
+
+- **Draw calls** are down 38 to 85 at the station. The lodge model is painted in many roles, and
+  `bake(…, byColor)` merges its plain colours into one vertex-coloured mesh per cut-away node. They are
+  up 1 to 3 at the working-mountain sites.
+- **Triangles** are down nearly everywhere, although the new models have more triangles than the code
+  pieces did. The working mountain used to be one valley-wide mesh that was always drawn. It is now
+  baked per site (the ridge, the repeater, the pass road signs, the top station, the mine), so only the
+  sites in view are drawn.
+- **Boot**: four cold loads each: `main` 1.8 to 3.1 s, branch 2.1 to 2.7 s. That is noise at this
+  scale.
+- **Download**: the 11 new GLBs add 1.58 MB uncompressed and 0.30 MB gzipped. The whole model set is
+  0.80 MB gzipped, and Vercel serves GLBs brotli-compressed.
+- **Heap**: 48 MB on both after the tour.
+- The `high` tier does not complete on SwiftShader within the time limit, on `main` or here, so it
+  was not measured. Check it on a real device with `?stats`.
+
+Regression checks on this branch:
+- `npm run check` (typecheck, 133 tests in 20 files, production build) passes.
+- `scripts/verify.mjs` passes on 5 viewports: iPhone 15, SE and 15 Pro Max, upright and on their side.
+  It found no console warnings, no kit model missing, no HUD overlap, no touch target under 44 px, and
+  no state left behind after a restart.
+- `scripts/assetviews.mjs` captured every view with no page errors or warnings.
+- Every new GLB passed MeshCraft `validate_asset` (0 failures) and `engine_check` (three@0.170).
 
 ## 7. Remaining legacy and why
 
@@ -153,3 +190,10 @@ are code on purpose; every model keeps a tested code fallback.
    persistent 3D library outside the container so library versions survive sessions.
 6. **Retire code fallbacks** once the models have shipped a while without a load failure, which would
    cut `characterMesh.ts`, `huskyMesh.ts`, `sledMesh.ts`, `heliMesh.ts` and the code lodge.
+
+## Tools added to this repo
+
+- `art/pipeline/8_build_models.py`: build, preview, export, validate and engine-check any asset of a
+  ROCKSLIDE MeshCraft script, and ship it with `--ship`.
+- `scripts/assetviews.mjs`: fixed in-game views of the modernized assets, with every station upgrade
+  built (for before/after captures). `scripts/beforeafter.py` and `scripts/sheet.py` make the sheets.

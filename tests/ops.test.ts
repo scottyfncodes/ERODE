@@ -31,11 +31,20 @@ describe('the working mountain', () => {
     }
   });
 
-  it('builds in a handful of draw calls, with the solid pieces as obstacles', () => {
+  it('builds in a handful of draw calls, one site at a time, with the solid pieces as obstacles', () => {
     const g = buildOps(t);
     let meshes = 0;
     g.traverse((o) => (meshes += (o as { isMesh?: boolean }).isMesh ? 1 : 0));
-    expect(meshes).toBeLessThanOrEqual(3);
+    // the ridge, the repeater, the top station and the mine: one vertex-coloured mesh each; the pass
+    // road signs: their steel and their faces
+    expect(meshes).toBeLessThanOrEqual(6);
+    // each site is small enough to cull on its own (the ridge is the long one)
+    g.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.geometry.computeBoundingSphere();
+      expect(m.geometry.boundingSphere!.radius).toBeLessThan(110);
+    });
     expect(opsObstacles(t).length).toBeGreaterThan(5);
     for (const k of ['fence', 'exploder', 'repeater', 'sign', 'snowcat', 'headframe', 'minecabin']) expect(spots.some((s) => s.kind === k), k).toBe(true);
   });
