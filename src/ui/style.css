@@ -1436,11 +1436,40 @@ button {
     margin-top: 8px;
   }
 }
-body:not(.booted) .title-screen .inner {
+body:not(.titled) .title-screen .inner {
   visibility: hidden;
 }
-body.booted .title-screen .inner {
-  animation: title-in 0.8s cubic-bezier(0.2, 0.8, 0.25, 1) 0.35s both;
+body.titled .title-screen .inner {
+  animation: title-in 0.8s cubic-bezier(0.2, 0.8, 0.25, 1) 0.15s both;
+}
+/* the title goes up while the valley is still being built: the loading screen becomes its backdrop
+   (without its own emblem), with a slim progress line at the top, and fades to show the lodge */
+body.titled #loading {
+  /* above the canvas and the grade, below #ui (z-index 2) where the title card lives */
+  z-index: 1;
+}
+body.titled #loading .emblem,
+body.titled #loading .wordmark,
+body.titled #loading .subbrand {
+  display: none;
+}
+body.titled #loading .loading-inner {
+  position: absolute;
+  left: 50%;
+  top: calc(16px + var(--safe-t));
+  transform: translateX(-50%);
+  width: min(260px, 60vw);
+}
+body.titled #loading .loading-bar {
+  margin: 0 0 6px;
+}
+.title-screen .btn.busy {
+  animation: busy-pulse 1.2s ease-in-out infinite;
+}
+@keyframes busy-pulse {
+  50% {
+    opacity: 0.72;
+  }
 }
 @keyframes title-in {
   from {
@@ -1449,7 +1478,8 @@ body.booted .title-screen .inner {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  body.booted .title-screen .inner {
+  body.titled .title-screen .inner,
+  .title-screen .btn.busy {
     animation: none;
   }
 }
@@ -1467,7 +1497,7 @@ body.booted .title-screen .inner {
 }
 .title-screen .meta {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 12px;
 }

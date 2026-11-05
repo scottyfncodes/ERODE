@@ -102,6 +102,8 @@ Everything persists in `localStorage` (`rockslide.patrol.v1`): missions done and
 
 ## Performance on phones
 
+The title card goes up as soon as the fonts are in, and the valley is built behind it in stages that hand the main thread back to the browser between them, so the card stays responsive; its shaders are compiled while the title is up (in parallel where the browser supports it). Tap Start before the valley is ready and the button says so; play begins the moment it is up, with the sound unlocked in that first tap.
+
 Terrain in 64 chunks culled to the view; trees instanced in 25 cells with a lighter tree on phones and about half the density; every static building merged into a few meshes per material (about halving the draw calls at the station); shadows only in a box around you; pooled particles and track ribbons with a fixed budget; the renderer drops its resolution when frames run long and raises it again when there is headroom. Graphics can be forced to Light or Full in the pause menu.
 
 ## Architecture

@@ -3,6 +3,7 @@ import { AudioEngine } from '../audio/audio';
 import { Input } from '../core/input';
 import { BUZZ, buzz, hitStopScale, HIT_TOTAL } from './feel';
 import type { GameSnapshot } from './snapshot';
+import { TitleScreen } from '../ui/title';
 import { RoadNet, trimWay, wayTo, type Way } from '../world/routing';
 import { forwardSpeed, glideSpeed, newGlider, SKIS, SLED, stepGlider, type Glider } from '../actors/glide';
 import { HELI, heliAgl, newHeli, stepHeli, type Heli } from '../actors/heli';
@@ -12,7 +13,7 @@ import { Snowpack, simulateRelease } from '../missions/avalanche';
 import { FAMILY_LABEL, mission, MISSIONS, type MissionDef, type Vehicle } from '../missions/catalog';
 import { currentStep, fire, fireState, interact, interactables, navTarget, newRun, tickRun, type RunEvent } from '../missions/runner';
 import { BADGES, item, RANKS, type Group } from '../progress/catalog';
-import { available, build, buy, complete, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
+import { available, browserStore, build, buy, complete, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
 import { PatrollerMesh, type Pose } from '../render/characterMesh';
 import { ForestView } from '../render/forestView';
 import { FX_KIND, GroundDrift, Particles, Snowfall, Tracks } from '../render/fx';
@@ -59,58 +60,49 @@ interface Act {
   work?: 'saw' | 'dig' | 'fix';
 }
 
-const storage = (): Store | null => {
-  try {
-    const s = window.localStorage;
-    s.setItem('__t', '1');
-    s.removeItem('__t');
-    return s;
-  } catch {
-    return null;
-  }
-};
+const storage = (): Store | null => browserStore();
 
 const UP = new THREE.Vector3(0, 1, 0);
 
 export class Game {
-  private rig: Rig;
-  private terrain: Terrain;
-  private trees: Tree[];
-  private grid: TreeGrid;
-  private solid: Colliders;
-  private station: StationView;
-  private world: WorldView;
-  private kitView: KitView;
-  private scattered: Placed[];
-  private markers: Markers;
-  private avView: AvalancheView;
-  private props: MissionProps;
-  private particles: Particles;
-  private snowfall: Snowfall;
-  private tracks: Tracks;
-  private drift: GroundDrift;
+  private rig!: Rig;
+  private terrain!: Terrain;
+  private trees!: Tree[];
+  private grid!: TreeGrid;
+  private solid!: Colliders;
+  private station!: StationView;
+  private world!: WorldView;
+  private kitView!: KitView;
+  private scattered!: Placed[];
+  private markers!: Markers;
+  private avView!: AvalancheView;
+  private props!: MissionProps;
+  private particles!: Particles;
+  private snowfall!: Snowfall;
+  private tracks!: Tracks;
+  private drift!: GroundDrift;
   private spinT = 0;
   /** Vince: twenty, the patrol's newest hand, long blonde hair with a bit of a curl */
   private player = new PatrollerMesh(false, { hair: VINCE_HAIR, long: true });
   private dogMesh = new HuskyMesh();
   private sledMesh = new SledMesh();
   private heliMesh = new HeliMesh();
-  private pepperHeld: THREE.Group;
-  private walker: Walker;
-  private sled: Glider;
-  private skis: Glider;
-  private heli: Heli;
-  private dog: Husky;
+  private pepperHeld!: THREE.Group;
+  private walker!: Walker;
+  private sled!: Glider;
+  private skis!: Glider;
+  private heli!: Heli;
+  private dog!: Husky;
   private mode: Mode = 'foot';
-  private pack: Snowpack;
-  private input: Input;
-  private hud: Hud;
-  private panels: Panels;
-  private audio = new AudioEngine();
-  private cam: FollowCamera;
-  private p: Profile;
+  private pack!: Snowpack;
+  private input!: Input;
+  private hud!: Hud;
+  private panels!: Panels;
+  private audio: AudioEngine;
+  private cam!: FollowCamera;
+  private p!: Profile;
   private store = storage();
-  private topo: HTMLCanvasElement;
+  private topo!: HTMLCanvasElement;
   /** when the valley was last drawn behind an open panel */
   private lastBehind = 0;
   /** the sharp copy of the map is drawn */
@@ -130,7 +122,6 @@ export class Game {
   private watchSkip = false;
   /** the action button as last shown (for the read-only snapshot) */
   private lastAct: GameSnapshot['action'] = null;
-  private cond: Conditions;
   /** sled climb assist: how long it has been holding you, and when it last said so */
   private heldT = 0;
   private heldHintAt = -99;
@@ -138,6 +129,7 @@ export class Game {
   private readonly roads = new RoadNet();
   private way: Way | null = null;
   private wayFrom = { x: 0, z: 0, tx: 1e9, tz: 1e9 };
+  private cond!: Conditions;
   private indoors = 0;
   private seat = new THREE.Vector3();
   private tmp = new THREE.Vector3();
@@ -156,26 +148,47 @@ export class Game {
   private stats: StatsOverlay | null = null;
   private forest!: ForestView;
 
-  constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void, kit: Kit = {}, models: PatrolModels = {}) {
+  constructor(
+    private canvas: HTMLCanvasElement,
+    private ui: HTMLElement,
+    audio: AudioEngine = new AudioEngine(),
+  ) {
+    this.audio = audio;
+  }
+
+  /**
+   * Build the valley. It runs in stages and `pause` between them hands the main thread back to the
+   * browser, so the title card on top stays responsive (taps, its animation) while the world goes up.
+   */
+  async build(progress: (f: number, t: string) => void, kit: Kit = {}, models: PatrolModels = {}, pause: () => Promise<void> = async () => {}) {
+    const canvas = this.canvas;
+    const ui = this.ui;
     this.p = loadProfile(this.store) ?? newProfile();
     if (statsWanted()) this.stats = new StatsOverlay(document.body);
     this.rig = new Rig(canvas, detectQuality(this.p.settings.quality));
     progress(0.15, 'Raising the mountains');
+    await pause();
     this.terrain = getTerrain();
     this.solid = buildColliders();
+    await pause();
     progress(0.35, 'Planting the forest');
     this.trees = plantForest(this.terrain, this.rig.quality.trees);
+    await pause();
     // the Kessel kit (MeshCraft): tors on the steeps, boulders, deadwood and the patrol's own gear
     const scattered = (this.scattered = scatterKit(this.terrain, this.trees, this.rig.quality.trees));
     // collisions use the same trees and rocks you see
     this.grid = new TreeGrid([...this.trees, ...kitObstacles(scattered.filter((p) => kit[p.kind])), ...opsObstacles(this.terrain)]);
     progress(0.5, 'Drawing the map');
+    await pause();
     this.topo = drawTopo(this.terrain, 640);
+    await pause();
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
+    await pause();
     // the working mountain: snow fences, exploders, signs, the old snowcat, the mine
     scene.add(buildOps(this.terrain, models));
     this.modelled.ops = OPS_IDS.every((id) => models[id]);
+    await pause();
     const forest = (this.forest = new ForestView(this.trees, models));
     scene.add(forest.group);
     // the patrol's vehicles from MeshCraft; the code-built ones stay if a model did not load
@@ -183,16 +196,20 @@ export class Game {
     // the patroller and Koda: skinned models on skeletons of the code's own joints
     this.modelled.patroller = this.player.useModel(models.rs_patroller);
     this.modelled.koda = this.dogMesh.useModel(models.rs_koda);
+    await pause();
     this.kitLoaded = Object.keys(kit).sort();
     this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z), this.rig.quality.tier === 'high');
     scene.add(this.kitView.group);
     progress(0.7, 'Lighting the stove');
+    await pause();
     this.station = new StationView(this.terrain, this.topo, models);
+    await pause();
     this.modelled.yard = this.station.modelled;
     this.modelled.lodge = this.station.lodgeModelled;
     this.world = new WorldView(this.terrain, models);
     this.modelled.buildings = this.world.modelled;
     this.modelled.weather = this.world.weatherModelled;
+    await pause();
     this.markers = new Markers(this.terrain);
     this.avView = new AvalancheView();
     this.props = new MissionProps(this.terrain, models);
@@ -209,6 +226,7 @@ export class Game {
     scene.add(this.station.group, this.world.group, this.markers.group, this.avView.group, this.props.group, this.particles.points, this.snowfall.points, this.tracks.mesh, this.drift.group);
     scene.add(this.player.group, this.dogMesh.group, this.sledMesh.group, this.heliMesh.group);
     progress(0.85, 'Waking Koda');
+    await pause();
     this.pack = new Snowpack(this.terrain);
     const pl = this.p.player;
     this.walker = newWalker(pl.x, pl.z, pl.yaw, this.terrain);
@@ -314,8 +332,22 @@ export class Game {
     }
   }
 
-  start() {
-    this.showTitle();
+  /**
+   * Compile every shader the valley uses while the title is up (in parallel where the browser can), so
+   * neither the first frame nor the first step into the lodge stalls on it.
+   */
+  async warm() {
+    const r = this.rig.renderer;
+    try {
+      await r.compileAsync(this.rig.scene, this.rig.camera);
+    } catch {
+      /* an older browser without async compile: the first frame compiles them instead */
+    }
+  }
+
+  /** Start the frame loop on the title card: `title` is one already showing (put up before the build). */
+  start(title?: TitleScreen) {
+    this.adoptTitle(title ?? new TitleScreen(this.ui, this.p, import.meta.env.BASE_URL));
     const loop = () => {
       requestAnimationFrame(loop);
       this.frame();
@@ -326,32 +358,19 @@ export class Game {
   // ------------------------------------------------------------------ title
 
   private showTitle() {
+    this.adoptTitle(new TitleScreen(this.ui, this.p, import.meta.env.BASE_URL));
+  }
+
+  private adoptTitle(t: TitleScreen) {
     this.state = 'title';
     this.hud.show(false);
-    const has = !!this.p.savedAt && !this.p.fresh;
-    const el = document.createElement('div');
-    el.className = 'title-screen';
-    const when = has ? `Day ${this.p.weather.day}, ${clock(this.p.weather.minute)} · ${RANKS[rank(this.p)].name} · ${this.p.funds} funds` : '';
-    el.innerHTML = `<div class="inner"><img class="emblem" src="${import.meta.env.BASE_URL}icons/icon.svg" alt="" width="72" height="72"><div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div><div class="subbrand">Mountain Patrol</div><p>The Kessel valley is yours to look after: its slopes, its roads, its people. You have a log station, a snowmobile, a borrowed helicopter, a pair of old skis, and Koda.</p><div class="row">${has ? '<button class="btn red" data-a="cont">Continue</button><button class="btn ghost" data-a="new">New patrol</button>' : '<button class="btn red" data-a="new">Start your patrol</button>'}</div>${has ? `<div class="meta">${when}</div>` : ''}</div>`;
-    this.ui.appendChild(el);
-    const go = (fresh: boolean) => {
+    t.onGo = (fresh: boolean) => {
       this.audio.unlock();
       this.applySettings(this.p.settings);
-      if (fresh) {
-        const btn = el.querySelector('[data-a=new]') as HTMLElement;
-        if (has && !btn.dataset.armed) {
-          btn.dataset.armed = '1';
-          btn.textContent = 'Tap again: this erases your save';
-          return;
-        }
-        this.resetProfile();
-      }
-      el.remove();
+      if (fresh) this.resetProfile();
+      t.remove();
       this.beginPlay();
     };
-    (el.querySelector('[data-a=new]') as HTMLElement).onclick = () => go(true);
-    const c = el.querySelector('[data-a=cont]') as HTMLElement | null;
-    if (c) c.onclick = () => go(false);
   }
 
   private resetProfile() {

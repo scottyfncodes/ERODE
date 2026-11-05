@@ -113,6 +113,18 @@ export interface Store {
   removeItem(k: string): void;
 }
 
+/** The browser's localStorage, if it works here (private windows and blocked storage throw). */
+export function browserStore(): Store | null {
+  try {
+    const s = window.localStorage;
+    s.setItem('__t', '1');
+    s.removeItem('__t');
+    return s;
+  } catch {
+    return null;
+  }
+}
+
 export function loadProfile(store: Store | null): Profile | null {
   if (!store) return null;
   try {
