@@ -56,6 +56,9 @@ const G = 9.81;
 const MAX_BLOCKS = 640;
 const CROWN_SPEED = 38;
 
+/** Which slopes were loaded on the story's release (the CHARGE_SPOTS defaults). */
+export const STORY_LOADED: readonly string[] = CHARGE_SPOTS.filter((c) => c.weak).map((c) => c.id);
+
 export class Snowpack {
   blocks: Block[] = [];
   private t: Terrain;
@@ -74,9 +77,12 @@ export class Snowpack {
   private rng = mulberry32(99);
   private secondaryDone = false;
   result: AvalancheResult = { released: 0, weakReleased: 0, weakTotal: 0, reachZ: BOWL.zTop, roadHit: false, secondary: 0 };
+  /** the slopes carrying wind slab on a weak layer right now (the story's first day: A and C) */
+  private loaded: Set<string>;
 
-  constructor(t: Terrain) {
+  constructor(t: Terrain, loaded: readonly string[] = STORY_LOADED) {
     this.t = t;
+    this.loaded = new Set(loaded);
     this.depo = new Float32Array(this.depoW * this.depoH);
     this.lay();
   }
@@ -97,7 +103,11 @@ export class Snowpack {
         });
       }
     }
-    this.result.weakTotal = this.blocks.filter((b) => CHARGE_SPOTS.find((c) => c.id === b.zone)!.weak).length;
+    this.result.weakTotal = this.blocks.filter((b) => this.isLoaded(b.zone)).length;
+  }
+
+  isLoaded(id: string): boolean {
+    return this.loaded.has(id);
   }
 
   /** Ground plus piled debris. */
@@ -134,13 +144,13 @@ export class Snowpack {
     for (const id of charged) {
       const c = CHARGE_SPOTS.find((s) => s.id === id)!;
       this.events.push({ type: 'boom', x: c.x, z: c.z });
-      const reach = c.weak ? 62 : 11;
+      const reach = this.isLoaded(id) ? 62 : 11;
       for (const b of this.blocks) {
         if (b.state !== 0) continue;
         const d = Math.hypot(b.x - c.x, b.z - c.z);
         // the crack runs along the slope (across x) faster than up and down it
         const aniso = Math.hypot((b.x - c.x) * 0.8, (b.z - c.z) * 1.35);
-        const weakHere = CHARGE_SPOTS.find((s) => s.id === b.zone)!.weak;
+        const weakHere = this.isLoaded(b.zone);
         if (aniso < reach && (weakHere || d < 12)) {
           b.state = 1;
           b.at = 0.25 + aniso / CROWN_SPEED;
@@ -164,7 +174,7 @@ export class Snowpack {
       if (b.state === 1 && this.time >= b.at) {
         b.state = 2;
         this.result.released++;
-        if (CHARGE_SPOTS.find((s) => s.id === b.zone)!.weak) this.result.weakReleased++;
+        if (this.isLoaded(b.zone)) this.result.weakReleased++;
         b.vx = (this.rng() - 0.5) * 1.5;
         b.vz = 1.5 + this.rng() * 1.5;
         b.ax = this.rng() - 0.5;
@@ -232,7 +242,7 @@ export class Snowpack {
   private sympathetic() {
     if (this.secondaryDone || this.time < 4) return;
     for (const c of CHARGE_SPOTS) {
-      if (c.weak) continue;
+      if (this.isLoaded(c.id)) continue;
       const near = this.blocks.some((b) => b.state === 2 && b.zone !== c.id && Math.abs(b.x - c.x) < 20 && b.z > c.z && b.z - c.z < 40);
       const resting = this.blocks.filter((b) => b.state === 0 && b.zone === c.id && Math.hypot(b.x - c.x, b.z - c.z) < 16);
       if (near && resting.length) {
@@ -248,8 +258,9 @@ export class Snowpack {
     }
   }
 
-  /** Put the slab back (the snow has built up again). */
-  reset(): void {
+  /** Put the slab back (the snow has built up again), loaded on these slopes. */
+  reset(loaded: readonly string[] = [...this.loaded]): void {
+    this.loaded = new Set(loaded);
     this.blocks.length = 0;
     this.depo.fill(0);
     this.fired = false;
@@ -275,8 +286,8 @@ function nearestZone(x: number, z: number) {
 }
 
 /** Simulate a release to the end, headless (tests and tuning). */
-export function simulateRelease(t: Terrain, charged: string[], maxT = 120): Snowpack {
-  const s = new Snowpack(t);
+export function simulateRelease(t: Terrain, charged: string[], maxT = 120, loaded: readonly string[] = STORY_LOADED): Snowpack {
+  const s = new Snowpack(t, loaded);
   s.fire(charged);
   const dt = 1 / 30;
   while (!s.done && s.time < maxT) s.step(dt);

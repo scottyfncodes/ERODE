@@ -29,9 +29,9 @@ export type Step =
   | { kind: 'goto'; at: Target; radius: number; text: string; by?: Vehicle[] }
   | { kind: 'interact'; id: string; at: Target | 'dog'; radius?: number; text: string; action: string; hold: number; prop?: string; onFoot?: boolean }
   | { kind: 'mount'; vehicle: Vehicle; text: string }
-  | { kind: 'scan'; contacts: Contact[]; text: string }
+  | { kind: 'scan'; contacts: Contact[]; text: string; /** read the bowl as it is loaded today (the run's `loaded`) */ bowl?: boolean }
   | { kind: 'land'; at: Target; text: string }
-  | { kind: 'charges'; spots: string[]; text: string }
+  | { kind: 'charges'; spots: string[]; text: string; /** you choose which of `spots` to charge, then fire */ choose?: boolean }
   | { kind: 'fire'; text: string }
   | { kind: 'watch'; text: string }
   | { kind: 'track'; trail: { x: number; z: number }[]; at: Target; text: string; start: Target }
@@ -53,6 +53,10 @@ export interface MissionDef {
   steps: Step[];
   /** a world event: comes and goes, can recur */
   dynamic?: boolean;
+  /** posted by the avalanche service when Kessel Bowl reloads, never by the radio's random callouts */
+  bowl?: boolean;
+  /** the reward is the most it can pay: what you get depends on how the job went */
+  graded?: boolean;
   /** the person or animal involved (for the scene) */
   subject?: { kind: 'skier' | 'cat' | 'driver'; x: number; z: number; name: string };
   /** where on the map to draw it */
@@ -74,15 +78,40 @@ const GATE: Target = { x: -150, z: -40, label: 'Pass barrier' };
 const LODGE_T: Target = { x: 330, z: 461, label: 'The Kettle, Hollin' };
 const CLINIC_T: Target = { x: 380, z: 506, label: 'Hollin clinic' };
 
-/** The slopes of Kessel Bowl, as SKYTRACE recon contacts. */
-export const BOWL_CONTACTS: Contact[] = CHARGE_SPOTS.map((c) => ({
-  x: c.x,
-  z: c.z,
-  label: c.label.toUpperCase(),
-  kind: 'slope',
-  target: c.weak,
-  clear: c.weak ? `${c.label}: wind slab on a buried weak layer. Loaded. Marked.` : `${c.label}: well bonded, scoured by the wind. Stable.`,
-}));
+/** The slopes of Kessel Bowl as SKYTRACE recon contacts, loaded on the slopes given. */
+export function bowlContacts(loaded: readonly string[]): Contact[] {
+  return CHARGE_SPOTS.map((c) => {
+    const weak = loaded.includes(c.id);
+    return {
+      x: c.x,
+      z: c.z,
+      label: c.label.toUpperCase(),
+      kind: 'slope',
+      target: weak,
+      clear: weak ? `${c.label}: wind slab on a buried weak layer. Loaded. Marked.` : `${c.label}: well bonded, scoured by the wind. Stable.`,
+    };
+  });
+}
+
+/** The story's bowl: A and C loaded. */
+export const BOWL_CONTACTS: Contact[] = bowlContacts(CHARGE_SPOTS.filter((c) => c.weak).map((c) => c.id));
+
+/**
+ * Which slopes the wind loads. Snow blows over the ridge and settles in the lee, so the wind
+ * that came with the new snow decides which of the four slopes carry slab. One of these per
+ * reload, picked by the day.
+ */
+export const WIND_LOADS: { wind: string; loaded: string[] }[] = [
+  { wind: 'west', loaded: ['A', 'C'] },
+  { wind: 'north-west', loaded: ['B', 'C'] },
+  { wind: 'south-west', loaded: ['A', 'D'] },
+  { wind: 'north', loaded: ['C', 'D'] },
+  { wind: 'south', loaded: ['A', 'B'] },
+  { wind: 'east', loaded: ['B', 'D'] },
+  { wind: 'strong west', loaded: ['A', 'C', 'D'] },
+  { wind: 'light north-east', loaded: ['B'] },
+  { wind: 'light south-east', loaded: ['D'] },
+];
 
 /** Nils's last tracks from the top station into the trees. */
 const NILS = { x: 640, z: -220 };
@@ -227,6 +256,51 @@ export const MISSIONS: MissionDef[] = [
     done: 'Pepper is on the windowsill pretending none of this happened.',
   },
   {
+    id: 'bowl-recon',
+    family: 'recon',
+    title: 'Kessel Bowl Has Reloaded',
+    from: 'Avalanche service',
+    alert: 'New snow on Kessel Bowl and the wind has been at it. Which slopes are loaded today?',
+    brief: 'The bowl has loaded up again, and the wind decides where: snow settles in the lee, so it is not always A and C. Fly the bowl and read all four slopes; the loaded ones get flagged on the mountain and the map for the control team. You can skip the flight and judge the slopes yourself, but a charge on sound snow is a charge wasted.',
+    reward: { funds: 120, rep: 70 },
+    requires: ['release'],
+    dynamic: true,
+    bowl: true,
+    where: { x: -120, z: -400, label: 'Kessel Bowl' },
+    steps: [
+      { kind: 'mount', vehicle: 'heli', text: 'Start the helicopter on the pad' },
+      { kind: 'goto', at: { x: -120, z: -330, label: 'Kessel Bowl' }, radius: 170, text: 'Fly to Kessel Bowl', by: ['heli'] },
+      { kind: 'scan', contacts: BOWL_CONTACTS, bowl: true, text: 'Scan the four slopes: nose on each one, close and low' },
+      { kind: 'land', at: PAD_T, text: 'Fly home and land on the pad' },
+    ],
+    done: 'Report filed. The loaded slopes are flagged for the control team.',
+  },
+  {
+    id: 'bowl-control',
+    family: 'avalanche',
+    title: 'Bring Down the Bowl',
+    from: 'Avalanche service',
+    alert: 'Kessel Bowl is loaded above the pass road. Bring it down before it comes down on its own.',
+    brief: 'Close the pass road, climb to Kessel Ridge and charge the loaded slopes: the ones the recon flight flagged, or your own read if nobody has flown it. You choose which slopes to charge, then fire from safe ground. Pay goes by how much of the loaded snow comes down; a charge on a stable slope is wasted, and a clean read (every loaded slope, nothing else) earns a bonus.',
+    reward: { funds: 290, rep: 170 },
+    graded: true,
+    requires: ['release'],
+    dynamic: true,
+    bowl: true,
+    where: { x: -120, z: -400, label: 'Kessel Bowl' },
+    controls: true,
+    steps: [
+      { kind: 'interact', id: 'locker', at: { x: SPOTS.locker.x - 1.2, z: SPOTS.locker.z, label: 'Explosives locker' }, text: 'Take the charges from the locker in the garage', action: 'Take charges', hold: 1, onFoot: true },
+      { kind: 'interact', id: 'gate-close', at: GATE, text: 'Close the pass road at the barrier', action: 'Close road', hold: 1.2, prop: 'gate' },
+      { kind: 'goto', at: P('ridge', 'Kessel Ridge'), radius: 24, text: 'Take the ridge track up to Kessel Ridge' },
+      { kind: 'charges', spots: ['A', 'B', 'C', 'D'], choose: true, text: 'Charge the slopes you judge loaded, then get clear and fire' },
+      { kind: 'fire', text: 'Get clear of the slope, then fire the charges' },
+      { kind: 'watch', text: 'Watch it run' },
+      { kind: 'interact', id: 'gate-open', at: GATE, text: 'Reopen the pass road', action: 'Open road', hold: 1.2, prop: 'gate' },
+    ],
+    done: 'Bowl is down and the road is open again. Good work up there.',
+  },
+  {
     id: 'tree',
     family: 'response',
     title: 'Tree Down on the Pass',
@@ -264,3 +338,14 @@ export const MISSIONS: MissionDef[] = [
 ];
 
 export const mission = (id: string): MissionDef => MISSIONS.find((m) => m.id === id)!;
+
+/** The avalanche control missions: the story's first release and the repeat work on the bowl. */
+export const isControl = (id: string | undefined): boolean => id === 'release' || id === 'bowl-control';
+
+/** "Slopes A and C", "Slope B", "no slopes". */
+export function slopeList(ids: readonly string[]): string {
+  const sorted = [...ids].sort();
+  if (!sorted.length) return 'no slopes';
+  if (sorted.length === 1) return `Slope ${sorted[0]}`;
+  return `Slopes ${sorted.slice(0, -1).join(', ')} and ${sorted[sorted.length - 1]}`;
+}

@@ -21,6 +21,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { BOWL_CONTACTS, mission, MISSIONS } from '../src/missions/catalog';
 import { BADGES, RANKS } from '../src/progress/catalog';
+import { CONTROL_PAY } from '../src/progress/profile';
 import { CHARGE_SPOTS, pad } from '../src/world/places';
 import { SPOTS } from '../src/world/station';
 import { getTerrain } from '../src/world/terrain';
@@ -45,7 +46,7 @@ interface Check {
 }
 const checks: Check[] = [];
 const log: string[] = [];
-const counts = { realInputs: 0, holds: 0, clicks: 0, travelShortcuts: 0, timerShortcuts: 0 };
+const counts = { realInputs: 0, holds: 0, clicks: 0, travelShortcuts: 0, timerShortcuts: 0, snowShortcuts: 0 };
 const say = (s: string) => {
   const line = `[${((Date.now() - T0) / 1000).toFixed(0).padStart(4)}s] ${s}`;
   log.push(line);
@@ -184,7 +185,11 @@ async function finish(id: string, before: GameSnapshot, t0: number) {
   const df = after.funds - before.funds;
   const dr = after.reputation - before.reputation;
   check('core_gameplay', def.title, 'mission completes and the debrief opens', d.ok && !!debrief, debrief?.slice(0, 120));
-  check('progression', def.title, `pays the advertised reward (+${def.reward.funds} funds, +${def.reward.rep} reputation)`, df === def.reward.funds && dr === def.reward.rep, { funds: df, reputation: dr });
+  if (def.graded) {
+    // graded work pays by the result: never more than the listed reward, and a clean read earns the bonus
+    const clean = /clean read/i.test(debrief ?? '');
+    check('progression', def.title, `pays by the result, up to the listed ${def.reward.funds} funds (a clean read: base, share and bonus)`, df > 0 && df <= def.reward.funds && dr <= def.reward.rep && (!clean || df >= CONTROL_PAY.funds + CONTROL_PAY.clean.funds), { funds: df, reputation: dr, clean });
+  } else check('progression', def.title, `pays the advertised reward (+${def.reward.funds} funds, +${def.reward.rep} reputation)`, df === def.reward.funds && dr === def.reward.rep, { funds: df, reputation: dr });
   missionLog[id] = { funds: df, rep: dr, ok: d.ok, seconds: Math.round((Date.now() - t0) / 1000), rankBefore: before.rank.name, rankAfter: after.rank.name, extra: debrief ?? '' };
   await shot(`debrief-${id}`);
   await click('.debrief [data-a=ok]', def.title, 'close the debrief');
@@ -624,13 +629,118 @@ check('player_experience', 'Title', 'the first radio call says where to start (t
   await click('[data-a=ok]', 'Sleep', 'Head out');
 }
 
+// ================================================================== Kessel Bowl, again: reload, recon, your own read
+{
+  const T = 'Kessel Bowl, again';
+  await travel(0, 250, 0);
+  // if the night did not load the bowl, let it snow: fresh snow set through the save (counted)
+  const loadedNow = (await P((p) => p.profile().events.includes('bowl-control'))) as boolean;
+  if (!loadedNow) {
+    counts.snowShortcuts++;
+    await P((p) => {
+      const w = p.profile().weather;
+      w.controlled = false;
+      w.freshSnow = 40;
+    });
+  }
+  const posted = await until(() => P((p) => ({ events: [...p.profile().events], loaded: [...p.profile().loaded], wind: p.profile().loadWind })) as Promise<{ events: string[]; loaded: string[]; wind: string }>, (v) => v.events.includes('bowl-recon') && v.events.includes('bowl-control'), 20000, 400);
+  check('replayability', T, 'after the story, new snow reloads the bowl and the avalanche service posts a recon flight and a control job', posted.ok && posted.v.loaded.length > 0, { loaded: posted.v.loaded, wind: posted.v.wind, viaNight: loadedNow });
+  const loaded = posted.v.loaded;
+  // the recon flight: today's loading, not the story's
+  {
+    const id = 'bowl-recon';
+    const t0 = Date.now();
+    await takeFromTable(id);
+    const before = await G();
+    await travel(SPOTS.heli.x + 3.2, SPOTS.heli.z + 1, Math.PI / 2, false);
+    await act('Fly', T);
+    await stepIs(id, 1);
+    await page.keyboard.down('KeyR');
+    await until(G, (s) => !s.heli.landed && s.heli.altitudeAboveGround > 4, 120000);
+    await page.keyboard.up('KeyR');
+    counts.realInputs++;
+    await flyTo(-120, -260, 70, 0);
+    check('core_gameplay', T, 'recon: fly to Kessel Bowl', (await stepIs(id, 2)).ok);
+    const read: string[] = [];
+    for (const [i, c] of BOWL_CONTACTS.entries()) {
+      await flyTo(c.x, c.z + 70, Math.max(30, H(c.x, c.z) - H(c.x, c.z + 70) + 50), 0);
+      const r = await until(() => P((p) => p.state().active?.scan) as Promise<{ identified: boolean[] } | null>, (sc) => !!sc && sc.identified[i], 120000, 400);
+      if (r.ok) read.push(c.label);
+    }
+    check('core_gameplay', T, 'recon: the scanner reads all four slopes', read.length === 4, read);
+    await stepIs(id, 3, 10000);
+    await flyTo(SPOTS.heli.x, SPOTS.heli.z, 12, Math.PI / 2);
+    await page.keyboard.down('KeyC');
+    await until(G, (s) => s.heli.landed || !s.mission, 120000);
+    await page.keyboard.up('KeyC');
+    counts.realInputs++;
+    await finish(id, before, t0);
+    const marked = (await P((p) => [...p.profile().marked])) as string[];
+    check('replayability', T, "recon flags today's loaded slopes (the wind's pattern), ready for the control team", marked.join() === loaded.join(), { marked, loaded });
+    await tap('KeyX');
+    await until(G, (s) => s.mode === 'foot', 10000);
+  }
+  // the control job: the table says what recon flagged; charge those, fire, and get paid by the result
+  {
+    const id = 'bowl-control';
+    const t0 = Date.now();
+    await travel(SPOTS.table.x + 1.4, SPOTS.table.z + 0.4, Math.PI / 2, false);
+    await act('Mission table', T);
+    await until(G, (s) => s.panel, 8000);
+    await click(`[data-m="${id}"]`, T, 'pick the control job');
+    const brief = ((await page.locator('.mdetail').first().textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ');
+    const tag = ((await page.locator(`[data-m="${id}"] .tag`).first().textContent().catch(() => '')) ?? '').trim();
+    check('player_experience', T, 'the table shows what recon flagged and that the pay is "up to" the listed reward', /Recon flagged/.test(brief) && /^up to/.test(tag), { tag, read: brief.match(/Recon flagged[^.]*\./)?.[0] });
+    const goal = ((await page.locator('.goal').first().textContent().catch(() => '')) ?? '').trim();
+    check('progression', T, 'the mission table shows the next rank and how far off it is', /Next rank|top of the patrol/.test(goal), goal);
+    await click('[data-go]', T, 'take the call');
+    await until(G, (g) => g.mission?.id === id && !g.panel, 8000);
+    const before = await G();
+    await travel(SPOTS.locker.x - 1.2, SPOTS.locker.z, Math.PI / 2, false);
+    await act('Take charges', T, 1);
+    await stepIs(id, 1);
+    await travel(-150 + 1, -40 + 1, 0);
+    await act('Close road', T, 1.2);
+    await stepIs(id, 2);
+    const ridge = pad('ridge');
+    await travel(ridge.x, ridge.z, 0);
+    check('core_gameplay', T, 'control: road closed and up on Kessel Ridge', (await stepIs(id, 3)).ok);
+    const chargesAtStart = (await P((p) => p.profile().active.charges.length)) as number;
+    for (const sid of loaded) {
+      const c = CHARGE_SPOTS.find((k) => k.id === sid)!;
+      await travel(c.x + 1, c.z + 1, 0);
+      await act(new RegExp(`^Set charge: Slope ${sid}`), T, 2.2);
+    }
+    const hud = ((await page.locator('.task .obj').first().textContent().catch(() => '')) ?? '').trim();
+    const charged = (await P((p) => [...p.profile().active.charges])) as string[];
+    check('core_gameplay', T, 'control: your own charges, as many as you choose (the step waits for you to fire)', chargesAtStart === 0 && charged.join() === loaded.join() && /\(\d+ set\)$/.test(hud), { charged, hud });
+    await travel(ridge.x, ridge.z, Math.PI);
+    const fireReady = await waitAction('Fire charges');
+    counts.realInputs++;
+    counts.holds++;
+    await page.keyboard.down('KeyE');
+    const fired = await until(G, (s) => s.avalanche.fired, 20000, 50);
+    await page.keyboard.up('KeyE');
+    check('core_gameplay', T, 'control: fire from safe ground with the charges you chose', fireReady.ok && fired.ok);
+    const settled = await until(G, (s) => s.avalanche.settled, 900000, 2000);
+    check('difficulty', T, "control: today's loaded slopes come down and the berm holds", settled.ok && settled.v.avalanche.releasedShare > 0.5 && !settled.v.avalanche.reachedRoad, settled.v.avalanche);
+    await stepIs(id, 6, 20000);
+    await travel(-150 + 1, -40 + 1, 0);
+    await act('Open road', T, 1.2);
+    await finish(id, before, t0);
+    check('replayability', T, 'the debrief explains the result: what was loaded, what you charged, and the clean-read bonus', /Loaded today:/.test(missionLog[id]?.extra ?? '') && /clean read/i.test(missionLog[id]?.extra ?? ''), (missionLog[id]?.extra ?? '').slice(0, 220));
+    const after = (await P((p) => ({ events: [...p.profile().events], controlled: p.profile().weather.controlled, bowlDays: p.profile().bowlDays }))) as { events: string[]; controlled: boolean; bowlDays: number };
+    check('replayability', T, 'the bowl is controlled, the calls are off the board, and the patrol log counts it', after.controlled && !after.events.some((e) => e.startsWith('bowl')) && after.bowlDays === 1, after);
+  }
+}
+
 // ================================================================== totals
 const end = await G();
 const story = MISSIONS.filter((m) => !m.dynamic);
 check('core_gameplay', 'Campaign', 'every story mission completed end to end', story.every((m) => missionLog[m.id]?.ok), Object.keys(missionLog));
 check('progression', 'Campaign', 'reputation raises the rank (Recruit at the start)', end.rank.index >= 3, { rank: end.rank.name, reputation: end.reputation, ranks: RANKS.map((r) => `${r.name} ${r.rep}`).join(', ') });
 // the HUD adds a count to counted steps ("(0 of 4)" slopes scanned, charges set)
-const badObj = objectives.filter((o) => !o.game || !(o.hud === o.game || new RegExp(`^${o.game.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(\\d+ of \\d+\\)$`).test(o.hud)));
+const badObj = objectives.filter((o) => !o.game || !(o.hud === o.game || new RegExp(`^${o.game.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(\\d+ (of \\d+|set)\\)$`).test(o.hud)));
 check('player_experience', 'Campaign', "every mission step's objective is on the HUD, word for word (plus its count on counted steps)", objectives.length > 20 && badObj.length === 0, { stepsChecked: objectives.length, mismatches: badObj.slice(0, 3) });
 check('technical', 'Campaign', 'no page errors or console errors during the whole playthrough', pageErrors.length === 0, pageErrors.slice(0, 5));
 await shot('end');
@@ -653,14 +763,14 @@ const report = {
   checks,
   log,
   method:
-    'Real key input and clicks for every action and menu; long journeys skipped with the QA teleport (counted in counts.travelShortcuts); the radio callout timer wound down through the save (counts.timerShortcuts). Chromium headless, SwiftShader (software WebGL), 390x844 touch viewport, Light graphics.',
+    'Real key input and clicks for every action and menu; long journeys skipped with the QA teleport (counted in counts.travelShortcuts); the radio callout timer wound down through the save (counts.timerShortcuts); if the night did not reload Kessel Bowl, new snow is set through the save (counts.snowShortcuts). Chromium headless, SwiftShader (software WebGL), 390x844 touch viewport, Light graphics.',
   notTested: ['real-device frame rate', 'real touch hardware and haptics on a phone (vibration was observed as a request to navigator.vibrate, not felt)', 'iPhone Safari (this is Chromium)', 'driving and flying the long journeys by hand'],
 };
 writeFileSync(join(outDir, 'playthrough.json'), JSON.stringify(report, null, 1));
 const md = [
   `# ROCKSLIDE playthrough: ${report.ok ? 'PASS' : `FAIL (${failed.length} of ${checks.length} checks)`}`,
   '',
-  `${report.when} · ${url} · ${report.seconds} s · ${checks.length} checks · ${counts.realInputs} real key inputs (${counts.holds} holds) · ${counts.clicks} clicks · ${counts.travelShortcuts} travel shortcuts · ${counts.timerShortcuts} callout-timer shortcuts`,
+  `${report.when} · ${url} · ${report.seconds} s · ${checks.length} checks · ${counts.realInputs} real key inputs (${counts.holds} holds) · ${counts.clicks} clicks · ${counts.travelShortcuts} travel shortcuts · ${counts.timerShortcuts} callout-timer shortcuts · ${counts.snowShortcuts} snow shortcuts`,
   '',
   `Method: ${report.method}`,
   '',

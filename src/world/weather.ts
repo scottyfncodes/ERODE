@@ -151,12 +151,25 @@ export function tickWeather(w: WeatherState, dt: number): void {
   if (w.minute >= 1440 + DAY_START) nextDay(w);
 }
 
+/**
+ * Snow that falls overnight before the morning of `day` (cm): heavy after a stormy or snowy
+ * evening, more if the morning is snowing too, a dusting otherwise. Deterministic per day.
+ */
+export function overnightSnow(day: number): number {
+  if (day <= 1) return 0;
+  const evening = forecast(day - 1)[3].sky;
+  const morning = forecast(day)[0].sky;
+  const r = mulberry32(day * 4111 + 7)();
+  const base = evening === 'storm' ? 26 : evening === 'snow' ? 17 : evening === 'cloud' ? 5 : 0;
+  return Math.round(base + (morning === 'snow' ? 8 : 0) + r * 8);
+}
+
 /** Sleep at the station: morning of the next day. */
 export function nextDay(w: WeatherState): void {
   w.day += 1;
   w.minute = DAY_START + 15;
-  // the snowpack settles overnight a little
-  w.freshSnow = Math.max(0, w.freshSnow * 0.85);
+  // the snowpack settles overnight a little, and the night's snow lands on it
+  w.freshSnow = Math.min(120, Math.max(0, w.freshSnow * 0.85) + overnightSnow(w.day));
   w.controlled = false;
 }
 

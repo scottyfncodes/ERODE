@@ -20,6 +20,11 @@
   "avy_secondary",
   "avy_down_road",
   "avy_down_berm",
+  "avy_reload_alert",
+  "avy_reload_done",
+  "avy_control_alert",
+  "avy_control_done",
+  "avy_choose",
   "ski_alert",
   "ski_clinic",
   "ski_done",
@@ -169,6 +174,41 @@
     "id": "avy_down_berm",
     "character": "avalanche",
     "text": "It is down. The berm caught the lot. Beautiful.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_reload_alert",
+    "character": "avalanche",
+    "text": "New snow on Kessel Bowl and the wind has been at it. Which slopes are loaded today?",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_reload_done",
+    "character": "avalanche",
+    "text": "Report filed. The loaded slopes are flagged for the control team.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_control_alert",
+    "character": "avalanche",
+    "text": "Kessel Bowl is loaded above the pass road. Bring it down before it comes down on its own.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_control_done",
+    "character": "avalanche",
+    "text": "Bowl is down and the road is open again. Good work up there.",
+    "lang": "en-gb",
+    "speed": 0.98
+   },
+   {
+    "id": "avy_choose",
+    "character": "avalanche",
+    "text": "Charge the slopes you think are loaded, then get clear and fire.",
     "lang": "en-gb",
     "speed": 0.98
    },

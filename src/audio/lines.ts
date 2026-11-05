@@ -38,6 +38,11 @@ export const VOICE_LINES: readonly VoiceLine[] = [
   { id: 'avy_secondary', cast: 'avalanche', radio: R, text: 'Secondary release on the next slope over. That is fine, let it run.' },
   { id: 'avy_down_road', cast: 'avalanche', radio: R, text: 'It is down. A little over the road, but the barrier did its job.' },
   { id: 'avy_down_berm', cast: 'avalanche', radio: R, text: 'It is down. The berm caught the lot. Beautiful.' },
+  { id: 'avy_reload_alert', cast: 'avalanche', radio: R, text: 'New snow on Kessel Bowl and the wind has been at it. Which slopes are loaded today?' },
+  { id: 'avy_reload_done', cast: 'avalanche', radio: R, text: 'Report filed. The loaded slopes are flagged for the control team.' },
+  { id: 'avy_control_alert', cast: 'avalanche', radio: R, text: 'Kessel Bowl is loaded above the pass road. Bring it down before it comes down on its own.' },
+  { id: 'avy_control_done', cast: 'avalanche', radio: R, text: 'Bowl is down and the road is open again. Good work up there.' },
+  { id: 'avy_choose', cast: 'avalanche', radio: R, text: 'Charge the slopes you think are loaded, then get clear and fire.' },
   // Tannberg ski patrol and the road crew
   { id: 'ski_alert', cast: 'skipatrol', radio: R, text: 'A skier missed the last chair. Last seen at the top station heading for the trees.' },
   { id: 'ski_clinic', cast: 'skipatrol', radio: R, text: 'The clinic in Hollin is expecting him.' },

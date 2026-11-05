@@ -9,11 +9,11 @@ import { forwardSpeed, glideSpeed, newGlider, SKIS, SLED, stepGlider, type Glide
 import { HELI, heliAgl, newHeli, stepHeli, type Heli } from '../actors/heli';
 import { newHusky, pet, startTrack, stepHusky, type Husky, type Scent } from '../actors/husky';
 import { newWalker, stepWalker, type Walker } from '../actors/walker';
-import { Snowpack, simulateRelease } from '../missions/avalanche';
-import { FAMILY_LABEL, mission, MISSIONS, type MissionDef, type Vehicle } from '../missions/catalog';
-import { currentStep, fire, fireState, interact, interactables, navTarget, newRun, tickRun, type RunEvent } from '../missions/runner';
+import { Snowpack, simulateRelease, STORY_LOADED } from '../missions/avalanche';
+import { FAMILY_LABEL, isControl, mission, MISSIONS, slopeList, type MissionDef, type Vehicle } from '../missions/catalog';
+import { currentStep, fire, fireState, interact, interactables, navTarget, newRun, stepContacts, tickRun, type RunEvent } from '../missions/runner';
 import { BADGES, item, RANKS, type Group } from '../progress/catalog';
-import { available, browserStore, build, buy, complete, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
+import { available, browserStore, build, buy, checkBowl, complete, CONTROL_PAY, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
 import { PatrollerMesh, type Pose } from '../render/characterMesh';
 import { ForestView } from '../render/forestView';
 import { FX_KIND, GroundDrift, Particles, Snowfall, Tracks } from '../render/fx';
@@ -290,7 +290,7 @@ export class Game {
     this.props.tree.visible = p.events.includes('tree') || p.active?.id === 'tree';
     this.props.van.visible = p.events.includes('drift') || p.active?.id === 'drift';
     this.props.driver.group.visible = this.props.van.visible;
-    if (done(p, 'release')) this.pack.reset();
+    if (done(p, 'release')) this.pack.reset(this.bowlLoaded());
     this.syncMissionVisuals();
   }
 
@@ -299,7 +299,7 @@ export class Game {
     const id = r?.id;
     const step = r?.step ?? -1;
     // the barrier
-    this.props.setGate(id === 'release' && step >= 1 && step <= 6);
+    this.props.setGate(isControl(id) && step >= 1 && step <= 6);
     // Nils
     const nilsHere = id === 'skier' && !r!.passenger && step <= 3;
     this.props.nils.group.visible = nilsHere || (id === 'skier' && r!.passenger);
@@ -424,7 +424,7 @@ export class Game {
     this.cam.snapBehind(this.headingNow());
     // a mission caught mid-avalanche finishes off-screen
     if (p.active && currentStep(p.active)?.kind === 'watch') {
-      const sp = simulateRelease(this.terrain, p.active.charges.length ? p.active.charges : ['A', 'C']);
+      const sp = simulateRelease(this.terrain, p.active.charges.length ? p.active.charges : [...STORY_LOADED], 120, this.bowlLoaded());
       this.pack = sp;
     }
     if (p.fresh) {
@@ -911,9 +911,16 @@ export class Game {
     };
   }
 
+  /** Kessel Bowl's loaded slopes as the snowpack should have them: the run's, today's, or the story's. */
+  private bowlLoaded(): readonly string[] {
+    const p = this.p;
+    if (p.active?.loaded?.length) return p.active.loaded;
+    return p.loaded.length ? p.loaded : STORY_LOADED;
+  }
+
   private accept(id: string) {
     const def = mission(id);
-    this.p.active = newRun(id);
+    this.p.active = newRun(id, def.bowl ? this.p.loaded : undefined);
     this.panels.close();
     this.hud.clearAlert();
     this.alertShown = null;
@@ -933,7 +940,7 @@ export class Game {
       this.props.van.visible = true;
       this.props.driver.group.visible = true;
     }
-    if (id === 'release') this.pack.reset();
+    if (isControl(id)) this.pack.reset(this.bowlLoaded());
     this.syncMissionVisuals();
     this.save();
   }
@@ -965,7 +972,7 @@ export class Game {
         case 'scan': {
           const s = currentStep(r);
           if (s?.kind !== 'scan') break;
-          const ct = s.contacts[e.ev.index];
+          const ct = stepContacts(r, s)[e.ev.index];
           this.audio.chime();
           this.hud.toast(`${ct.label}: ${e.ev.type === 'found' ? 'Loaded' : 'Stable'}`, e.ev.type === 'found' ? 'warn' : 'good');
           this.hud.radio('Scanner', ct.clear, 4);
@@ -974,6 +981,7 @@ export class Game {
         case 'charge':
           this.audio.click();
           this.hud.toast(`Charge set: ${CHARGE_SPOTS.find((c) => c.id === e.spot)!.label}`, 'good');
+          if (currentStep(r)?.kind === 'charges' && (currentStep(r) as { choose?: boolean }).choose && r.charges.length === 1) this.hud.radio('Avalanche service', 'Charge the slopes you think are loaded, then get clear and fire.', 4);
           break;
         case 'fire': {
           this.pack.fire(e.charges);
@@ -1009,7 +1017,10 @@ export class Game {
 
   private finishMission(def: MissionDef) {
     const before = available(this.p);
-    const r = complete(this.p, def.id);
+    const run = this.p.active;
+    const res0 = this.pack.result;
+    const control = def.graded && run ? { charged: [...run.charges], loaded: [...(run.loaded ?? [])], share: res0.weakTotal ? res0.weakReleased / res0.weakTotal : 0 } : undefined;
+    const r = complete(this.p, def.id, control);
     this.audio.reward();
     buzz(this.p.settings.vibrate, BUZZ.done);
     if (r.rankAfter > r.rankBefore) this.audio.promote();
@@ -1025,12 +1036,19 @@ export class Game {
     this.syncMissionVisuals();
     const after = available(this.p).filter((id) => !before.includes(id) && !mission(id).dynamic).map((id) => mission(id).title);
     let extra = '';
-    if (def.id === 'release') {
+    if (isControl(def.id)) {
       const res = this.pack.result;
       const pct = Math.round((res.weakReleased / Math.max(1, res.weakTotal)) * 100);
       extra = `${pct}% of the loaded snow came down under control. ${res.roadHit ? 'Some reached the road: the barrier kept it clear of traffic.' : 'The berm held: nothing reached the road.'}${res.secondary ? ' The flow also knocked loose a little snow off a neighbouring slope.' : ''}`;
+      const g = r.grade;
+      if (g && control) {
+        const names = (ids: string[]) => slopeList(ids);
+        extra += ` Loaded today: ${names(control.loaded)}. You charged ${names(control.charged)}.`;
+        extra += g.clean ? ` A clean read: +${CONTROL_PAY.clean.funds} funds bonus.` : `${g.missed ? ` ${g.missed === 1 ? 'One loaded slope was' : `${g.missed} loaded slopes were`} left standing.` : ''}${g.wasted ? ` ${g.wasted === 1 ? 'One charge' : `${g.wasted} charges`} went on sound snow (-${CONTROL_PAY.wasted * g.wasted} funds).` : ''}`;
+      }
     }
     if (def.id === 'survey') extra = 'Slopes A and C are marked on the map and flagged on the mountain.';
+    if (def.id === 'bowl-recon') extra = `${slopeList(this.p.marked)} ${this.p.marked.length === 1 ? 'is' : 'are'} loaded: flagged on the mountain and the map. The control job is on the mission table.`;
     this.save();
     this.input.release();
     this.panels.debrief(def.title, def.done, r.funds, r.rep, r.rankAfter > r.rankBefore ? RANKS[r.rankAfter].name : null, after, extra, () => {});
@@ -1065,7 +1083,7 @@ export class Game {
 
   private updateFlags() {
     const r = this.p.active;
-    const show = done(this.p, 'survey') && (!done(this.p, 'release') || r?.id === 'release') && !(r?.id === 'release' && r.fired);
+    const show = this.p.marked.length > 0 && !(isControl(r?.id) && r!.fired);
     this.markers.setFlags(show ? this.p.marked.map((id) => ({ id, x: CHARGE_SPOTS.find((c) => c.id === id)!.x, z: CHARGE_SPOTS.find((c) => c.id === id)!.z, charged: !!r?.charges.includes(id) })) : []);
   }
 
@@ -1275,6 +1293,13 @@ export class Game {
   }
 
   private updateEvents(dt: number) {
+    if (checkBowl(this.p)) {
+      const m = mission('bowl-control');
+      this.audio.radio();
+      this.hud.radio(m.from, m.alert, 5);
+      if (done(this.p, 'release')) this.pack.reset(this.bowlLoaded());
+      this.save();
+    }
     const id = tickEvents(this.p, dt, this.cond.sky === 'storm', this.rng);
     if (id) {
       const m = mission(id);
@@ -1490,8 +1515,8 @@ export class Game {
       const def = mission(r.id);
       const s = currentStep(r);
       let obj = s ? (s.kind === 'interact' || s.kind === 'goto' || s.kind === 'land' ? s.text : s.text) : '';
-      if (s?.kind === 'charges') obj += ` (${r.charges.length} of ${s.spots.length})`;
-      if (s?.kind === 'scan' && r.scan) obj += ` (${r.scan.identified.filter(Boolean).length} of ${s.contacts.length})`;
+      if (s?.kind === 'charges') obj += s.choose ? ` (${r.charges.length} set)` : ` (${r.charges.length} of ${s.spots.length})`;
+      if (s?.kind === 'scan' && r.scan) obj += ` (${r.scan.identified.filter(Boolean).length} of ${stepContacts(r, s).length})`;
       this.hud.setTask({ family: FAMILY_LABEL[def.family], title: def.title, objective: obj, steps: def.steps.length, current: r.step }, '');
     } else this.hud.setTask(null, this.freeHint());
     // where to go
@@ -1538,7 +1563,7 @@ export class Game {
     // the SKYTRACE scanner readout
     const s = r ? currentStep(r) : null;
     if (r && s?.kind === 'scan' && r.scan && this.mode === 'heli' && r.scan.looking >= 0) {
-      this.hud.setScan(`Reading ${s.contacts[r.scan.looking].label}`, r.scan.progress[r.scan.looking]);
+      this.hud.setScan(`Reading ${stepContacts(r, s)[r.scan.looking].label}`, r.scan.progress[r.scan.looking]);
     } else if (r && s?.kind === 'scan' && this.mode === 'heli' && !this.heli.landed && heliAgl(this.heli, this.terrain) > 200) {
       this.hud.setScan('Too high to read the snow', 0);
     } else this.hud.setScan(null, 0);
@@ -1594,7 +1619,7 @@ export class Game {
   /** How hard the theme plays: the patrol bed, a call in hand, the avalanche about to go or going. */
   private musicIntensity(): 0 | 1 | 2 {
     const a = this.p.active;
-    if ((this.pack.fired && !this.pack.done) || (a?.id === 'release' && currentStep(a)?.kind === 'fire')) return 2;
+    if ((this.pack.fired && !this.pack.done) || (isControl(a?.id) && (currentStep(a!)?.kind === 'fire' || fireState(a!, this.pos2().x, this.pos2().z) !== 'none'))) return 2;
     return a ? 1 : 0;
   }
 
@@ -1727,14 +1752,15 @@ export class Game {
   private sleep() {
     const p = this.p;
     nextDay(p.weather);
-    if (done(p, 'release')) this.pack.reset();
+    const reloaded = checkBowl(p);
+    if (done(p, 'release')) this.pack.reset(this.bowlLoaded());
     const bonus = hasUpgrade(p, 'wing') ? 60 : 0;
     p.funds += bonus;
     this.cond = conditions(p.weather);
     this.audio.chime();
     this.save();
     this.input.release();
-    this.panels.morning(p.weather.day, this.cond, avalancheDanger(p.weather, this.cond), bonus);
+    this.panels.morning(p.weather.day, this.cond, avalancheDanger(p.weather, this.cond), bonus, reloaded ? `Kessel Bowl has reloaded overnight (${Math.round(p.weather.freshSnow)} cm, ${p.loadWind} wind). The avalanche service has two calls on the mission table.` : '');
   }
 
   // ------------------------------------------------------------------ saving
@@ -1794,6 +1820,8 @@ export class Game {
     return {
       game: this,
       profile: () => this.p,
+      /** reduced motion (QA): whether the camera honours it, and how much shake is left */
+      motion: () => ({ reduced: this.cam.reduced, shake: this.cam.shakeScale }),
       /** the Kessel kit (QA): how much is placed, in how many draw calls, and the pieces nearest a point */
       /** which code-built meshes the MeshCraft models replaced */
       models: () => ({ ...this.modelled }),

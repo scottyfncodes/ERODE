@@ -1,6 +1,6 @@
 import { BOWL, CHARGE_SPOTS, pad } from '../world/places';
-import { mission, type MissionDef, type Step, type Target, type Vehicle } from './catalog';
-import { newScan, nextContact, tickScan, type ScanEvent, type ScanState } from './recon';
+import { bowlContacts, mission, type MissionDef, type Step, type Target, type Vehicle } from './catalog';
+import { newScan, nextContact, tickScan, type Contact, type ScanEvent, type ScanState } from './recon';
 
 /**
  * One mission in progress: which step, and the little bits of state a step needs
@@ -22,6 +22,8 @@ export interface MissionRun {
   fired: boolean;
   /** seconds since the mission began */
   time: number;
+  /** Kessel Bowl's loaded slopes for this run (repeat bowl work; absent on the story missions) */
+  loaded?: string[];
 }
 
 export interface Snapshot {
@@ -60,9 +62,18 @@ export type RunEvent =
   | { type: 'boarded' }
   | { type: 'cargo'; on: boolean };
 
-export const newRun = (id: string): MissionRun => ({
+export const newRun = (id: string, loaded?: readonly string[]): MissionRun => ({
   id, step: 0, charges: [], scan: null, tracking: false, passenger: false, cargo: false, carrying: false, fired: false, time: 0,
+  ...(loaded ? { loaded: [...loaded] } : {}),
 });
+
+/** A scan step's contacts for this run: the bowl as it is loaded today, or the step's own. */
+export function stepContacts(r: MissionRun, s: Extract<Step, { kind: 'scan' }>): Contact[] {
+  return s.bowl && r.loaded ? bowlContacts(r.loaded) : s.contacts;
+}
+
+/** On a choose-your-charges step with at least one set: firing ends the step. */
+const chooseReady = (r: MissionRun, s: Step | null) => s?.kind === 'charges' && !!s.choose && r.charges.length > 0;
 
 export const currentStep = (r: MissionRun): Step | null => mission(r.id).steps[r.step] ?? null;
 
@@ -81,7 +92,7 @@ function advance(r: MissionRun, out: RunEvent[]) {
   else {
     out.push({ type: 'step', index: r.step });
     const s = def.steps[r.step];
-    if (s.kind === 'scan') r.scan = newScan(s.contacts);
+    if (s.kind === 'scan') r.scan = newScan(stepContacts(r, s));
   }
 }
 
@@ -104,9 +115,10 @@ export function tickRun(r: MissionRun, snap: Snapshot, dt: number): RunEvent[] {
       else if (snap.vehicle === 'foot' && near(s.at, 16)) advance(r, out);
       break;
     case 'scan': {
-      if (!r.scan) r.scan = newScan(s.contacts);
+      const contacts = stepContacts(r, s);
+      if (!r.scan) r.scan = newScan(contacts);
       if (snap.vehicle !== 'heli' || snap.heliLanded) break;
-      for (const ev of tickScan(s.contacts, r.scan, { x: snap.x, z: snap.z, yaw: snap.heliYaw, agl: snap.heliAgl }, dt)) out.push({ type: 'scan', ev });
+      for (const ev of tickScan(contacts, r.scan, { x: snap.x, z: snap.z, yaw: snap.heliYaw, agl: snap.heliAgl }, dt)) out.push({ type: 'scan', ev });
       if (r.scan.identified.every(Boolean)) advance(r, out);
       break;
     }
@@ -172,7 +184,7 @@ export function interact(r: MissionRun, id: string): RunEvent[] {
     if (s.spots.includes(spot) && !r.charges.includes(spot)) {
       r.charges.push(spot);
       out.push({ type: 'charge', spot });
-      if (s.spots.every((k) => r.charges.includes(k))) advance(r, out);
+      if (!s.choose && s.spots.every((k) => r.charges.includes(k))) advance(r, out);
     }
   } else if (s.kind === 'track' && id === 'scent') {
     r.tracking = true;
@@ -188,13 +200,18 @@ export function interact(r: MissionRun, id: string): RunEvent[] {
 /** The fire step's button: available when you are clear. */
 export function fireState(r: MissionRun, x: number, z: number): 'none' | 'ready' | 'too-close' {
   const s = currentStep(r);
-  if (!s || s.kind !== 'fire' || r.fired) return 'none';
+  if (!s || (s.kind !== 'fire' && !chooseReady(r, s)) || r.fired) return 'none';
   return safeToFire(x, z) ? 'ready' : 'too-close';
 }
 
 export function fire(r: MissionRun): RunEvent[] {
   const out: RunEvent[] = [];
-  const s = currentStep(r);
+  let s = currentStep(r);
+  if (s && !r.fired && chooseReady(r, s)) {
+    // the charges you chose are the charges you fire
+    advance(r, out);
+    s = currentStep(r);
+  }
   if (!s || s.kind !== 'fire' || r.fired) return out;
   r.fired = true;
   out.push({ type: 'fire', charges: [...r.charges] });
@@ -219,10 +236,13 @@ export function navTarget(r: MissionRun, snap: { x: number; z: number }): Target
       return s.vehicle === 'sled' ? 'sled' : s.vehicle === 'heli' ? 'heli' : null;
     case 'scan': {
       if (!r.scan) return null;
-      const i = nextContact(s.contacts, r.scan, snap);
-      return i >= 0 ? { x: s.contacts[i].x, z: s.contacts[i].z, label: s.contacts[i].label } : null;
+      const contacts = stepContacts(r, s);
+      const i = nextContact(contacts, r.scan, snap);
+      return i >= 0 ? { x: contacts[i].x, z: contacts[i].z, label: contacts[i].label } : null;
     }
     case 'charges': {
+      // your own read: the arrow does not choose for you; once one is set, it points to safe ground
+      if (s.choose) return r.charges.length && !safeToFire(snap.x, snap.z) ? { x: pad('ridge').x, z: pad('ridge').z, label: 'Safe ground: the ridge' } : null;
       const left = CHARGE_SPOTS.filter((c) => s.spots.includes(c.id) && !r.charges.includes(c.id));
       left.sort((a, b) => Math.hypot(a.x - snap.x, a.z - snap.z) - Math.hypot(b.x - snap.x, b.z - snap.z));
       return left[0] ? { x: left[0].x, z: left[0].z, label: left[0].label } : null;

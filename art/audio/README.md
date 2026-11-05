@@ -7,7 +7,7 @@ fallback if it is missing or the browser cannot decode it (`src/audio/files.ts`)
 
 | What | Files | Made with | When it plays |
 | --- | --- | --- | --- |
-| Voice lines | `public/audio/voice/<id>.ogg/.m4a` (33) | AudioCraft `voice` (Kokoro-82M), request in `voice.json` | When its exact subtitle goes up on the radio strip (`src/audio/lines.ts`); the subtitle stays up while it talks |
+| Voice lines | `public/audio/voice/<id>.ogg/.m4a` (38) | AudioCraft `voice` (Kokoro-82M), request in `voice.json` | When its exact subtitle goes up on the radio strip (`src/audio/lines.ts`); the subtitle stays up while it talks |
 | The Kessel theme | `public/audio/music/theme_{patrol,mission,emergency}` | AudioCraft `music`: calm, D major, 84 bpm, 8 bars, stems pad, arp, bass, lead, drums | Patrol (pad + arp) always; mission (bass + lead) with a call in hand; emergency (drums) from "charges set" until the avalanche stops |
 | Impacts | `public/audio/sfx/step_1..6`, `thud_1..4` | AudioCraft `sfx`: `footstep` (6 variations, seed 21, variation 0.3) and `thud` (4 variations, seed 33, variation 0.35) | A step on the frame the boot lands (the animation's footfall), muffled by a low-pass that depends on how hard it lands and on powder, under the synthesised squeak of the snow; a thud when a sawn log hits the snow, a slab block lets go in the avalanche or the sled lands hard. A random take each time, never the same twice running, nudged in pitch |
 | Stingers | `public/audio/sting/{complete,rankup,avalanche}` | `music` (heroic, 1 and 2 bars) and `sfx` alarm layered three times over the theme's bass with `layer` | Mission complete, promotion, charges set |
