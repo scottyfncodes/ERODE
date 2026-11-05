@@ -5,3 +5,4 @@ dist
 gitcraft-out
 out
 .lab
+__pycache__

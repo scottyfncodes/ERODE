@@ -1,0 +1,50 @@
+{
+ "licence": "SIL Open Font License 1.1 (Google Fonts)",
+ "fonts": {
+  "Jost-Regular.ttf": {
+   "url": "https://fonts.gstatic.com/s/jost/v20/92zPtBhPNqw79Ij1E865zBUv7myjJQVG.ttf",
+   "sha256": "c3143e923ed1ca7bdf27f96c351fbafaebcbd3cf3f4c2d30d03e6c7f98e73d7a",
+   "bytes": 58796
+  },
+  "Jost-Medium.ttf": {
+   "url": "https://fonts.gstatic.com/s/jost/v20/92zPtBhPNqw79Ij1E865zBUv7myRJQVG.ttf",
+   "sha256": "d6ff7726ec21576cf2fdac55080b2d43832780fa981f03f0b66d2723a7c1ea09",
+   "bytes": 58936
+  },
+  "Jost-SemiBold.ttf": {
+   "url": "https://fonts.gstatic.com/s/jost/v20/92zPtBhPNqw79Ij1E865zBUv7mx9IgVG.ttf",
+   "sha256": "a63c8d75600a2d42e0e152e4c4810474a90a0b93206f47530a741dbb78a9e571",
+   "bytes": 58936
+  },
+  "Jost-Bold.ttf": {
+   "url": "https://fonts.gstatic.com/s/jost/v20/92zPtBhPNqw79Ij1E865zBUv7mxEIgVG.ttf",
+   "sha256": "3e49280c154002dcbab4344a77ad291d5587d4157b24b5a02341f68cccd24615",
+   "bytes": 58880
+  },
+  "CourierPrime-Regular.ttf": {
+   "url": "https://fonts.gstatic.com/s/courierprime/v11/u-450q2lgwslOqpF_6gQ8kELWwY.ttf",
+   "sha256": "b03b41606b4469bd908aaa83146ba19d34cbeab1ce11fac0074d0d8fe9eba6cc",
+   "bytes": 66444
+  },
+  "CourierPrime-Italic.ttf": {
+   "url": "https://fonts.gstatic.com/s/courierprime/v11/u-4n0q2lgwslOqpF_6gQ8kELawRpXw.ttf",
+   "sha256": "491b12db874ee76b6f96c1fe8259d081379de392a98666ff185b416d41073aaa",
+   "bytes": 75488
+  },
+  "CourierPrime-Bold.ttf": {
+   "url": "https://fonts.gstatic.com/s/courierprime/v11/u-4k0q2lgwslOqpF_6gQ8kELY7pMf-c.ttf",
+   "sha256": "79d4be90ecb99d03ca5474a4e688e2fb45abcd4a9c348164c3aa9166c67cd53b",
+   "bytes": 68080
+  },
+  "IBMPlexMono-Medium.ttf": {
+   "url": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3twJ8lc.ttf",
+   "sha256": "4fc14a73ca53ba9d32fd759ae1ca1a3133326035d0dd337862b3ee1633cc156e",
+   "bytes": 129916
+  },
+  "IBMPlexMono-SemiBold.ttf": {
+   "url": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3vAO8lc.ttf",
+   "sha256": "754dfc9d50cf7aabfb6b108d2c2f7d20a3f1f2cc6f6c01640c6728091272cec0",
+   "bytes": 133444
+  }
+ }
+}
