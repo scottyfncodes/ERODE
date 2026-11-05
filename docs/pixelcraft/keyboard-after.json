@@ -16,7 +16,7 @@
  {
   "name": "play: Tab still opens the map",
   "ok": true,
-  "detail": "first worked 6889 ms after the 5 s settle"
+  "detail": "first worked 6772 ms after the 5 s settle"
  },
  {
   "name": "map: Tab again closes it (Tab/M toggle the map by design)",
