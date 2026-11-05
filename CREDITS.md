@@ -24,7 +24,7 @@ licences extends to what they produced.
 
 | Asset | Where | Made with | Licence of the output |
 | --- | --- | --- | --- |
-| The Kessel kit, the patrol's vehicles, people, Koda, the valley's buildings, the yard, props and the chairlift | `public/models/` | MeshCraft + ForgeCraft (Blender 5.2, GPL-2.0-or-later; outputs not covered) | Owned by this project |
+| The Kessel kit, the patrol's vehicles, people, Koda, the valley's buildings, the lodge and its furniture, the yard, props, the chairlift, the working mountain and the weather station | `public/models/` | MeshCraft + ForgeCraft (Blender 5.2, GPL-2.0-or-later; outputs not covered) | Owned by this project |
 | Emblem, icons, share card, art bible | `public/icons/`, `public/og-image.jpg`, `art/kessel-art-bible.pdf` | VectorCraft, PhotoCraft, DesignCraft, PDFCraft | Owned by this project |
 | Voice lines (33: dispatch, the avalanche service, the Tannberg ski patrol, the road crew, Greta, Nils, the van driver) | `public/audio/voice/` | StudioCraft AudioCraft `voice`: [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) v1.0 via kokoro-onnx (weights Apache-2.0; kokoro-onnx and onnxruntime MIT; phonemiser espeak-ng GPL-3.0, run as a separate program); radio filter and encoding with FFmpeg | No restriction on generated speech; owned by this project |
 | The Kessel theme (patrol, mission and emergency layers) | `public/audio/music/` | AudioCraft `music` (GITCRAFT's own synth, no samples) + FFmpeg | Owned by this project |

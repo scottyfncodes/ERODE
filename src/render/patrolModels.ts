@@ -23,8 +23,24 @@ export type YardId = (typeof YARD_IDS)[number];
 export const PROP_IDS = ['rs_cat', 'rs_van', 'rs_fallen_tree', 'rs_barrier'] as const;
 /** The Tannberg chairlift: towers, end towers and the chair, used only when all three loaded. */
 export const LIFT_IDS = ['rs_lift_tower', 'rs_lift_tower_end', 'rs_chair'] as const;
+/** The patrol lodge, its wing and its furniture: used only when all three loaded (the lodge stays code-built otherwise). */
+export const LODGE_IDS = ['rs_lodge', 'rs_lodge_wing', 'rs_lodge_furniture'] as const;
+export type LodgeId = (typeof LODGE_IDS)[number];
+/** The working mountain (art/3d/scripts/working_mountain.py): each used when it loaded, by the kind it stands for. */
+export const OPS_MODELS = {
+  fence: 'rs_snow_fence',
+  exploder: 'rs_exploder',
+  repeater: 'rs_repeater',
+  sign: 'rs_warning_sign',
+  snowcat: 'rs_snowcat',
+  headframe: 'rs_headframe',
+  minecabin: 'rs_mine_cabin',
+} as const;
+export const OPS_IDS = Object.values(OPS_MODELS);
+/** The Grauhorn weather station's mast and its anemometer (same script). */
+export const WEATHER_IDS = ['rs_weather_mast'] as const;
 
-export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_villager', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS, ...PROP_IDS, ...LIFT_IDS] as const;
+export const PATROL_MODEL_IDS = ['rs_sled', 'rs_heli', 'rs_spruce_a', 'rs_spruce_b', 'rs_spruce_a_far', 'rs_spruce_b_far', 'rs_patroller', 'rs_villager', 'rs_koda', ...BUILDING_IDS, ...YARD_IDS, ...PROP_IDS, ...LIFT_IDS, ...LODGE_IDS, ...OPS_IDS, ...WEATHER_IDS] as const;
 export type PatrolModelId = (typeof PATROL_MODEL_IDS)[number];
 export type PatrolModels = Partial<Record<PatrolModelId, THREE.Group>>;
 
@@ -122,6 +138,8 @@ export function paintModel(src: THREE.Object3D, paint: Record<string, THREE.Mate
     const role = roleOf(m);
     const hex = parseInt(String((m.material as THREE.Material).userData?.gitcraft_color ?? '#cccccc').slice(1), 16);
     m.material = paint[role] ?? fallback(hex);
+    // the role it was painted for (placement reads it: ground snow is laid onto the terrain)
+    m.userData.role = role;
     m.castShadow = true;
     m.receiveShadow = true;
   });

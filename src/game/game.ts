@@ -30,7 +30,7 @@ import { buildOps, opsObstacles } from '../render/opsView';
 import { PEAKS } from '../world/places';
 import { WorldView } from '../render/worldView';
 import { KitView, type Kit } from '../render/kitView';
-import { PROP_IDS, type PatrolModels } from '../render/patrolModels';
+import { OPS_IDS, PROP_IDS, type PatrolModels } from '../render/patrolModels';
 import { StatsOverlay, statsWanted } from '../ui/stats';
 import { kitObstacles, scatterKit, type Placed } from '../world/scatter';
 import { Hud } from '../ui/hud';
@@ -135,7 +135,7 @@ export class Game {
   private fps = 60;
   private kitLoaded: string[] = [];
   /** which code-built meshes the MeshCraft models replaced (QA) */
-  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false, buildings: false, yard: false, props: false, lift: false, outfits: false };
+  private modelled = { sled: false, heli: false, forest: false, patroller: false, koda: false, villagers: false, buildings: false, yard: false, props: false, lift: false, outfits: false, lodge: false, ops: false, weather: false };
   /** wall-clock frame time: holds on buttons follow your thumb, not the simulation */
   private realDt = 0;
   /** the ?stats performance readout (off unless asked for) */
@@ -160,7 +160,8 @@ export class Game {
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
     // the working mountain: snow fences, exploders, signs, the old snowcat, the mine
-    scene.add(buildOps(this.terrain));
+    scene.add(buildOps(this.terrain, models));
+    this.modelled.ops = OPS_IDS.every((id) => models[id]);
     const forest = (this.forest = new ForestView(this.trees, models));
     scene.add(forest.group);
     // the patrol's vehicles from MeshCraft; the code-built ones stay if a model did not load
@@ -174,8 +175,10 @@ export class Game {
     progress(0.7, 'Lighting the stove');
     this.station = new StationView(this.terrain, this.topo, models);
     this.modelled.yard = this.station.modelled;
+    this.modelled.lodge = this.station.lodgeModelled;
     this.world = new WorldView(this.terrain, models);
     this.modelled.buildings = this.world.modelled;
+    this.modelled.weather = this.world.weatherModelled;
     this.markers = new Markers(this.terrain);
     this.avView = new AvalancheView();
     this.props = new MissionProps(this.terrain, models);
@@ -1410,6 +1413,7 @@ export class Game {
     for (const list of [this.station.smokeSources, this.world.smokeSources])
       for (const s of list) {
         if (s.distanceToSquared(camPos) > 400 * 400) continue;
+        if (s === this.station.chimney && this.station.chimneyHidden) continue;
         this.particles.smoke(s.x, s.y, s.z, this.cond.wind);
       }
   }

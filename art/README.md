@@ -112,6 +112,33 @@ down as before. Each prop falls back on its own. The Tannberg lift uses `rs_lift
 as one instanced mesh per material and still ride the cable the code works out each frame
 (`tests/props.test.ts`).
 
+**The patrol lodge** (`3d/scripts/valley_buildings.py`, the last code-built building at the station):
+`rs_lodge` is the 16 x 12 m log lodge with its walls as four nodes (`wall_n`, `wall_s`, `wall_w`, `wall_e`)
+plus `base` (plinth, floor, porch deck, steps, rail, bench), `roof` (main roof, log gables with
+board-and-batten, the porch's lean-to) and `chimney`, so the dollhouse cut-away still hides the walls on
+the camera's side and the roof when you walk in. Notched corners (the end walls sit half a log higher,
+their ends showing their grain), shuttered windows set through the logs so they glow inside too, and an
+open plank door. `rs_lodge_wing` is the bunkhouse upgrade; `rs_lodge_furniture` holds the hearth, the
+mission table, the bunk, the wardrobe, the armchair, the shelf of books, Koda's bed and the hanging lamp,
+one node each at the origin the code's group stood on. The flames, the map sheet, the badge board and its
+pins, the porch lantern and the signs stay code. All three files or none (`tests/lodge.test.ts`). The
+lodge is painted in many roles, so it is baked with `bake(…, byColor)`: plain colours merge into one
+vertex-coloured mesh per cut-away node, keeping the station's draw calls where they were.
+
+**The working mountain** (`3d/scripts/working_mountain.py`): `rs_snow_fence`, `rs_exploder`,
+`rs_repeater`, `rs_warning_sign` (the steel; the printed face stays the game's canvas), `rs_snowcat`,
+`rs_headframe` and `rs_mine_cabin` replace `src/render/opsView.ts`'s code-built pieces at the same spots
+and sizes, each falling back to its code piece on its own. The whole lot still bakes into two draw calls
+(`tests/ops.test.ts`). `rs_weather_mast` is the Grauhorn weather station (the Morning Rounds repair): a
+`mast` node and an `anemometer` node whose origin is the hub, which `WorldView` spins once the station is
+repaired (`tests/weather-station.test.ts`).
+
+Build any of them with `pipeline/8_build_models.py <script> <asset> … [--sunk] [--ship]`: MeshCraft
+`run_script`, `render_preview`, `export_asset` (three-web-toon), `validate_asset` and `engine_check`,
+work files in `gitcraft-out/` (git-ignored), and with `--ship` the main GLB copied into `public/models/`.
+`--sunk` checks the engine contract without a base on the ground, for models with a plinth or footing
+below y = 0 as the code's had.
+
 **The patroller and Koda** (`3d/scripts/patrol_people.py`) are skinned meshes on skeletons of the
 code's own joints: the same names, at the same pivots, with zero rest rotation (every bone points
 straight up with roll 0, so each glTF joint node's rotation is identity, the frame of the code's
