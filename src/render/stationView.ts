@@ -3,7 +3,7 @@ import { BADGES } from '../progress/catalog';
 import type { Terrain } from '../world/terrain';
 import { EQUIP, GARAGE, HANGAR, KENNEL, LODGE, MAST, PAD, SPOTS, WING, type UpgradeId } from '../world/station';
 import { bakeInPlace, ball, box, cyl, gable, glow, logWall, mat, PAL, shade, snowRoof, windowPane } from './kit';
-import { paintModel, YARD_IDS, type PatrolModels, type YardId } from './patrolModels';
+import { LODGE_IDS, paintModel, YARD_IDS, type LodgeId, type PatrolModels, type YardId } from './patrolModels';
 
 /** A painted sign: chunky letters on a board. */
 export function signTexture(text: string, bg = '#7b2f3b', fg = '#f6ecdc', w = 512, h = 128, accent?: string): THREE.CanvasTexture {
@@ -86,17 +86,26 @@ export class StationView {
   readonly y: number;
   /** the MeshCraft yard buildings (garage, hangar, equipment room, Koda's house, the mast), when every one loaded */
   private ym: Record<YardId, THREE.Object3D> | null;
-  /** true when the yard's buildings are the MeshCraft models (the lodge and its wing stay code-built) */
+  /** true when the yard's buildings are the MeshCraft models */
   readonly modelled: boolean;
+  /** the MeshCraft lodge, its wing and its furniture, when all three loaded */
+  private lm: Record<LodgeId, THREE.Object3D> | null;
+  /** true when the lodge, the wing and the furniture are the MeshCraft models */
+  readonly lodgeModelled: boolean;
+  /** the furniture model, painted, its pieces taken out one by one as the lodge is furnished */
+  private furniture: THREE.Object3D | null = null;
 
   constructor(t: Terrain, topo: HTMLCanvasElement, models: PatrolModels = {}) {
     this.ym = YARD_IDS.every((id) => models[id]) ? (Object.fromEntries(YARD_IDS.map((id) => [id, models[id]!])) as unknown as Record<YardId, THREE.Object3D>) : null;
     this.modelled = !!this.ym;
+    this.lm = LODGE_IDS.every((id) => models[id]) ? (Object.fromEntries(LODGE_IDS.map((id) => [id, models[id]!])) as unknown as Record<LodgeId, THREE.Object3D>) : null;
+    this.lodgeModelled = !!this.lm;
     this.y = t.height(LODGE.x, LODGE.z);
     const y = this.y;
     this.windows = new THREE.MeshLambertMaterial({ color: PAL.window, emissive: 0xffa040, emissiveIntensity: 0.2 });
     this.lamps = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
     this.fireLight = new THREE.PointLight(0xff9a4a, 6, 14, 1.6);
+    if (this.lm) this.furniture = paintModel(this.lm.rs_lodge_furniture, { ...this.lodgePaint(), lamp: this.lamps }, (hex) => mat(hex));
     this.rooms.push(this.buildLodge(y, topo));
     this.rooms.push(this.buildGarage(y));
     this.buildPad(y);
@@ -142,12 +151,230 @@ export class StationView {
     g.position.set(L.x, y, L.z);
     const hw = L.w / 2;
     const hd = L.d / 2;
+    const walls: Room['walls'] = [];
+    const roof = new THREE.Group();
+    if (this.lm) {
+      // the MeshCraft lodge: plinth and porch, each wall its own node (for the cut-away), the roof, the chimney
+      const m = paintModel(this.lm.rs_lodge, this.lodgePaint(), (hex) => mat(hex));
+      const node = (n: string) => m.getObjectByName(n)!;
+      g.add(node('base'), node('chimney'));
+      for (const [n, nx, nz] of [
+        ['wall_n', 0, -1],
+        ['wall_s', 0, 1],
+        ['wall_w', -1, 0],
+        ['wall_e', 1, 0],
+      ] as const) {
+        const o = new THREE.Group();
+        o.add(node(n));
+        g.add(o);
+        walls.push({ obj: o, nx, nz });
+      }
+      roof.add(node('roof'));
+      g.add(roof);
+    } else {
+      this.codeLodge(g, walls, roof);
+    }
+    this.chimney.set(L.x - hw - 0.5, y + L.wallH + 5, L.z + 2.5);
+    this.smokeSources.push(this.chimney);
+    // porch with a lantern and the sign
+    const porch = new THREE.Group();
+    if (!this.lm) {
+      porch.add(box(3, 0.2, 5.6, 0x8a603a, hw + 1.5, 0.15, 0));
+      for (const s of [-1, 1]) porch.add(cyl(0.12, 0.12, 2.8, 6, PAL.logDark, hw + 2.8, 1.5, s * 2.5));
+      const pr = snowRoof(5.8, 3.2, 0.6);
+      pr.rotation.y = Math.PI / 2;
+      pr.position.set(hw + 1.6, 2.85, 0);
+      roof.add(pr);
+      porch.add(box(0.5, 0.45, 1.8, PAL.logDark, hw + 0.5, 0.45, -1.6));
+    }
+    const lantern = box(0.25, 0.35, 0.25, this.lamps, hw + 0.35, 2.4, 1.6);
+    porch.add(lantern);
+    const s = sign('KESSEL PATROL', 4.2, 0.8, { bg: '#f6ecdc', fg: '#7b2f3b', accent: '#d4422f' });
+    s.position.set(hw + 0.22, 3.0, 0);
+    s.rotation.y = Math.PI / 2;
+    porch.add(s);
+    g.add(porch);
+
+    // --- inside ---
+    const inside = new THREE.Group();
+    // a big red rug by the fire
+    inside.add(box(4.2, 0.03, 3.2, 0xa63a2c, -4.5, 0.28, 2.3));
+    inside.add(box(3.6, 0.035, 2.6, 0xc9a35a, -4.5, 0.285, 2.3));
+    // the hearth
+    const hearth = new THREE.Group();
+    if (this.lm) hearth.add(this.piece('hearth'));
+    else {
+      hearth.add(box(0.9, 2.4, 2.8, PAL.stone, 0, 1.45, 0));
+      hearth.add(box(0.95, 1.0, 1.4, 0x1a1512, 0.05, 0.85, 0));
+      hearth.add(box(1.4, 0.2, 3.2, PAL.stoneDark, 0.2, 0.32, 0));
+      hearth.add(box(1.1, 0.15, 3.0, 0x6b4428, 0.1, 2.0, 0));
+    }
+    const fireMat = glow(0xffa040);
+    const fireMat2 = glow(0xffe08a);
+    for (let i = 0; i < 3; i++) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.2 - i * 0.03, 0.6 - i * 0.1, 6), i === 1 ? fireMat2 : fireMat);
+      f.position.set(0.25, 0.65, (i - 1) * 0.28);
+      this.fire.push(f);
+      hearth.add(f);
+    }
+    if (!this.lm)
+      for (const z of [-0.25, 0.25]) {
+        const log = cyl(0.08, 0.08, 0.8, 6, PAL.logDark, 0.3, 0.42, z);
+        log.rotation.x = Math.PI / 2;
+        hearth.add(log);
+      }
+    hearth.position.set(-hw + 0.75, 0, 2.5);
+    this.fireLight.position.set(L.x - hw + 2, y + 1.3, L.z + 2.5);
+    inside.add(hearth);
+    // the mission table with the valley map on it
+    const table = new THREE.Group();
+    const tex = new THREE.CanvasTexture(topo);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // a wooden top and the map as its own sheet on it: the lodge's furniture is baked into a few
+    // meshes per material, and the baker skips multi-material meshes (that is how the top vanished)
+    if (this.lm) table.add(this.piece('table'));
+    else table.add(box(3, 0.1, 2, 0x6b4428, 0, 0.95, 0));
+    const map = new THREE.Mesh(new THREE.PlaneGeometry(2.84, 1.84), new THREE.MeshLambertMaterial({ map: tex }));
+    map.rotation.x = -Math.PI / 2;
+    map.position.y = 1.006;
+    table.add(map);
+    if (!this.lm) {
+      for (const [x, z] of [
+        [-1.35, -0.85],
+        [1.35, -0.85],
+        [-1.35, 0.85],
+        [1.35, 0.85],
+      ])
+        table.add(box(0.14, 0.9, 0.14, PAL.logDark, x, 0.5, z));
+      table.add(box(0.5, 0.35, 0.3, 0x3d4a3a, 1.0, 1.15, -0.6)); // the radio
+      table.add(box(0.04, 0.4, 0.04, 0x222222, 1.15, 1.45, -0.6));
+    }
+    table.position.set(SPOTS.table.x - L.x, 0.25, SPOTS.table.z - L.z);
+    inside.add(table);
+    // the bunk
+    const bed = new THREE.Group();
+    if (this.lm) bed.add(this.piece('bunk'));
+    else {
+      bed.add(box(3.6, 0.4, 1.8, PAL.logDark, 0, 0.45, 0));
+      bed.add(box(3.4, 0.25, 1.65, 0xb33a2e, 0.1, 0.75, 0));
+      for (let i = -3; i <= 3; i++) bed.add(box(0.06, 0.26, 1.66, 0x7d2a22, i * 0.45, 0.755, 0));
+      bed.add(box(0.6, 0.2, 1.3, 0xf3efe6, -1.4, 0.95, 0));
+      bed.add(box(0.2, 1.2, 1.8, PAL.logDark, -1.85, 0.85, 0));
+    }
+    bed.position.set(-35.6 - L.x, 0.25, 240.2 - L.z);
+    inside.add(bed);
+    // wardrobe
+    const ward = new THREE.Group();
+    if (this.lm) ward.add(this.piece('wardrobe'));
+    else {
+      ward.add(box(1.6, 2.3, 0.7, 0x7a4f2e, 0, 1.15, 0));
+      ward.add(box(0.03, 2.1, 0.02, 0x4a2e1a, 0, 1.15, 0.36));
+      ward.add(ball(0.05, PAL.yellow, -0.12, 1.2, 0.38, 6), ball(0.05, PAL.yellow, 0.12, 1.2, 0.38, 6));
+    }
+    ward.position.set(SPOTS.wardrobe.x - L.x, 0.25, SPOTS.wardrobe.z - 0.3 - L.z);
+    inside.add(ward);
+    // the badge board on the south wall: a pin for each one you have found
+    const board = new THREE.Group();
+    board.add(box(2.6, 1.4, 0.08, 0x5e3a22, 0, 0, 0));
+    board.add(box(2.4, 1.2, 0.09, 0x2f4a3a, 0, 0, 0));
+    BADGES.forEach((b, i) => {
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 10), mat([0xd8382a, 0xf2c230, 0x2f7fb8, 0xf3efe6, 0x3c6b4a][i % 5]));
+      pin.rotation.x = Math.PI / 2;
+      pin.position.set(-0.9 + (i % 5) * 0.45, i < 5 ? 0.25 : -0.25, -0.06);
+      pin.visible = false;
+      this.badgePins.set(b.id, pin);
+      board.add(pin);
+      const slot = new THREE.Mesh(new THREE.CircleGeometry(0.11, 10), mat(0x24382c));
+      slot.position.set(pin.position.x, pin.position.y, -0.05);
+      slot.rotation.y = Math.PI;
+      board.add(slot);
+    });
+    board.position.set(SPOTS.badges.x - L.x, 1.9, hd - 0.3);
+    board.rotation.y = Math.PI;
+    inside.add(board);
+    // Koda's bed by the fire
+    if (this.lm) inside.add(this.piece('dogbed').translateX(SPOTS.dogBed.x - L.x).translateY(0.25).translateZ(SPOTS.dogBed.z - L.z));
+    else {
+      const dogBed = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.18, 6, 14), mat(0x2f5f9e));
+      dogBed.rotation.x = Math.PI / 2;
+      dogBed.position.set(SPOTS.dogBed.x - L.x, 0.42, SPOTS.dogBed.z - L.z);
+      const cushion = cyl(0.45, 0.45, 0.12, 14, 0xe8dcc8, SPOTS.dogBed.x - L.x, 0.33, SPOTS.dogBed.z - L.z);
+      inside.add(dogBed, cushion);
+    }
+    // an armchair, a shelf of books, a hanging lamp, skis on the wall
+    const chair = new THREE.Group();
+    if (this.lm) chair.add(this.piece('armchair'));
+    else chair.add(box(1, 0.45, 1, 0x3c6b4a, 0, 0.5, 0), box(1, 0.9, 0.25, 0x3c6b4a, 0, 0.95, 0.4), box(0.2, 0.6, 1, 0x2f553a, -0.45, 0.75, 0), box(0.2, 0.6, 1, 0x2f553a, 0.45, 0.75, 0));
+    chair.position.set(-4.6, 0.25, 4.6);
+    chair.rotation.y = -2.4;
+    inside.add(chair);
+    const shelf = new THREE.Group();
+    if (this.lm) shelf.add(this.piece('shelf'));
+    else {
+      shelf.add(box(2, 1.6, 0.4, 0x6b4428, 0, 0.8, 0));
+      for (let k = 0; k < 9; k++) shelf.add(box(0.15, 0.45, 0.3, [0xa63a2c, 0x2f5f9e, 0xe9c46a, 0x3c6b4a][k % 4], -0.8 + k * 0.2, 1.3, 0.02));
+      for (let k = 0; k < 7; k++) shelf.add(box(0.18, 0.4, 0.3, [0x7a4f2e, 0xf3efe6, 0xa63a2c][k % 3], -0.7 + k * 0.22, 0.6, 0.02));
+    }
+    shelf.position.set(3.2, 0.25, hd - 0.45);
+    shelf.rotation.y = Math.PI;
+    inside.add(shelf);
+    const lamp = new THREE.Group();
+    if (this.lm) lamp.add(this.piece('lamp'));
+    else lamp.add(cyl(0.02, 0.02, 0.9, 4, 0x222222, 0, 0.45, 0), new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.3, 10, 1, true), mat(0x3d4a3a, { side: THREE.DoubleSide })), ball(0.12, this.lamps, 0, -0.1, 0, 8));
+    lamp.position.set(SPOTS.table.x - L.x, 2.6, SPOTS.table.z - L.z);
+    inside.add(lamp);
+    for (let k = 0; k < 3; k++) {
+      const ski = box(0.1, 1.8, 0.04, [PAL.red, PAL.wood, 0x2a9d8f][k], 5.6 + k * 0.25, 1.3, -hd + 0.3);
+      inside.add(ski);
+    }
+    inside.name = 'inside';
+    g.add(inside);
+    this.group.add(g);
+    this.group.add(this.fireLight);
+    return { group: g, roof, walls, x: L.x, z: L.z };
+  }
+
+
+  /** The game's materials for the lodge's paint roles (the wing uses the same). */
+  private lodgePaint(): Record<string, THREE.Material> {
+    return {
+      log: mat(PAL.log),
+      logShade: mat(shade(PAL.log, 0.92)),
+      grain: mat(PAL.logLight),
+      logLight: mat(PAL.logLight),
+      logDark: mat(PAL.logDark),
+      roof: mat(PAL.roof),
+      roofSnow: mat(PAL.roofSnow),
+      stone: mat(PAL.stone),
+      stoneDark: mat(PAL.stoneDark),
+      window: this.windows,
+      floor: mat(0xa77a4c),
+      floorDark: mat(0x8a603a),
+      door: mat(0x6b4428),
+      shutter: mat(PAL.green),
+      dark: mat(0x1a1512),
+    };
+  }
+
+  /** One piece of the MeshCraft furniture (its origin is where the code's group stood). */
+  private piece(name: string): THREE.Object3D {
+    const o = this.furniture!.getObjectByName(name)!;
+    o.removeFromParent();
+    o.position.set(0, 0, 0);
+    o.rotation.set(0, 0, 0);
+    return o;
+  }
+
+  /** The code-built lodge shell (walls, windows, door, roof, gables, chimney): the fallback. */
+  private codeLodge(g: THREE.Group, walls: Room['walls'], roof: THREE.Group) {
+    const L = LODGE;
+    const hw = L.w / 2;
+    const hd = L.d / 2;
     // foundation and floor
     g.add(box(L.w + 0.6, 0.5, L.d + 0.6, PAL.stone, 0, -0.1, 0));
     const floor = box(L.w - 0.3, 0.12, L.d - 0.3, 0xa77a4c, 0, 0.2, 0);
     g.add(floor);
     for (let i = -7; i <= 7; i++) g.add(box(0.03, 0.125, L.d - 0.3, 0x8a603a, i, 0.205, 0));
-    const walls: Room['walls'] = [];
     const wall = (len: number, x: number, z: number, rotY: number, nx: number, nz: number, extra: THREE.Object3D[] = []) => {
       const w = new THREE.Group();
       const logs = logWall(len, L.wallH);
@@ -179,7 +406,6 @@ export class StationView {
     lintel.position.set(hw, 2.65, 0);
     east.add(e2, lintel);
     // gable ends and the roof
-    const roof = new THREE.Group();
     const r = snowRoof(L.w + 1.8, L.d + 1.6, 2.7);
     r.position.y = L.wallH + 0.25;
     roof.add(r);
@@ -194,142 +420,6 @@ export class StationView {
     const chim = box(1.2, L.wallH + 4.5, 1.2, PAL.stone, -hw - 0.5, (L.wallH + 4.5) / 2, 2.5);
     const cap = box(1.5, 0.3, 1.5, PAL.stoneDark, -hw - 0.5, L.wallH + 4.6, 2.5);
     g.add(chim, cap);
-    this.chimney.set(L.x - hw - 0.5, y + L.wallH + 5, L.z + 2.5);
-    this.smokeSources.push(this.chimney);
-    // porch with a lantern and the sign
-    const porch = new THREE.Group();
-    porch.add(box(3, 0.2, 5.6, 0x8a603a, hw + 1.5, 0.15, 0));
-    for (const s of [-1, 1]) porch.add(cyl(0.12, 0.12, 2.8, 6, PAL.logDark, hw + 2.8, 1.5, s * 2.5));
-    const pr = snowRoof(5.8, 3.2, 0.6);
-    pr.rotation.y = Math.PI / 2;
-    pr.position.set(hw + 1.6, 2.85, 0);
-    roof.add(pr);
-    const lantern = box(0.25, 0.35, 0.25, this.lamps, hw + 0.35, 2.4, 1.6);
-    porch.add(lantern);
-    const bench = box(0.5, 0.45, 1.8, PAL.logDark, hw + 0.5, 0.45, -1.6);
-    porch.add(bench);
-    const s = sign('KESSEL PATROL', 4.2, 0.8, { bg: '#f6ecdc', fg: '#7b2f3b', accent: '#d4422f' });
-    s.position.set(hw + 0.22, 3.0, 0);
-    s.rotation.y = Math.PI / 2;
-    porch.add(s);
-    g.add(porch);
-
-    // --- inside ---
-    const inside = new THREE.Group();
-    // a big red rug by the fire
-    inside.add(box(4.2, 0.03, 3.2, 0xa63a2c, -4.5, 0.28, 2.3));
-    inside.add(box(3.6, 0.035, 2.6, 0xc9a35a, -4.5, 0.285, 2.3));
-    // the hearth
-    const hearth = new THREE.Group();
-    hearth.add(box(0.9, 2.4, 2.8, PAL.stone, 0, 1.45, 0));
-    hearth.add(box(0.95, 1.0, 1.4, 0x1a1512, 0.05, 0.85, 0));
-    hearth.add(box(1.4, 0.2, 3.2, PAL.stoneDark, 0.2, 0.32, 0));
-    hearth.add(box(1.1, 0.15, 3.0, 0x6b4428, 0.1, 2.0, 0));
-    const fireMat = glow(0xffa040);
-    const fireMat2 = glow(0xffe08a);
-    for (let i = 0; i < 3; i++) {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.2 - i * 0.03, 0.6 - i * 0.1, 6), i === 1 ? fireMat2 : fireMat);
-      f.position.set(0.25, 0.65, (i - 1) * 0.28);
-      this.fire.push(f);
-      hearth.add(f);
-    }
-    for (const z of [-0.25, 0.25]) {
-      const log = cyl(0.08, 0.08, 0.8, 6, PAL.logDark, 0.3, 0.42, z);
-      log.rotation.x = Math.PI / 2;
-      hearth.add(log);
-    }
-    hearth.position.set(-hw + 0.75, 0, 2.5);
-    this.fireLight.position.set(L.x - hw + 2, y + 1.3, L.z + 2.5);
-    inside.add(hearth);
-    // the mission table with the valley map on it
-    const table = new THREE.Group();
-    const tex = new THREE.CanvasTexture(topo);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    // a wooden top and the map as its own sheet on it: the lodge's furniture is baked into a few
-    // meshes per material, and the baker skips multi-material meshes (that is how the top vanished)
-    table.add(box(3, 0.1, 2, 0x6b4428, 0, 0.95, 0));
-    const map = new THREE.Mesh(new THREE.PlaneGeometry(2.84, 1.84), new THREE.MeshLambertMaterial({ map: tex }));
-    map.rotation.x = -Math.PI / 2;
-    map.position.y = 1.006;
-    table.add(map);
-    for (const [x, z] of [
-      [-1.35, -0.85],
-      [1.35, -0.85],
-      [-1.35, 0.85],
-      [1.35, 0.85],
-    ])
-      table.add(box(0.14, 0.9, 0.14, PAL.logDark, x, 0.5, z));
-    table.add(box(0.5, 0.35, 0.3, 0x3d4a3a, 1.0, 1.15, -0.6)); // the radio
-    table.add(box(0.04, 0.4, 0.04, 0x222222, 1.15, 1.45, -0.6));
-    table.position.set(SPOTS.table.x - L.x, 0.25, SPOTS.table.z - L.z);
-    inside.add(table);
-    // the bunk
-    const bed = new THREE.Group();
-    bed.add(box(3.6, 0.4, 1.8, PAL.logDark, 0, 0.45, 0));
-    bed.add(box(3.4, 0.25, 1.65, 0xb33a2e, 0.1, 0.75, 0));
-    for (let i = -3; i <= 3; i++) bed.add(box(0.06, 0.26, 1.66, 0x7d2a22, i * 0.45, 0.755, 0));
-    bed.add(box(0.6, 0.2, 1.3, 0xf3efe6, -1.4, 0.95, 0));
-    bed.add(box(0.2, 1.2, 1.8, PAL.logDark, -1.85, 0.85, 0));
-    bed.position.set(-35.6 - L.x, 0.25, 240.2 - L.z);
-    inside.add(bed);
-    // wardrobe
-    const ward = new THREE.Group();
-    ward.add(box(1.6, 2.3, 0.7, 0x7a4f2e, 0, 1.15, 0));
-    ward.add(box(0.03, 2.1, 0.02, 0x4a2e1a, 0, 1.15, 0.36));
-    ward.add(ball(0.05, PAL.yellow, -0.12, 1.2, 0.38, 6), ball(0.05, PAL.yellow, 0.12, 1.2, 0.38, 6));
-    ward.position.set(SPOTS.wardrobe.x - L.x, 0.25, SPOTS.wardrobe.z - 0.3 - L.z);
-    inside.add(ward);
-    // the badge board on the south wall: a pin for each one you have found
-    const board = new THREE.Group();
-    board.add(box(2.6, 1.4, 0.08, 0x5e3a22, 0, 0, 0));
-    board.add(box(2.4, 1.2, 0.09, 0x2f4a3a, 0, 0, 0));
-    BADGES.forEach((b, i) => {
-      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 10), mat([0xd8382a, 0xf2c230, 0x2f7fb8, 0xf3efe6, 0x3c6b4a][i % 5]));
-      pin.rotation.x = Math.PI / 2;
-      pin.position.set(-0.9 + (i % 5) * 0.45, i < 5 ? 0.25 : -0.25, -0.06);
-      pin.visible = false;
-      this.badgePins.set(b.id, pin);
-      board.add(pin);
-      const slot = new THREE.Mesh(new THREE.CircleGeometry(0.11, 10), mat(0x24382c));
-      slot.position.set(pin.position.x, pin.position.y, -0.05);
-      slot.rotation.y = Math.PI;
-      board.add(slot);
-    });
-    board.position.set(SPOTS.badges.x - L.x, 1.9, hd - 0.3);
-    board.rotation.y = Math.PI;
-    inside.add(board);
-    // Koda's bed by the fire
-    const dogBed = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.18, 6, 14), mat(0x2f5f9e));
-    dogBed.rotation.x = Math.PI / 2;
-    dogBed.position.set(SPOTS.dogBed.x - L.x, 0.42, SPOTS.dogBed.z - L.z);
-    const cushion = cyl(0.45, 0.45, 0.12, 14, 0xe8dcc8, SPOTS.dogBed.x - L.x, 0.33, SPOTS.dogBed.z - L.z);
-    inside.add(dogBed, cushion);
-    // an armchair, a shelf of books, a hanging lamp, skis on the wall
-    const chair = new THREE.Group();
-    chair.add(box(1, 0.45, 1, 0x3c6b4a, 0, 0.5, 0), box(1, 0.9, 0.25, 0x3c6b4a, 0, 0.95, 0.4), box(0.2, 0.6, 1, 0x2f553a, -0.45, 0.75, 0), box(0.2, 0.6, 1, 0x2f553a, 0.45, 0.75, 0));
-    chair.position.set(-4.6, 0.25, 4.6);
-    chair.rotation.y = -2.4;
-    inside.add(chair);
-    const shelf = new THREE.Group();
-    shelf.add(box(2, 1.6, 0.4, 0x6b4428, 0, 0.8, 0));
-    for (let k = 0; k < 9; k++) shelf.add(box(0.15, 0.45, 0.3, [0xa63a2c, 0x2f5f9e, 0xe9c46a, 0x3c6b4a][k % 4], -0.8 + k * 0.2, 1.3, 0.02));
-    for (let k = 0; k < 7; k++) shelf.add(box(0.18, 0.4, 0.3, [0x7a4f2e, 0xf3efe6, 0xa63a2c][k % 3], -0.7 + k * 0.22, 0.6, 0.02));
-    shelf.position.set(3.2, 0.25, hd - 0.45);
-    shelf.rotation.y = Math.PI;
-    inside.add(shelf);
-    const lamp = new THREE.Group();
-    lamp.add(cyl(0.02, 0.02, 0.9, 4, 0x222222, 0, 0.45, 0), new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.3, 10, 1, true), mat(0x3d4a3a, { side: THREE.DoubleSide })), ball(0.12, this.lamps, 0, -0.1, 0, 8));
-    lamp.position.set(SPOTS.table.x - L.x, 2.6, SPOTS.table.z - L.z);
-    inside.add(lamp);
-    for (let k = 0; k < 3; k++) {
-      const ski = box(0.1, 1.8, 0.04, [PAL.red, PAL.wood, 0x2a9d8f][k], 5.6 + k * 0.25, 1.3, -hd + 0.3);
-      inside.add(ski);
-    }
-    inside.name = 'inside';
-    g.add(inside);
-    this.group.add(g);
-    this.group.add(this.fireLight);
-    return { group: g, roof, walls, x: L.x, z: L.z };
   }
 
   /** A MeshCraft yard building, painted with the game's own materials (see paintModel). */
@@ -601,6 +691,10 @@ export class StationView {
     const W = WING;
     const g = new THREE.Group();
     g.position.set(W.x, y, W.z);
+    if (this.lm) {
+      g.add(paintModel(this.lm.rs_lodge_wing, this.lodgePaint(), (hex) => mat(hex)));
+      return g;
+    }
     g.add(box(W.w + 0.4, 0.5, W.d + 0.4, PAL.stone, 0, -0.1, 0));
     for (const [len, x, z, rot] of [
       [W.w, 0, -W.d / 2, 0],

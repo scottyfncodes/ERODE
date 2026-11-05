@@ -46,6 +46,12 @@ ROLES = {
     "nose": "#E8A0A8", "van": "#E9E2D0", "vanStripe": "#2F5F9E", "glass": "Nav Cyan", "tyre": "#1D1F22",
     "lamp": "Lamp Glow", "bark": "#5E3A22", "barkDark": "#4A2D1A", "needles": "#2B4A33", "soil": "#6B4428",
     "snow": "Kessel Snow", "post": "Aubergine", "liftSteel": "#6E7A85", "chair": "#2F5F9E", "cushion": "#24497A",
+    # the patrol lodge and its furniture (the game paints most of these with its own materials)
+    "floor": "#A77A4C", "floorDark": "#8A603A", "mantel": "#6B4428", "iron": "#2A2D33", "brass": "#C29A45",
+    "tableTop": "#6B4428", "radio": "#3D4A3A", "paper": "#F3EFE6", "mug": "#2F5F9E", "blanket": "#B33A2E",
+    "blanketDark": "#7D2A22", "pillow": "#F3EFE6", "wardrobe": "#7A4F2E", "wardrobeDark": "#6A4226", "chairCloth": "#3C6B4A",
+    "chairDark": "#2F553A", "shelf": "#6B4428", "bookRed": "#A63A2C", "bookBlue": "#2F5F9E", "bookOchre": "#E9C46A",
+    "bookGreen": "#3C6B4A", "dogBed": "#2F5F9E", "rope": "#D9A429", "shade": "#3D4A3A",
 }
 mats = K.Materials(pal, ROLES, prefix="RS")
 M = mats.__getitem__
@@ -640,6 +646,291 @@ def chair():
     return [finish(p, "chair")]
 
 
+# ------------------------------------------------------------------ the patrol lodge, its wing and its furniture
+LOG_R = 0.17
+
+
+def log_run(length, x, z, along_x, n, y0=0.25, half=False, ends=True, skip=None):
+    """A wall of n stacked logs (radius LOG_R) along x or z, centred on (x, z), the first log's foot at
+    y0. half: the run sits half a log higher (the cross wall of a notched corner). ends: end-grain discs
+    on both ends. skip(i, u0, u1) -> list of (u0, u1) spans to keep, for door and window openings."""
+    r = LOG_R
+    out = []
+    for i in range(n):
+        y = y0 + r + i * r * 2 + (r if half else 0)
+        role = "log" if i % 2 else "logShade"
+        spans = skip(i, y) if skip else [(-length / 2, length / 2)]
+        for u0, u1 in spans:
+            L = u1 - u0
+            if L < 0.05:
+                continue
+            c = (u0 + u1) / 2
+            if along_x:
+                out.append(C(role, r, r, L, 7, (x + c, y, z), (0, 0, math.pi / 2)))
+            else:
+                out.append(C(role, r, r, L, 7, (x, y, z + c), (math.pi / 2, 0, 0)))
+        if ends:
+            for e in (-1, 1):
+                u = e * (length / 2 + 0.02)
+                if along_x:
+                    out.append(C("grain", r * 0.9, r * 0.9, 0.04, 7, (x + u, y, z), (0, 0, math.pi / 2)))
+                else:
+                    out.append(C("grain", r * 0.9, r * 0.9, 0.04, 7, (x, y, z + u), (math.pi / 2, 0, 0)))
+    return out
+
+
+def cut_spans(length, holes, y):
+    spans = [(-length / 2, length / 2)]
+    for u0, u1, y0, y1 in holes:
+        if y0 - LOG_R < y < y1 + LOG_R:
+            nxt = []
+            for a, b in spans:
+                if u1 <= a or u0 >= b:
+                    nxt.append((a, b))
+                else:
+                    if u0 > a: nxt.append((a, u0))
+                    if u1 < b: nxt.append((u1, b))
+            spans = nxt
+    return spans
+
+
+def lodge_window(u, y, along_x, x, z, face, w=1.3, h=1.1):
+    """A lit window through a log wall: the pane right through (so it glows inside too), a heavy frame
+    and cross bars on both faces, a snowy sill outside, a timber sill inside, shutters outside."""
+    p = []
+    t = 0.5
+    def at(du, dy, dn):
+        return (x + du, y + dy, z + dn) if along_x else (x + dn, y + dy, z + du)
+    def bx(role, a, hh, n, du=0, dy=0, dn=0):
+        return B(role, a, hh, n, at(u + du, dy, dn)) if along_x else B(role, n, hh, a, at(u + du, dy, dn))
+    p.append(bx("window", w, h, t))
+    for s in (-1, 1):
+        n = s * (t / 2 + 0.03)
+        p += [bx("logDark", w + 0.2, 0.12, 0.08, 0, h / 2 + 0.04, n), bx("logDark", w + 0.2, 0.12, 0.08, 0, -h / 2 - 0.04, n),
+              bx("logDark", 0.12, h, 0.08, -w / 2 - 0.04, 0, n), bx("logDark", 0.12, h, 0.08, w / 2 + 0.04, 0, n),
+              bx("logDark", 0.06, h, 0.06, 0, 0, n), bx("logDark", w, 0.06, 0.06, 0, 0, n)]
+    p.append(bx("roofSnow", w + 0.36, 0.12, 0.34, 0, -h / 2 - 0.16, face * (t / 2 + 0.12)))
+    p.append(bx("logDark", w + 0.3, 0.08, 0.22, 0, -h / 2 - 0.12, -face * (t / 2 + 0.06)))
+    for sx in (-1, 1):
+        p.append(bx("shutter", 0.5, h + 0.12, 0.06, sx * (w / 2 + 0.3), 0, face * (t / 2 + 0.05)))
+        for k in (-1, 1):
+            p.append(bx("logDark", 0.44, 0.06, 0.07, sx * (w / 2 + 0.3), k * h * 0.3, face * (t / 2 + 0.09)))
+    return p
+
+
+def lodge():
+    """Kessel Patrol's lodge, 16 x 12 m, log walls 3.1 m on a stone plinth. Every node is one the game
+    shows and hides (src/render/stationView.ts buildLodge): `base` (plinth, floor, porch deck, steps,
+    posts, rail, bench), `wall_n/s/w/e` (each its own node for the dollhouse cut-away, the east wall
+    with the door), `roof` (the main roof, its log gables and the porch roof), `chimney` (west end).
+    Notched corners: the end walls sit half a log higher, their ends showing their grain."""
+    w, d, wh = 16.0, 12.0, 3.1
+    hw, hd = w / 2, d / 2
+    n = max(2, round(wh / (LOG_R * 2)))
+    base = [B("stone", w + 0.6, 0.5, d + 0.6, (0, -0.1, 0)), B("stoneDark", w + 0.7, 0.12, d + 0.7, (0, 0.12, 0)),
+            B("floor", w - 0.3, 0.12, d - 0.3, (0, 0.2, 0))]
+    for i in range(-7, 8):
+        base.append(B("floorDark", 0.03, 0.125, d - 0.3, (i, 0.205, 0)))
+    # dressed stones along the plinth
+    for i in range(16):
+        for s in (-1, 1):
+            base.append(B("stoneDark" if i % 2 else "stone", 0.9, 0.3, 0.06, (-hw + 0.5 + i * 1.0, -0.05, s * (hd + 0.31))))
+    # the porch on the east front: deck, steps, posts, a rail with the gap at the steps, a bench
+    px = hw + 1.5
+    base += [B("floor", 3.0, 0.2, 5.6, (px, 0.15, 0)), B("stone", 3.1, 0.3, 5.7, (px, -0.05, 0))]
+    for k in range(1, 4):
+        base.append(B("floorDark", 0.03, 0.205, 5.6, (hw + k * 0.75, 0.152, 0)))
+    for k, (sx, sh) in enumerate(((hw + 3.25, 0.12), (hw + 3.55, -0.02))):
+        base.append(B("floor", 0.4, 0.14, 2.0, (sx, sh, 0)))
+    for s in (-1, 1):
+        base.append(C("logDark", 0.12, 0.13, 2.8, 7, (hw + 2.8, 1.5, s * 2.5)))
+        base.append(B("logDark", 0.3, 0.12, 0.3, (hw + 2.8, 2.86, s * 2.5)))
+        # rail from the wall to the corner post and along the front to the steps
+        base.append(B("logLight", 2.6, 0.1, 0.1, (hw + 1.45, 1.05, s * 2.5)))
+        base.append(B("logLight", 0.1, 0.1, 1.5, (hw + 2.8, 1.05, s * 1.75)))
+        for k in range(5):
+            base.append(B("logLight", 0.06, 0.8, 0.06, (hw + 0.4 + k * 0.55, 0.65, s * 2.5)))
+        base.append(C("logDark", 0.08, 0.08, 0.85, 6, (hw + 2.8, 0.65, s * 1.05)))
+    base += [B("logDark", 0.5, 0.08, 1.8, (hw + 0.5, 0.5, -1.6)), B("logDark", 0.08, 0.45, 1.8, (hw + 0.28, 0.75, -1.6))]
+    for z in (-2.3, -0.9):
+        base.append(B("logDark", 0.4, 0.4, 0.08, (hw + 0.5, 0.27, z)))
+    # a drift banked against the plinth and the porch, as the plows leave it
+    for s in (-1, 1):
+        base.append(B("roofSnow", w * 0.9, 0.28, 0.6, (0, 0.18, s * (hd + 0.55)), (s * 0.35, 0, 0)))
+
+    walls = []
+    # long walls (n/s) run along x at z=-hd/+hd; end walls (w/e) along z at x=-hw/+hw, half a log higher
+    holes_n = [(u - 0.65, u + 0.65, 1.2, 2.3) for u in (-3, 4)]
+    holes_s = [(u - 0.65, u + 0.65, 1.2, 2.3) for u in (-4, 1, 5)]
+    holes_e = [(-1.2, 1.2, 0.25, 2.6), (-3.6 - 0.65, -3.6 + 0.65, 1.2, 2.3)]
+    nl = lambda holes, L: (lambda i, y: cut_spans(L, holes, y))
+    wn = log_run(w + 0.5, 0, -hd, True, n, skip=nl(holes_n, w + 0.5))
+    for u in (-3, 4): wn += lodge_window(u, 1.75, True, 0, -hd, -1)
+    ws = log_run(w + 0.5, 0, hd, True, n, skip=nl(holes_s, w + 0.5))
+    for u in (-4, 1, 5): ws += lodge_window(u, 1.75, True, 0, hd, 1)
+    ww = log_run(d + 0.5, -hw, 0, False, n - 1, half=True)
+    we = log_run(d + 0.5, hw, 0, False, n - 1, half=True, skip=nl(holes_e, d + 0.5))
+    we += lodge_window(-3.6, 1.75, False, hw, 0, 1)
+    # the door: a heavy plank door standing open into the lodge, its frame, a lintel log, the patrol cross
+    we += [B("logDark", 0.5, 0.2, 2.6, (hw, 2.62, 0)), B("logDark", 0.5, 2.4, 0.16, (hw, 1.45, -1.25)),
+           B("logDark", 0.5, 2.4, 0.16, (hw, 1.45, 1.25)), B("floorDark", 0.55, 0.08, 2.5, (hw, 0.28, 0)),
+           B("door", 1.1, 2.3, 0.1, (hw - 0.75, 1.4, -1.12))]
+    for k in range(4):
+        we.append(B("logDark", 0.95, 0.06, 0.12, (hw - 0.75, 0.5 + k * 0.6, -1.06)))
+    walls = [finish(wn, "wall_n"), finish(ws, "wall_s"), finish(ww, "wall_w"), finish(we, "wall_e")]
+
+    # the roof: ridge along x, span across z, pitch 2.7 from the top of the walls (3.35)
+    top = wh + 0.25
+    roof = snow_roof(d + 1.6, w + 1.8, 2.7)
+    for s in (-1, 1):
+        roof.append(gable_end("logLight", d, 2.7, s * (hw - 0.05), t=0.32))
+        # board-and-batten on the gables, a vent and the end of the ridge beam
+        for k in range(-5, 6):
+            hgt = 2.7 * (1 - abs(k) / 6.0)
+            if hgt > 0.2:
+                roof.append(B("logDark", 0.08, hgt, 0.05, (k * 1.0, hgt / 2, s * (hw + 0.13))))
+        roof.append(B("logDark", 0.7, 0.45, 0.06, (0, 1.4, s * (hw + 0.16))))
+        roof.append(C("logDark", 0.2, 0.2, 0.5, 7, (0, 2.55, s * (hw + 0.2)), (math.pi / 2, 0, 0)))
+    turn(roof, math.pi / 2)
+    for o in roof:
+        o.location.y += top
+    # the porch roof: a lean-to off the east wall, on the porch posts, with its own snow and a lip
+    a = math.atan2(0.55, 3.4)
+    ln = math.hypot(0.55, 3.4)
+    roof += [B("roof", ln, 0.16, 6.0, (hw + 1.7, 2.95 + 0.28, 0), (0, 0, -a)),
+             B("roofSnow", ln - 0.1, 0.22, 5.9, (hw + 1.7 + 0.03, 3.13 + 0.28, 0), (0, 0, -a)),
+             C("roofSnow", 0.15, 0.15, 5.8, 6, (hw + 3.35, 2.98, 0), (math.pi / 2, 0, 0)),
+             B("logDark", 0.2, 0.2, 5.6, (hw + 2.8, 2.95, 0))]
+    # the chimney on the west end: a fieldstone stack, coursed, with a cap and a drip of soot
+    ch = [B("stone", 1.2, wh + 4.5, 1.2, (-hw - 0.5, (wh + 4.5) / 2, 2.5)),
+          B("stoneDark", 1.5, 0.3, 1.5, (-hw - 0.5, wh + 4.6, 2.5)),
+          B("stoneDark", 1.35, 0.6, 1.35, (-hw - 0.5, 0.3, 2.5)),
+          B("roofSnow", 1.5, 0.14, 1.5, (-hw - 0.5, wh + 4.82, 2.5)),
+          B("dark", 0.6, 0.3, 0.6, (-hw - 0.5, wh + 4.9, 2.5))]
+    for i in range(9):
+        y = 0.8 + i * 0.75
+        for sx, sz in ((-1, 0), (0, 1), (0, -1)):
+            ch.append(B("stoneDark" if i % 2 else "stone", 0.62 if sz else 0.07, 0.3, 0.07 if sz else 0.62,
+                        (-hw - 0.5 + sx * 0.62 + (0.3 if sz and i % 2 else -0.3 if sz else 0), y, 2.5 + sz * 0.62 + (0.3 if sx and i % 2 else -0.3 if sx else 0))))
+    return [finish(base, "base")] + walls + [finish(roof, "roof"), finish(ch, "chimney")]
+
+
+def lodge_wing():
+    """The bunkhouse wing (the 'wing' upgrade): 12 x 8 m of logs, walls 3 m, notched corners, three lit
+    windows on the north front and one each end, a snowy roof with log gables. The south side is open
+    to the lodge's north wall, as the code built it."""
+    w, d, wh = 12.0, 8.0, 3.0
+    hw, hd = w / 2, d / 2
+    n = max(2, round(wh / (LOG_R * 2)))
+    p = [B("stone", w + 0.4, 0.5, d + 0.4, (0, -0.1, 0)), B("stoneDark", w + 0.5, 0.12, d + 0.5, (0, 0.12, 0))]
+    holes_n = [(u - 0.55, u + 0.55, 1.25, 2.15) for u in (-3.5, 0, 3.5)]
+    p += log_run(w + 0.5, 0, -hd, True, n, skip=lambda i, y: cut_spans(w + 0.5, holes_n, y))
+    for u in (-3.5, 0, 3.5): p += lodge_window(u, 1.7, True, 0, -hd, -1, w=1.1, h=0.9)
+    for s in (-1, 1):
+        holes = [(-0.5, 0.5, 1.3, 2.1)]
+        p += log_run(d + 0.5, s * hw, 0, False, n - 1, half=True, skip=lambda i, y: cut_spans(d + 0.5, holes, y))
+        p += lodge_window(0, 1.7, False, s * hw, 0, s, w=0.9, h=0.8)
+    roof = snow_roof(d + 1.2, w + 1.4, 2.0)
+    for s in (-1, 1):
+        roof.append(gable_end("logLight", d, 2.0, s * (hw - 0.05), t=0.3))
+        for k in range(-3, 4):
+            hgt = 2.0 * (1 - abs(k) / 4.0)
+            if hgt > 0.2:
+                roof.append(B("logDark", 0.08, hgt, 0.05, (k * 1.0, hgt / 2, s * (hw + 0.12))))
+    turn(roof, math.pi / 2)
+    for o in roof:
+        o.location.y += wh + 0.25
+    return [finish(p + roof, "wing")]
+
+
+def lodge_furniture():
+    """The lodge's furniture, one node each at its own origin (the game places them where the code did):
+    hearth (a fieldstone fireplace facing +x, firebox, hearthstone, mantel, andirons; the flames stay code),
+    table (the mission table: plank top, trestle legs, the radio; the map is the game's own sheet on top),
+    bunk, wardrobe, armchair, shelf (books), dogbed (Koda's), lamp (the hanging lamp; origin at its top)."""
+    out = []
+    # hearth: origin on the floor at the middle of the stack (code: hearth group at (-hw + 0.75, 0, 2.5))
+    h = [B("stone", 0.9, 2.4, 2.8, (0, 1.45, 0)), B("stoneDark", 1.0, 0.3, 3.0, (0.03, 2.75, 0)),
+         B("dark", 0.95, 1.0, 1.4, (0.05, 0.85, 0)), B("stoneDark", 1.4, 0.2, 3.2, (0.2, 0.32, 0)),
+         B("mantel", 1.1, 0.15, 3.0, (0.1, 2.0, 0)), B("stone", 0.6, 0.5, 1.4, (-0.1, 2.9, 0))]
+    for i in range(6):
+        y = 0.55 + i * 0.4
+        for z in (-1.15, -0.7, 0.7, 1.15):
+            if abs(z) > 0.8 or y > 1.4:
+                h.append(B("stoneDark" if (i + int(z * 10)) % 2 else "stone", 0.06, 0.32, 0.4, (0.46, y, z + (0.1 if i % 2 else -0.1))))
+    for z in (-0.5, 0.5):
+        h += [B("iron", 0.6, 0.06, 0.06, (0.3, 0.4, z)), B("iron", 0.06, 0.3, 0.06, (0.55, 0.5, z))]
+    for z in (-0.25, 0.25):
+        h.append(C("logDark", 0.08, 0.08, 0.8, 6, (0.3, 0.48, z), (math.pi / 2, 0, 0)))
+    h += [C("logDark", 0.1, 0.1, 0.6, 6, (0.2, 2.17, -1.0), (0, 0, math.pi / 2)), B("brass", 0.12, 0.25, 0.12, (0.2, 2.2, 0.9)),
+          B("iron", 0.04, 0.9, 0.04, (0.7, 0.75, 1.3)), B("logLight", 0.4, 0.4, 0.5, (0.6, 0.45, -1.3))]
+    for k in range(4):
+        h.append(C("log", 0.07, 0.07, 0.45, 6, (0.6 + (k % 2) * 0.14 - 0.07, 0.72 + (k // 2) * 0.13, -1.3), (math.pi / 2, 0, 0)))
+    out.append(finish(h, "hearth"))
+    # mission table: origin on the floor at its centre; top 3 x 2 at 0.95
+    t = [B("tableTop", 3.0, 0.1, 2.0, (0, 0.95, 0), bevel=0.02), B("logDark", 2.8, 0.08, 1.8, (0, 0.86, 0))]
+    for x in (-1.2, 1.2):
+        t += [B("logDark", 0.14, 0.8, 0.14, (x, 0.45, -0.75)), B("logDark", 0.14, 0.8, 0.14, (x, 0.45, 0.75)),
+              B("logDark", 0.12, 0.12, 1.5, (x, 0.2, 0))]
+    t += [B("logDark", 2.4, 0.12, 0.12, (0, 0.2, 0)),
+          B("radio", 0.5, 0.35, 0.3, (1.0, 1.175, -0.6), bevel=0.02), B("dark", 0.36, 0.14, 0.02, (1.0, 1.2, -0.44)),
+          B("iron", 0.04, 0.4, 0.04, (1.15, 1.55, -0.6)), C("brass", 0.03, 0.03, 0.04, 8, (0.85, 1.2, -0.44), (math.pi / 2, 0, 0)),
+          B("dark", 0.08, 0.2, 0.06, (0.72, 1.1, -0.42)), B("paper", 0.3, 0.012, 0.4, (-1.15, 1.006, 0.62), (0, 0.2, 0)),
+          C("mug", 0.06, 0.05, 0.12, 8, (-0.9, 1.06, -0.65))]
+    out.append(finish(t, "table"))
+    # bunk: origin on the floor at the bed's centre, 3.6 x 1.8, headboard at -x
+    b = [B("logDark", 3.6, 0.4, 1.8, (0, 0.45, 0), bevel=0.03), B("blanket", 3.4, 0.25, 1.65, (0.1, 0.75, 0))]
+    for i in range(-3, 4):
+        b.append(B("blanketDark", 0.06, 0.26, 1.66, (i * 0.45, 0.755, 0)))
+    b += [B("pillow", 0.6, 0.2, 1.3, (-1.4, 0.95, 0), bevel=0.06), B("logDark", 0.2, 1.2, 1.8, (-1.85, 0.85, 0)),
+          B("logDark", 0.2, 0.7, 1.8, (1.85, 0.6, 0)), B("blanket", 1.0, 0.1, 1.7, (1.2, 0.92, 0))]
+    for z in (-0.85, 0.85):
+        b += [C("log", 0.09, 0.09, 1.5, 6, (-1.85, 0.8, z)), C("log", 0.09, 0.09, 1.0, 6, (1.85, 0.55, z))]
+    out.append(finish(b, "bunk"))
+    # wardrobe: origin on the floor, doors on +z
+    w = [B("wardrobe", 1.6, 2.3, 0.7, (0, 1.15, 0), bevel=0.02), B("logDark", 1.7, 0.12, 0.78, (0, 2.34, 0)),
+         B("logDark", 1.66, 0.1, 0.74, (0, 0.05, 0)), B("logDark", 0.03, 2.1, 0.02, (0, 1.15, 0.36))]
+    for sx in (-1, 1):
+        w += [B("wardrobeDark", 0.62, 0.8, 0.02, (sx * 0.4, 1.65, 0.355)), B("wardrobeDark", 0.62, 0.8, 0.02, (sx * 0.4, 0.65, 0.355)),
+              place(K.sphere("k", 0.05, (0, 0, 0), None, segs=6, rings=4), (sx * 0.12, 1.2, 0.38), (0, 0, 0), "brass")]
+    out.append(finish(w, "wardrobe"))
+    # armchair: origin on the floor, facing -z (back at +z), as the code's
+    a = [B("chairCloth", 1.0, 0.25, 1.0, (0, 0.4, 0), bevel=0.05), B("chairCloth", 0.86, 0.14, 0.86, (0, 0.58, -0.05), bevel=0.05),
+         B("chairCloth", 1.0, 0.9, 0.25, (0, 0.95, 0.4), bevel=0.06), B("chairDark", 0.2, 0.6, 1.0, (-0.45, 0.75, 0), bevel=0.05),
+         B("chairDark", 0.2, 0.6, 1.0, (0.45, 0.75, 0), bevel=0.05), B("blanket", 0.9, 0.05, 0.5, (0.1, 0.67, -0.1), (0, 0.4, 0))]
+    for x, z in ((-0.4, -0.4), (0.4, -0.4), (-0.4, 0.4), (0.4, 0.4)):
+        a.append(C("logDark", 0.05, 0.04, 0.27, 6, (x, 0.135, z)))
+    out.append(finish(a, "armchair"))
+    # shelf: origin on the floor, books toward +z
+    s = [B("shelf", 2.0, 0.08, 0.4, (0, 1.6, 0)), B("shelf", 2.0, 0.06, 0.4, (0, 1.03, 0)), B("shelf", 2.0, 0.06, 0.4, (0, 0.33, 0)),
+         B("shelf", 2.0, 0.06, 0.4, (0, 0.05, 0)), B("shelf", 0.06, 1.6, 0.4, (-0.97, 0.8, 0)), B("shelf", 0.06, 1.6, 0.4, (0.97, 0.8, 0)),
+         B("logDark", 2.0, 1.6, 0.04, (0, 0.8, -0.18))]
+    cols = ["bookRed", "bookBlue", "bookOchre", "bookGreen"]
+    x = -0.88
+    for k in range(9):
+        hh = 0.38 + (k * 37 % 7) * 0.02
+        s.append(B(cols[k % 4], 0.15, hh, 0.3, (x + 0.075, 1.06 + hh / 2, 0.02), (0, 0, 0.0 if k != 7 else 0.25)))
+        x += 0.18
+    x = -0.85
+    for k in range(7):
+        hh = 0.34 + (k * 53 % 5) * 0.03
+        s.append(B(["log", "paper", "bookRed"][k % 3], 0.18, hh, 0.3, (x + 0.09, 0.36 + hh / 2, 0.02)))
+        x += 0.21
+    s += [B("brass", 0.2, 0.25, 0.2, (0.7, 1.21, 0.02)), B("paper", 0.5, 0.08, 0.32, (0.55, 0.43, 0.02))]
+    out.append(finish(s, "shelf"))
+    # Koda's bed: a stuffed ring round a cushion, a plaid blanket, a chewed rope toy
+    db = [place(K.torus("ring", 0.5, 0.18, (0, 0, 0), axis="Y", major=16, minor=6), (0, 0.17, 0), (0, 0, 0), "dogBed"),
+          C("cushion", 0.45, 0.45, 0.12, 14, (0, 0.08, 0)), B("blanket", 0.5, 0.03, 0.4, (0.1, 0.16, 0.05), (0, 0.6, 0)),
+          C("rope", 0.04, 0.04, 0.35, 6, (0.55, 0.06, 0.55), (0, 0, math.pi / 2))]
+    out.append(finish(db, "dogbed"))
+    # the hanging lamp: origin at the ceiling hook; a chain, an enamel shade, the bulb (role lamp)
+    lp = [C("iron", 0.02, 0.02, 0.9, 4, (0, 0.45, 0)), lathe("shade", [(0.06, 0.3), (0.12, 0.26), (0.32, 0.05), (0.42, -0.06), (0.4, -0.08)], 12),
+          place(K.sphere("bulb", 0.12, (0, 0, 0), None, segs=8, rings=6), (0, -0.1, 0), (0, 0, 0), "lamp")]
+    out.append(finish(lp, "lamp"))
+    return out
+
+
+
 BUILD = {
     "rs_chalet": lambda: chalet(6.0, 5.0, 2, 2),
     "rs_chalet_wide": lambda: chalet(10.0, 7.5, 2, 3),
@@ -660,6 +951,9 @@ BUILD = {
     "rs_lift_tower": lambda: lift_tower(10, False),
     "rs_lift_tower_end": lambda: lift_tower(6, True),
     "rs_chair": chair,
+    "rs_lodge": lodge,
+    "rs_lodge_wing": lodge_wing,
+    "rs_lodge_furniture": lodge_furniture,
 }
 objs = BUILD[asset]()
 bpy.ops.wm.save_as_mainfile(filepath=A["out"])
