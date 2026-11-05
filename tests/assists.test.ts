@@ -97,15 +97,15 @@ describe('sled climb assist (hill hold)', () => {
   });
 
   it('too steep for the track: without it the sled slides back, with it the sled holds', () => {
-    const off = climb(36, false);
-    const on = climb(36, true);
+    const off = climb(40, false);
+    const on = climb(40, true);
     expect(off.z).toBeGreaterThan(2); // slid back down the hill
     expect(Math.abs(on.z)).toBeLessThan(0.3);
     expect(on.held).toBe(true);
   });
 
   it('never adds climbing power: it cannot get up a slope the track cannot', () => {
-    const on = climb(36, true, 8);
+    const on = climb(40, true, 8);
     expect(on.z).toBeGreaterThan(-0.3);
   });
 

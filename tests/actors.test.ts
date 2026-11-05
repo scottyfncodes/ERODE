@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { getTerrain } from '../src/world/terrain';
 import { buildColliders, SPOTS } from '../src/world/station';
+import { Colliders } from '../src/world/colliders';
+import type { Terrain } from '../src/world/terrain';
 import { newWalker, stepWalker, RUN } from '../src/actors/walker';
 import { newGlider, stepGlider, SLED, SKIS, glideSpeed, forwardSpeed } from '../src/actors/glide';
 import { newHeli, stepHeli, HELI, heliAgl } from '../src/actors/heli';
@@ -79,17 +81,75 @@ describe('the snowmobile', () => {
     expect(Math.hypot(g.x - r.x, g.z - r.z)).toBeLessThan(30);
   });
 
-  it('flies off a crest at speed and lands', () => {
-    const g = newGlider(0, 250, 0, t);
-    g.vz = -25;
-    g.vy = 6;
-    let flew = false;
-    for (let i = 0; i < 300; i++) {
-      stepGlider(g, SLED, 0, 0, dt, t, solid, null);
-      if (g.airborne) flew = true;
+  /** Ground along -z (the way the sled faces at yaw 0), as a height profile h(distance). */
+  const profile = (h: (s: number) => number) => {
+    const n = (s: number) => {
+      const k = (h(s + 0.5) - h(s - 0.5)) / 1;
+      const m = Math.hypot(1, k);
+      return { x: 0, y: 1 / m, z: k / m };
+    };
+    return { height: (_x: number, z: number) => 100 + h(-z), normal: (_x: number, z: number) => n(-z), surface: () => 'packed', inBounds: () => true } as unknown as Terrain;
+  };
+  const runOver = (ground: Terrain, speed: number, profileOf = SLED) => {
+    const g = newGlider(0, 0, 0, ground);
+    g.vz = -speed;
+    let flights = 0;
+    let air = 0;
+    let longest = 0;
+    let relaunch = false;
+    let sinceLanding = 99;
+    for (let i = 0; i < 60 * 6; i++) {
+      const was = g.airborne;
+      stepGlider(g, profileOf, 0, 0.6, dt, ground, solid0, null);
+      sinceLanding += dt;
+      if (g.airborne) air += dt;
+      if (!was && g.airborne && sinceLanding < 0.5) relaunch = true;
+      if (was && !g.airborne) {
+        if (air > 0.1) flights++;
+        longest = Math.max(longest, air);
+        air = 0;
+        sinceLanding = 0;
+      }
     }
-    expect(flew).toBe(true);
-    expect(g.airborne).toBe(false);
+    return { flights, longest, relaunch, airborne: g.airborne };
+  };
+  const solid0 = new Colliders();
+
+  it('still flies off a real kicker at speed, lands, and does not bounce out of the landing', () => {
+    // a 2 m kicker at 20 degrees, then a 4 m drop to flat snow
+    const kicker = profile((s) => (s < 40 ? 0 : s < 45.5 ? (s - 40) * Math.tan(0.35) : -4));
+    const r = runOver(kicker, 22);
+    expect(r.flights).toBe(1);
+    expect(r.longest).toBeGreaterThan(0.4);
+    expect(r.airborne).toBe(false);
+    expect(r.relaunch).toBe(false);
+  });
+
+  it('cannot launch again for half a second after a real landing (no bounce over rough snow)', () => {
+    // a drop onto a run of sharp little crests every 6 m (rough snow beside a road)
+    const rough = profile((s) => (s < 30 ? 0 : -3 - Math.abs(((s - 30) % 6) - 3) * 0.6 + (s - 30) * -0.2));
+    const g = newGlider(0, 0, 0, rough);
+    g.vz = -20;
+    let landedAt = -1;
+    let relaunchAfter = Infinity;
+    for (let i = 0; i < 60 * 4; i++) {
+      const was = g.airborne;
+      stepGlider(g, SLED, 0, 0.6, dt, rough, solid0, null);
+      if (was && !g.airborne && g.sinceLand === 0 && landedAt < 0) landedAt = i;
+      if (landedAt >= 0 && !was && g.airborne && relaunchAfter === Infinity) relaunchAfter = (i - landedAt) * dt;
+    }
+    expect(landedAt).toBeGreaterThan(0);
+    expect(relaunchAfter).toBeGreaterThanOrEqual(SLED.weight!.settle);
+  });
+
+  it('over a sharp road crest it hops low and short where the light model flew', () => {
+    // a kink: up at 0.25, straight over, down at 0.25 (how the height grid meets itself at speed)
+    const crest = profile((s) => (s < 60 ? (s - 60) * 0.25 : -(s - 60) * 0.25));
+    const light = runOver(crest, 20, { ...SLED, weight: undefined });
+    const heavy = runOver(crest, 20);
+    expect(light.longest).toBeGreaterThan(0.5);
+    expect(heavy.longest).toBeLessThan(light.longest / 2);
+    expect(heavy.relaunch).toBe(false);
   });
 });
 
