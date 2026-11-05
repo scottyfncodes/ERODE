@@ -1263,8 +1263,32 @@
    "status": "shipped",
    "notes": "rs_weather_mast: Grauhorn weather station: mast, guys, vane, shield, panel, logger; anemometer node on the hub; art/3d/scripts/working_mountain.py; validate_asset 0 failures, engine-checked (three@0.170)",
    "sha256": "404d18139386af2ae026906fac758b359e3f6de762797e8ebcdb13c0e7ebe456"
+  },
+  {
+   "path": "kessel-art-bible.pdf",
+   "bytes": 5869803,
+   "tools": "DesignCraft layout and PDF export (Playwright captures of the game, colour tokens from the code)",
+   "status": "shipped",
+   "notes": "The art bible, edition 2: the canonical visual reference, 20 pages. Built by art/bible/build_bible.py from art/bible/captures (capture.mjs) and art/bible/tokens.json (tokens.ts); fonts pinned in art/bible/fonts.json; review in art/bible/QA.md. Supersedes edition 1 (dark slate).",
+   "sha256": "63413b973c824f0a9ff2d75894d26782bd0e93f280c917025bd6a1d774d4f3fe"
+  },
+  {
+   "path": "bible/kessel-art-bible.designcraft",
+   "bytes": 5858171,
+   "tools": "DesignCraft",
+   "status": "source",
+   "notes": "The editable layout of the art bible (open beside a Document Fonts folder holding the fonts in art/bible/fonts.json)",
+   "sha256": "45009869b115cbc59a8fb7870e0122da5f0060ee71a2200a1d4a58c1ac34a7d3"
+  },
+  {
+   "path": "bible/qa-contact-sheet.jpg",
+   "bytes": 412932,
+   "tools": "Poppler pdftoppm + Pillow",
+   "status": "source",
+   "notes": "Every page of art/kessel-art-bible.pdf as Poppler renders it: the evidence for art/bible/QA.md",
+   "sha256": "2a9ac8800353d67690b996d3eb06486c66d6080f57d159cd285e8f3824355fc2"
   }
  ],
- "files": 147,
- "updated": "2026-11-05T15:31:46Z"
+ "files": 150,
+ "updated": "2026-11-05T16:07:56Z"
 }
