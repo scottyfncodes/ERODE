@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/audio';
 import { Input } from '../core/input';
-import { BUZZ, buzz, hitScale, HIT_TOTAL } from './feel';
+import { BUZZ, buzz, hitStopScale, HIT_TOTAL } from './feel';
 import { forwardSpeed, glideSpeed, newGlider, SKIS, SLED, stepGlider, type Glider } from '../actors/glide';
 import { HELI, heliAgl, newHeli, stepHeli, type Heli } from '../actors/heli';
 import { newHusky, pet, startTrack, stepHusky, type Husky, type Scent } from '../actors/husky';
@@ -124,7 +124,7 @@ export class Game {
   private saveT = 0;
   private watching = 0;
   /** real seconds since the last hit-stop began (past HIT_TOTAL: none running) */
-  private hitT = HIT_TOTAL;
+  private hitStopT = HIT_TOTAL;
   private watchSkip = false;
   private cond: Conditions;
   private indoors = 0;
@@ -525,9 +525,9 @@ export class Game {
     this.last = now;
     this.fps += (1 / Math.max(dt, 1e-3) - this.fps) * 0.05;
     // hit-stop: the world's clock slows for a beat on the biggest moments (sound and HUD stay real-time)
-    if (this.hitT < HIT_TOTAL) {
-      this.hitT += dt;
-      dt *= hitScale(this.hitT);
+    if (this.hitStopT < HIT_TOTAL) {
+      this.hitStopT += dt;
+      dt *= hitStopScale(this.hitStopT);
     }
     this.time += dt;
     shared.time.value = this.time;
@@ -944,7 +944,7 @@ export class Game {
           const d = Math.hypot(this.pos2().x - CHARGE_SPOTS[0].x, this.pos2().z - CHARGE_SPOTS[0].z);
           this.audio.boom(d);
           this.cam.kick(0.8);
-          this.hitT = 0;
+          this.hitStopT = 0;
           buzz(this.p.settings.vibrate, BUZZ.blast);
           this.pack.events.length = 0;
           this.hud.radio('Avalanche service', 'Fire in the hole.', 2.5);

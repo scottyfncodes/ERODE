@@ -17,7 +17,7 @@ export const HIT_EASE = 0.4;
 export const HIT_FLOOR = 0.06;
 
 /** Simulation speed (0..1) `t` real seconds after a hit-stop started. */
-export function hitScale(t: number): number {
+export function hitStopScale(t: number): number {
   if (t < 0) return 1;
   if (t < HIT_HOLD) return HIT_FLOOR;
   const u = (t - HIT_HOLD) / HIT_EASE;
