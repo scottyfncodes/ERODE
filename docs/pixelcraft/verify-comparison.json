@@ -1,0 +1,277 @@
+{
+ "comparable": true,
+ "why": "same method, same screens, viewports and journeys; deltas use only metrics measured in both runs",
+ "scores": {
+  "visual": {
+   "title": "Visual Quality",
+   "before": 78.8,
+   "after": 84.1,
+   "delta": 5.3
+  },
+  "usability": {
+   "title": "Usability",
+   "before": 50.3,
+   "after": 74.5,
+   "delta": 24.2
+  },
+  "consistency": {
+   "title": "Consistency",
+   "before": 73.2,
+   "after": 76.8,
+   "delta": 3.6
+  },
+  "overall": {
+   "title": "Overall",
+   "before": 67.4,
+   "after": 78.5,
+   "delta": 11.1
+  }
+ },
+ "resolved": [
+  {
+   "id": "states.no_pressed",
+   "title": "No pressed (active) state",
+   "was": 7
+  },
+  {
+   "id": "journey.fails",
+   "title": "A user journey cannot be completed",
+   "was": 4
+  },
+  {
+   "id": "controls.small_target",
+   "title": "Touch target is too small",
+   "was": 10
+  },
+  {
+   "id": "controls.too_close",
+   "title": "Controls are too close together",
+   "was": 6
+  },
+  {
+   "id": "type.line_height",
+   "title": "Paragraph line height is cramped",
+   "was": 6
+  }
+ ],
+ "persisting": [
+  {
+   "id": "controls.obscured",
+   "title": "A control is covered by another element",
+   "before": 12,
+   "after": 12
+  },
+  {
+   "id": "nav.dead_end",
+   "title": "Dead-end screen",
+   "before": 12,
+   "after": 12
+  },
+  {
+   "id": "spacing.uneven",
+   "title": "Uneven spacing between related elements",
+   "before": 6,
+   "after": 6
+  },
+  {
+   "id": "mobile.reach",
+   "title": "Main action is at the top of the phone screen",
+   "before": 12,
+   "after": 12
+  },
+  {
+   "id": "spacing.off_scale",
+   "title": "Spacing does not follow a consistent scale",
+   "before": 11,
+   "after": 7
+  },
+  {
+   "id": "mobile.home_indicator",
+   "title": "Bottom controls sit under the home indicator",
+   "before": 3,
+   "after": 3
+  },
+  {
+   "id": "spacing.void",
+   "title": "Excessive empty gap between sections",
+   "before": 5,
+   "after": 4
+  },
+  {
+   "id": "component.button_variants",
+   "title": "Too many button variants",
+   "before": 6,
+   "after": 6
+  },
+  {
+   "id": "states.no_hover",
+   "title": "No hover state",
+   "before": 3,
+   "after": 1
+  },
+  {
+   "id": "resp.content_missing",
+   "title": "Content disappears at one screen size",
+   "before": 2,
+   "after": 2
+  },
+  {
+   "id": "layout.shift",
+   "title": "Layout jumps while the screen loads",
+   "before": 1,
+   "after": 1
+  }
+ ],
+ "new": [],
+ "regressions": [],
+ "coverage_lost": [
+  "type.readability (hud @ landscape)"
+ ],
+ "screens": [
+  {
+   "screen": "pause",
+   "viewport": "narrow",
+   "changed_pct": 21.46,
+   "diff": "diff/pause__narrow.jpg"
+  },
+  {
+   "screen": "pause",
+   "viewport": "iphone13",
+   "changed_pct": 20.54,
+   "diff": "diff/pause__iphone13.jpg"
+  },
+  {
+   "screen": "pause",
+   "viewport": "iphone17",
+   "changed_pct": 19.02,
+   "diff": "diff/pause__iphone17.jpg"
+  },
+  {
+   "screen": "pause",
+   "viewport": "tablet",
+   "changed_pct": 18.5,
+   "diff": "diff/pause__tablet.jpg"
+  },
+  {
+   "screen": "hud",
+   "viewport": "landscape",
+   "changed_pct": 14.8,
+   "diff": "diff/hud__landscape.jpg"
+  },
+  {
+   "screen": "map",
+   "viewport": "narrow",
+   "changed_pct": 11.99,
+   "diff": "diff/map__narrow.jpg"
+  },
+  {
+   "screen": "pause",
+   "viewport": "landscape",
+   "changed_pct": 11.91,
+   "diff": "diff/pause__landscape.jpg"
+  },
+  {
+   "screen": "map",
+   "viewport": "iphone17",
+   "changed_pct": 11.74,
+   "diff": "diff/map__iphone17.jpg"
+  },
+  {
+   "screen": "map",
+   "viewport": "desktop",
+   "changed_pct": 10.19,
+   "diff": "diff/map__desktop.jpg"
+  },
+  {
+   "screen": "map",
+   "viewport": "iphone13",
+   "changed_pct": 9.58,
+   "diff": "diff/map__iphone13.jpg"
+  },
+  {
+   "screen": "map",
+   "viewport": "tablet",
+   "changed_pct": 8.82,
+   "diff": "diff/map__tablet.jpg"
+  },
+  {
+   "screen": "pause",
+   "viewport": "desktop",
+   "changed_pct": 7.62,
+   "diff": "diff/pause__desktop.jpg"
+  },
+  {
+   "screen": "map",
+   "viewport": "landscape",
+   "changed_pct": 6.99,
+   "diff": "diff/map__landscape.jpg"
+  },
+  {
+   "screen": "hud",
+   "viewport": "tablet",
+   "changed_pct": 3.15,
+   "diff": "diff/hud__tablet.jpg"
+  },
+  {
+   "screen": "hud",
+   "viewport": "iphone13",
+   "changed_pct": 2.26,
+   "diff": "diff/hud__iphone13.jpg"
+  },
+  {
+   "screen": "title",
+   "viewport": "narrow",
+   "changed_pct": 2.12,
+   "diff": "diff/title__narrow.jpg"
+  },
+  {
+   "screen": "hud",
+   "viewport": "iphone17",
+   "changed_pct": 1.9,
+   "diff": "diff/hud__iphone17.jpg"
+  },
+  {
+   "screen": "title",
+   "viewport": "iphone17",
+   "changed_pct": 1.15,
+   "diff": "diff/title__iphone17.jpg"
+  },
+  {
+   "screen": "title",
+   "viewport": "iphone13",
+   "changed_pct": 1.14,
+   "diff": "diff/title__iphone13.jpg"
+  },
+  {
+   "screen": "hud",
+   "viewport": "narrow",
+   "changed_pct": 1.11,
+   "diff": "diff/hud__narrow.jpg"
+  },
+  {
+   "screen": "title",
+   "viewport": "tablet",
+   "changed_pct": 0.69,
+   "diff": "diff/title__tablet.jpg"
+  },
+  {
+   "screen": "title",
+   "viewport": "desktop",
+   "changed_pct": 0.52,
+   "diff": "diff/title__desktop.jpg"
+  },
+  {
+   "screen": "title",
+   "viewport": "landscape",
+   "changed_pct": 0.16,
+   "diff": "diff/title__landscape.jpg"
+  },
+  {
+   "screen": "hud",
+   "viewport": "desktop",
+   "changed_pct": 0.0,
+   "diff": "diff/hud__desktop.jpg"
+  }
+ ],
+ "metrics_compared": 588
+}

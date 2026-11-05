@@ -113,6 +113,7 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 12px;
+  line-height: 1.45; /* a label that wraps (the keys line in Pause) must not crowd */
   color: var(--muted);
 }
 
@@ -921,8 +922,8 @@ button {
   text-align: center;
 }
 .panel .x {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--slate-2);
@@ -1131,7 +1132,8 @@ button {
   box-shadow: 0 2px 6px rgba(40, 25, 15, 0.2);
   touch-action: manipulation;
 }
-.mapctl button:active {
+.mapctl button:active,
+.mapctl button.down {
   transform: scale(0.94);
 }
 .mapctl .loc {
@@ -1403,7 +1405,7 @@ button {
   text-align: center;
 }
 .title-screen .emblem {
-  margin: 0 auto 14px;
+  margin: 0 auto 16px;
 }
 .title-screen p {
   margin-left: auto !important;
@@ -1489,12 +1491,12 @@ body.titled #loading .loading-bar {
   font-size: 15px;
   line-height: 1.45;
   color: #dbe4ea;
-  margin: 14px 0 20px;
+  margin: 16px 0 20px;
   max-width: 440px;
 }
 .title-screen .row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .title-screen .meta {
@@ -1533,12 +1535,32 @@ body.titled #loading .loading-bar {
   margin: 0 auto 10px;
   line-height: 1.45;
 }
+/* Pause: the way back to the game stays on screen however long the settings list grows (pinned to
+   the panel's bottom edge while the list scrolls); quitting and starting over stay in the list */
+.pause-back {
+  position: sticky;
+  bottom: -14px; /* the body's bottom padding: flush with the panel's edge */
+  margin: 16px -14px 0;
+  padding: 12px 14px;
+  background: var(--slate);
+  border-top: 1px solid var(--line);
+}
+.pause-back .btn {
+  width: 100%;
+}
+.pause-more {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 4px;
+}
 .setrow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
@@ -1560,7 +1582,9 @@ body.titled #loading .loading-bar {
   gap: 4px;
 }
 .seg button {
-  height: 34px;
+  /* 44 px: the touch minimum, like every other control */
+  height: 44px;
+  min-width: 52px;
   padding: 0 12px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -2115,4 +2139,74 @@ body.titled #loading .loading-bar {
   .alt .big {
     font-size: 14px;
   }
+}
+
+/* Every button answers the moment it is touched: a press darkens and sinks it (.down is set by
+   Input on every pointerdown, so touch gets it on iOS too), a mouse over it lifts it, and the
+   keyboard focus ring shows where Tab is. One list, so no kind of button is left out:
+   .btn, the HUD chips and icon button, the panel close, map zoom, tabs, settings toggles. */
+.btn,
+.chip,
+.iconbtn,
+.panel .x,
+.mapctl button,
+.tab,
+.seg button {
+  transition: filter 0.12s, transform 0.08s, border-color 0.12s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn:not(:disabled):hover,
+  .chip:hover,
+  .iconbtn:hover,
+  .panel .x:hover,
+  .mapctl button:hover,
+  .tab:hover,
+  .seg button:hover {
+    filter: brightness(1.12);
+    border-color: rgba(246, 236, 220, 0.85);
+  }
+}
+.btn:not(:disabled):active,
+.btn:not(:disabled).down,
+.chip:active,
+.chip.down,
+.iconbtn:active,
+.iconbtn.down,
+.panel .x:active,
+.panel .x.down,
+.tab:active,
+.tab.down,
+.seg button:active,
+.seg button.down {
+  filter: brightness(0.82);
+  transform: translateY(1px) scale(0.97);
+  transition: none; /* the press shows on the very next frame; only the release eases back */
+}
+.act.down {
+  transform: translateY(2px);
+}
+.btn:focus-visible,
+.chip:focus-visible,
+.iconbtn:focus-visible,
+.act:focus-visible,
+.panel .x:focus-visible,
+.mapctl button:focus-visible,
+.tab:focus-visible,
+.seg button:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .chip,
+  .iconbtn,
+  .panel .x,
+  .mapctl button,
+  .tab,
+  .seg button {
+    transition: none;
+  }
+}
+.panel:focus {
+  outline: none;
 }

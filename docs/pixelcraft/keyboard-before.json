@@ -1,0 +1,78 @@
+[
+ {
+  "name": "title: Tab focuses a control (Enter run)",
+  "ok": true,
+  "detail": "BUTTON \"Start your patrol\""
+ },
+ {
+  "name": "title: focus ring visible (Enter run)",
+  "ok": true,
+  "detail": "auto 1px rgb(238, 238, 238)"
+ },
+ {
+  "name": "title: Enter on focused button starts the patrol",
+  "ok": true
+ },
+ {
+  "name": "play: Tab still opens the map",
+  "ok": true,
+  "detail": "first worked 6854 ms after the 5 s settle"
+ },
+ {
+  "name": "map: Tab again closes it (Tab/M toggle the map by design)",
+  "ok": true
+ },
+ {
+  "name": "play: Escape opens pause",
+  "ok": true
+ },
+ {
+  "name": "pause: \"Back to patrol\" reachable with Tab",
+  "ok": false,
+  "detail": null
+ },
+ {
+  "name": "pause: focus ring visible on \"Back to patrol\"",
+  "ok": false,
+  "detail": null
+ },
+ {
+  "name": "pause: Tab stays inside the panel (30 presses)",
+  "ok": false,
+  "detail": "left the panel on 30 presses"
+ },
+ {
+  "name": "title: Tab focuses a control (Space run)",
+  "ok": false,
+  "detail": null
+ },
+ {
+  "name": "title: focus ring visible (Space run)",
+  "ok": false,
+  "detail": null
+ },
+ {
+  "name": "title: Space on focused button starts the patrol",
+  "ok": false
+ },
+ {
+  "name": "touch: .hud .chip:not(.hidden) changes while held",
+  "ok": false,
+  "detail": "none|none → none|none (.down=false)"
+ },
+ {
+  "name": "touch: .hud .chip:not(.hidden) lets go on release",
+  "ok": true,
+  "detail": "false|none"
+ },
+ {
+  "name": "touch: .hud .iconbtn changes while held",
+  "ok": false,
+  "detail": "none|none → none|none (.down=false)"
+ },
+ {
+  "name": "touch: .hud .iconbtn lets go on release",
+  "ok": true,
+  "detail": "false|none"
+ }
+]
