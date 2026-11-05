@@ -411,7 +411,9 @@ check('player_experience', 'Title', 'the first radio call says where to start (t
 {
   const T = 'Station and gear';
   // the stock engine first: speed after 60 m from a standstill on a flat packed road (frame-rate independent)
-  const road = { x: -30, z: 200, yaw: 3.927 };
+  // flat packed snow, clear of walls, trees and the kit for 100 m (the line 10 m east runs into the patrol
+  // supply cache at about 60 m, which made one of each pair of runs look slow)
+  const road = { x: -30, z: 210, yaw: 3.927 };
   const speedAt60Once = async () => {
     await P((p, a) => p.sledTo(a.x, a.z), road);
     await travel(road.x + 1.5, road.z, 0, false);
@@ -422,13 +424,29 @@ check('player_experience', 'Title', 'the first radio call says where to start (t
     await sleep(600);
     const start = await G();
     await page.keyboard.down('KeyW');
-    const r = await until(G, (s) => Math.hypot(s.position.x - start.position.x, s.position.z - start.position.z) >= 60, 300000, 60);
+    // speed every 6 m, so a slow run says where it lost its speed
+    const trace: string[] = [];
+    let lastD = -6;
+    const r = await until(
+      async () => {
+        const s = await G();
+        const d = Math.hypot(s.position.x - start.position.x, s.position.z - start.position.z);
+        if (d - lastD >= 6) {
+          lastD = d;
+          trace.push(`${Math.round(d)}m:${Math.round(s.speedKmh)}${s.panel ? ' panel' : ''}${s.action ? ` [${s.action.label}]` : ''}`);
+        }
+        return s;
+      },
+      (s) => Math.hypot(s.position.x - start.position.x, s.position.z - start.position.z) >= 60,
+      300000,
+      60,
+    );
     await page.keyboard.up('KeyW');
     counts.realInputs++;
     await tap('KeyS', 1500);
     await tap('KeyX');
     const engine = (await P((p) => p.profile().equip.sledEngine)) as string;
-    return { kmh: r.ok && r.v.mode === 'sled' ? r.v.speedKmh : null, why: `${r.v.mode}, ${Math.round(Math.hypot(r.v.position.x - start.position.x, r.v.position.z - start.position.z))} m, ${engine}` };
+    return { kmh: r.ok && r.v.mode === 'sled' ? r.v.speedKmh : null, why: `${r.v.mode}, ${Math.round(Math.hypot(r.v.position.x - start.position.x, r.v.position.z - start.position.z))} m, ${engine}`, trace: trace.join(' ') };
   };
   // two runs each; the slower one counts (a conservative comparison)
   const speedAt60 = async () => {
