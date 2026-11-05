@@ -1,0 +1,82 @@
+[
+ {
+  "name": "title: Tab focuses a control (Enter run)",
+  "ok": true,
+  "detail": "BUTTON \"Start your patrol\""
+ },
+ {
+  "name": "title: focus ring visible (Enter run)",
+  "ok": true,
+  "detail": "solid 2px rgb(169, 214, 234)"
+ },
+ {
+  "name": "title: Enter on focused button starts the patrol",
+  "ok": true
+ },
+ {
+  "name": "play: Tab still opens the map",
+  "ok": true,
+  "detail": "first worked 6889 ms after the 5 s settle"
+ },
+ {
+  "name": "map: Tab again closes it (Tab/M toggle the map by design)",
+  "ok": true
+ },
+ {
+  "name": "play: Escape opens pause",
+  "ok": true
+ },
+ {
+  "name": "pause: \"Back to patrol\" reachable with Tab",
+  "ok": true,
+  "detail": "solid 2px rgb(169, 214, 234)"
+ },
+ {
+  "name": "pause: focus ring visible on \"Back to patrol\"",
+  "ok": true,
+  "detail": "solid 2px rgb(169, 214, 234)"
+ },
+ {
+  "name": "pause: Tab stays inside the panel (30 presses)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "pause: Space on \"Back to patrol\" resumes",
+  "ok": true
+ },
+ {
+  "name": "title: Tab focuses a control (Space run)",
+  "ok": true,
+  "detail": "BUTTON \"Start your patrol\""
+ },
+ {
+  "name": "title: focus ring visible (Space run)",
+  "ok": true,
+  "detail": "solid 2px rgb(169, 214, 234)"
+ },
+ {
+  "name": "title: Space on focused button starts the patrol",
+  "ok": true
+ },
+ {
+  "name": "touch: .hud .chip:not(.hidden) changes while held",
+  "ok": true,
+  "detail": "none|none → brightness(0.82)|matrix(0.97, 0, 0, 0.97, 0, 1) (.down=true)"
+ },
+ {
+  "name": "touch: .hud .chip:not(.hidden) lets go on release",
+  "ok": true,
+  "detail": "false|brightness(0.82)"
+ },
+ {
+  "name": "touch: .hud .iconbtn changes while held",
+  "ok": true,
+  "detail": "none|none → brightness(0.82)|matrix(0.97, 0, 0, 0.97, 0, 1) (.down=true)"
+ },
+ {
+  "name": "touch: .hud .iconbtn lets go on release",
+  "ok": true,
+  "detail": "false|brightness(0.82)"
+ }
+]

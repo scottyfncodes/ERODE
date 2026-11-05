@@ -54,14 +54,34 @@ export class Input {
     window.addEventListener('pointercancel', (e) => this.up(e));
     window.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      // In a menu (the title, a panel other than the map) Tab moves the keyboard focus and Enter/Space
+      // press the focused button: none of them reach the game. The map keeps Tab as its open/close key.
+      const wrap = document.querySelector<HTMLElement>('.panel-wrap');
+      const menu = !!document.querySelector('.title-screen') || (!!wrap && wrap.dataset.kind !== 'map');
+      const onButton = !!(e.target as HTMLElement)?.closest?.('button');
+      if (menu && (e.code === 'Tab' || ((e.code === 'Space' || e.code === 'Enter') && onButton))) return;
       if (!this.keys.has(e.code)) this.pressedSet.add(e.code);
       this.keys.add(e.code);
-      // Tab opens the map in play, but in a menu (the title, a panel) it moves the keyboard focus
-      const menu = !!document.querySelector('.title-screen, .panel-wrap');
-      if (e.code === 'Tab' && menu) return;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    // Press feedback for every button, touch included: iOS Safari does not apply :active to a tap
+    // unless the page listens for touches, and HUD buttons consume their pointerdown, so a class does it.
+    let held: Element | null = null;
+    const lift = () => {
+      held?.classList.remove('down');
+      held = null;
+    };
+    window.addEventListener(
+      'pointerdown',
+      (e) => {
+        lift();
+        held = (e.target as Element)?.closest?.('button') ?? null;
+        held?.classList.add('down');
+      },
+      true,
+    );
+    for (const t of ['pointerup', 'pointercancel', 'blur'] as const) window.addEventListener(t, lift, true);
     window.addEventListener('blur', () => {
       this.keys.clear();
       this.btn.clear();
@@ -142,12 +162,10 @@ export class Input {
       this.touch = this.touch || (e as PointerEvent).pointerType === 'touch';
       if (!this.btn.get(b)) this.pressedSet.add(`btn:${b}`);
       this.btn.set(b, true);
-      el.classList.add('down');
     };
     const off = (e: Event) => {
       e.preventDefault();
       this.btn.set(b, false);
-      el.classList.remove('down');
     };
     el.addEventListener('pointerdown', on);
     el.addEventListener('pointerup', off);

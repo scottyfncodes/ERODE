@@ -89,8 +89,23 @@ export class Panels {
     // re-drawn in place (a tab, a purchase) it stays put; opened fresh it rises in
     wrap.className = again ? 'panel-wrap' : 'panel-wrap enter';
     wrap.innerHTML = `<div class="panel"><header><h2>${title}</h2>${extra}<button class="x" aria-label="Close">✕</button></header><div class="body"></div></div>`;
+    wrap.dataset.kind = kind;
     this.parent.appendChild(wrap);
     this.wrap = wrap;
+    // keyboard: focus goes into the panel when it opens (onto the panel itself, so a stray Enter or
+    // Space presses nothing) and Tab cycles inside it instead of wandering to the HUD behind
+    const panelEl = wrap.querySelector('.panel') as HTMLElement;
+    panelEl.tabIndex = -1;
+    if (!again) panelEl.focus({ preventScroll: true });
+    wrap.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      const f = [...wrap.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input, select, [tabindex="0"]')].filter((x) => x.offsetParent !== null);
+      if (!f.length) return;
+      const i = f.indexOf(document.activeElement as HTMLElement);
+      const next = e.shiftKey ? (i <= 0 ? f[f.length - 1] : f[i - 1]) : i === -1 || i === f.length - 1 ? f[0] : f[i + 1];
+      e.preventDefault();
+      next.focus();
+    });
     (wrap.querySelector('.x') as HTMLElement).onclick = () => this.close();
     // the dimmed edge closes the panel on a clean tap only: a thumb that lands there mid-pinch, or a
     // drag that wanders off the map, must not throw the panel away

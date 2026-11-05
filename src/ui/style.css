@@ -1129,7 +1129,8 @@ button {
   box-shadow: 0 2px 6px rgba(40, 25, 15, 0.2);
   touch-action: manipulation;
 }
-.mapctl button:active {
+.mapctl button:active,
+.mapctl button.down {
   transform: scale(0.94);
 }
 .mapctl .loc {
@@ -2116,7 +2117,7 @@ body.titled #loading .loading-bar {
 }
 
 /* Every button answers the moment it is touched: a press darkens and sinks it (.down is set by
-   Input.bind for HUD buttons, whose pointerdown is consumed), a mouse over it lifts it, and the
+   Input on every pointerdown, so touch gets it on iOS too), a mouse over it lifts it, and the
    keyboard focus ring shows where Tab is. */
 .btn,
 .chip,
@@ -2136,13 +2137,16 @@ body.titled #loading .loading-bar {
   }
 }
 .btn:not(:disabled):active,
+.btn:not(:disabled).down,
 .chip:active,
 .chip.down,
 .iconbtn:active,
 .iconbtn.down,
-.panel .x:active {
+.panel .x:active,
+.panel .x.down {
   filter: brightness(0.82);
   transform: translateY(1px) scale(0.97);
+  transition: none; /* the press shows on the very next frame; only the release eases back */
 }
 .act.down {
   transform: translateY(2px);
@@ -2164,4 +2168,7 @@ body.titled #loading .loading-bar {
   .mapctl button {
     transition: none;
   }
+}
+.panel:focus {
+  outline: none;
 }
