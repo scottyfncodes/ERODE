@@ -1149,7 +1149,10 @@ export class Game {
     // firing the charges
     if (r) {
       const fs = fireState(r, pos.x, pos.z);
-      if (fs !== 'none') out.push({ id: 'fire', label: fs === 'ready' ? 'Fire charges' : 'Too close to fire', hold: fs === 'ready' ? 0.6 : 0, red: true, enabled: fs === 'ready', run: () => fs === 'ready' && this.handle(fire(r)) });
+      // while you are still choosing charges, standing on the slope is for setting the next one:
+      // the fire button only comes up once you are clear
+      const choosing = currentStep(r)?.kind === 'charges';
+      if (fs !== 'none' && !(choosing && fs === 'too-close')) out.push({ id: 'fire', label: fs === 'ready' ? 'Fire charges' : 'Too close to fire', hold: fs === 'ready' ? 0.6 : 0, red: true, enabled: fs === 'ready', run: () => fs === 'ready' && this.handle(fire(r)) });
     }
     // mission work
     if (r) {

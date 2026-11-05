@@ -101,6 +101,16 @@ The people are jointed figures driven by a procedural gait built from the leg's 
 
 The station (the lodge and its furniture included), vehicles, people, Koda, buildings, the working mountain, the weather station and the kit are MeshCraft/ForgeCraft models (`public/models/`; the latest pass is in [`docs/modernization/REPORT.md`](docs/modernization/REPORT.md)); voices, the Kessel theme, stingers, impacts and the wind bed are AudioCraft; the particle atlas is FXCraft. See [`art/README.md`](art/README.md), [`art/audio/README.md`](art/audio/README.md), [`art/fx/README.md`](art/fx/README.md) and [`CREDITS.md`](CREDITS.md) (sources and licences for everything shipped).
 
+## Accessibility
+
+- **Keyboard only:** Tab reaches Start, every panel takes focus when it opens and keeps Tab inside it, Esc closes it, and focus goes back to where it was. Every button shows a 2 px cyan focus ring.
+- **Screen readers:** panels are modal dialogs named by their title; the mission table and shop tabs are tab lists with the open tab marked; pause toggles say which option is on; the radio, toasts and the current objective are announced as they change, an incoming call at once; the 3D view is labelled. What is drawn in the 3D view (the valley, markers, Koda) is not described.
+- **Readable:** text is at least 12 px and passes WCAG AA contrast on every panel (axe-core); locked rows are a dashed card, never faded out. Touch targets are at least 44 px.
+- **Reduced motion:** with the system setting on, panels and buttons stop animating, and the camera drops its handheld breathing and wind buffet and keeps a quarter of its shake.
+- **Not changed, on purpose:** the page does not zoom (`user-scalable=no`): pinch belongs to the map, and on a phone a page zoom mid-play strands the controls. axe reports this (`meta-viewport`).
+
+`npx tsx scripts/a11y.ts <url> <outdir>` runs the audit (axe-core on eight screens at phone and desktop size, plus 35 scripted checks); results are in [`docs/accessibility/`](docs/accessibility/).
+
 ## Saving
 
 Everything persists in `localStorage` (`rockslide.patrol.v1`): missions done and in progress (down to which slopes are charged and whether Nils is on your sled), which slopes of Kessel Bowl are loaded today and which recon flagged, funds, rank, gear owned and worn, buildings, badges, the day, time and weather, where you, the sled and the helicopter are, and settings. It saves every 12 seconds, on every mission event, and when the page is hidden or closed. A damaged or older save is repaired with defaults rather than lost. A mission interrupted mid-avalanche finishes the release on load.
