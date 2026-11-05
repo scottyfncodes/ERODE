@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/audio';
 import { Input } from '../core/input';
+import { BUZZ, buzz, hitStopScale, HIT_TOTAL } from './feel';
 import { forwardSpeed, glideSpeed, newGlider, SKIS, SLED, stepGlider, type Glider } from '../actors/glide';
 import { HELI, heliAgl, newHeli, stepHeli, type Heli } from '../actors/heli';
 import { newHusky, pet, startTrack, stepHusky, type Husky, type Scent } from '../actors/husky';
@@ -122,6 +123,8 @@ export class Game {
   private holdT = 0;
   private saveT = 0;
   private watching = 0;
+  /** real seconds since the last hit-stop began (past HIT_TOTAL: none running) */
+  private hitStopT = HIT_TOTAL;
   private watchSkip = false;
   private cond: Conditions;
   private indoors = 0;
@@ -518,9 +521,14 @@ export class Game {
     // wall-clock, uncapped, for the stats readout (the simulation's steps below are capped)
     const frameMs = now - this.last;
     this.realDt = Math.min(0.25, (now - this.last) / 1000);
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    let dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     this.fps += (1 / Math.max(dt, 1e-3) - this.fps) * 0.05;
+    // hit-stop: the world's clock slows for a beat on the biggest moments (sound and HUD stay real-time)
+    if (this.hitStopT < HIT_TOTAL) {
+      this.hitStopT += dt;
+      dt *= hitStopScale(this.hitStopT);
+    }
     this.time += dt;
     shared.time.value = this.time;
     if (this.state === 'title') this.titleFrame(dt);
@@ -742,6 +750,7 @@ export class Game {
         this.particles.powder(s.x, s.y + 0.3, s.z, 14, 6, 3, s.vx * 0.3, s.vz * 0.3, 1.4, FX_KIND.powder);
         this.audio.landing(s.landed);
         this.cam.kick(Math.min(1, s.landed / 10));
+        if (s.landed > 6) buzz(this.p.settings.vibrate, BUZZ.landing);
       }
       if (s.bump > 3) {
         this.audio.bump(s.bump);
@@ -935,6 +944,8 @@ export class Game {
           const d = Math.hypot(this.pos2().x - CHARGE_SPOTS[0].x, this.pos2().z - CHARGE_SPOTS[0].z);
           this.audio.boom(d);
           this.cam.kick(0.8);
+          this.hitStopT = 0;
+          buzz(this.p.settings.vibrate, BUZZ.blast);
           this.pack.events.length = 0;
           this.hud.radio('Avalanche service', 'Fire in the hole.', 2.5);
           break;
@@ -961,6 +972,7 @@ export class Game {
     const before = available(this.p);
     const r = complete(this.p, def.id);
     this.audio.reward();
+    buzz(this.p.settings.vibrate, BUZZ.done);
     if (r.rankAfter > r.rankBefore) this.audio.promote();
     this.hud.radio(def.from, def.done, 5);
     this.dog.mode = this.dog.mode === 'track' ? 'follow' : this.dog.mode;
