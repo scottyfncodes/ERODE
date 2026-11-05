@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AudioEngine } from '../audio/audio';
 import { Input } from '../core/input';
 import { BUZZ, buzz, hitStopScale, HIT_TOTAL } from './feel';
+import type { GameSnapshot } from './snapshot';
 import { forwardSpeed, glideSpeed, newGlider, SKIS, SLED, stepGlider, type Glider } from '../actors/glide';
 import { HELI, heliAgl, newHeli, stepHeli, type Heli } from '../actors/heli';
 import { newHusky, pet, startTrack, stepHusky, type Husky, type Scent } from '../actors/husky';
@@ -126,6 +127,8 @@ export class Game {
   /** real seconds since the last hit-stop began (past HIT_TOTAL: none running) */
   private hitStopT = HIT_TOTAL;
   private watchSkip = false;
+  /** the action button as last shown (for the read-only snapshot) */
+  private lastAct: GameSnapshot['action'] = null;
   private cond: Conditions;
   private indoors = 0;
   private seat = new THREE.Vector3();
@@ -1180,6 +1183,7 @@ export class Game {
     }
     if (!a) {
       this.hud.setAction(null);
+      this.lastAct = null;
       if (this.holdId !== 'pet-pose') {
         this.holdId = '';
         this.holdT = 0;
@@ -1193,6 +1197,7 @@ export class Game {
     if (a.hold <= 0) {
       if (pressed && enabled) a.run();
       this.hud.setAction(a.label, !!a.red, 0, enabled);
+      this.lastAct = { label: a.label, hold: 0, enabled };
       return;
     }
     if (held && enabled) {
@@ -1214,6 +1219,7 @@ export class Game {
       if (this.holdT === 0) this.holdId = '';
     }
     this.hud.setAction(a.label, !!a.red, this.holdId === a.id ? this.holdT / a.hold : 0, enabled);
+    this.lastAct = { label: a.label, hold: this.holdId === a.id ? this.holdT / a.hold : 0, enabled };
   }
 
   private updateBadges() {
@@ -1687,6 +1693,44 @@ export class Game {
   }
 
   /** For the browser test scripts. */
+  /** The read-only view behind `window.game` (see snapshot.ts): plain values only, built on each read. */
+  publicState(): GameSnapshot {
+    const p = this.p;
+    const f = this.focusPos();
+    const r = p.active;
+    const step = r ? currentStep(r) : null;
+    const res = this.pack.result;
+    const rk = rank(p);
+    return {
+      state: this.state,
+      panel: this.panels.open,
+      day: p.weather.day,
+      minute: Math.floor(p.weather.minute),
+      funds: p.funds,
+      reputation: p.rep,
+      rank: { index: rk, name: RANKS[rk].name },
+      mode: this.mode,
+      position: { x: f.x, y: f.y, z: f.z },
+      speedKmh: this.speedNow() * 3.6,
+      heading: (-this.headingNow() * 180) / Math.PI,
+      heli: { altitudeAboveGround: heliAgl(this.heli, this.terrain), landed: this.heli.landed, rotor: this.heli.rotor },
+      koda: { mode: this.dog.mode, distance: Math.hypot(this.dog.x - f.x, this.dog.z - f.z) },
+      weather: { sky: this.cond.sky, windKmh: this.cond.windKmh, tempC: this.cond.temp, snow: this.cond.snow, grounded: this.cond.grounded, avalancheDanger: avalancheDanger(p.weather, this.cond) },
+      mission: r && step ? { id: r.id, title: mission(r.id).title, step: r.step, steps: mission(r.id).steps.length, stepKind: step.kind, objective: step.text, seconds: r.time } : null,
+      action: this.state === 'play' && this.lastAct ? { ...this.lastAct } : null,
+      progress: {
+        storyDone: MISSIONS.filter((m) => !m.dynamic && done(p, m.id)).length,
+        storyTotal: MISSIONS.filter((m) => !m.dynamic).length,
+        calloutsAnswered: MISSIONS.filter((m) => m.dynamic).reduce((a, m) => a + (p.completed[m.id] ?? 0), 0),
+        badges: p.badges.length,
+        badgesTotal: BADGES.length,
+        buildings: [...p.upgrades],
+      },
+      avalanche: { fired: this.pack.fired, settled: this.pack.done, releasedShare: res.weakTotal ? res.weakReleased / res.weakTotal : 0, reachedRoad: res.roadHit },
+      assists: { heliHover: p.settings.heliAssist, sledClimb: p.settings.sledAssist, routeLine: p.settings.routeLine },
+    };
+  }
+
   debug() {
     return {
       game: this,

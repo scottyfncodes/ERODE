@@ -1,4 +1,5 @@
 import { Game } from './game/game';
+import { exposeSnapshot } from './game/snapshot';
 import { loadKit } from './render/kitView';
 import { loadPatrolModels } from './render/patrolModels';
 import './ui/style.css';
@@ -53,6 +54,7 @@ async function boot() {
   progress(1, 'Ready');
   game.start();
   (window as unknown as { patrol: unknown }).patrol = game.debug();
+  exposeSnapshot(window, () => game.publicState());
   // two frames of the valley first (shaders compile on the first), then the loading card fades
   // and the title rises in after it, so the two never show their emblems at once
   await nextFrame();

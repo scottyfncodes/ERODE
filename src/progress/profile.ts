@@ -24,6 +24,10 @@ export interface Settings {
   quality: 'auto' | 'low' | 'high';
   /** buzz on big moments, where the browser can vibrate */
   vibrate: boolean;
+  /** assists, all off unless the player turns them on in the pause menu */
+  heliAssist: boolean;
+  sledAssist: boolean;
+  routeLine: boolean;
 }
 
 export interface Profile {
@@ -74,7 +78,7 @@ export function newProfile(): Profile {
     heli: { x: -24, z: 292, yaw: Math.PI / 2 },
     affection: 0,
     marked: [],
-    settings: { sound: true, music: true, look: 1, invertY: false, quality: 'auto', vibrate: true },
+    settings: { sound: true, music: true, look: 1, invertY: false, quality: 'auto', vibrate: true, heliAssist: false, sledAssist: false, routeLine: false },
     played: 0,
     fresh: true,
     savedAt: 0,
