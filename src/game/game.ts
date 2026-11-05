@@ -1413,6 +1413,7 @@ export class Game {
     for (const list of [this.station.smokeSources, this.world.smokeSources])
       for (const s of list) {
         if (s.distanceToSquared(camPos) > 400 * 400) continue;
+        if (s === this.station.chimney && this.station.chimneyHidden) continue;
         this.particles.smoke(s.x, s.y, s.z, this.cond.wind);
       }
   }

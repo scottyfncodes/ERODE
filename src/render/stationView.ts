@@ -339,12 +339,12 @@ export class StationView {
     }
     inside.name = 'inside';
     g.add(inside);
-    // what hangs on a wall, or is built into it, goes with that wall in the cut-away: the porch sign and
-    // lantern with the east wall, the chimney with the west, the badge board with the south, the skis
-    // hung on the north wall with it
+    // what hangs on a wall goes with that wall in the cut-away: the porch sign and lantern with the east
+    // wall, the badge board with the south, the skis hung on the north wall with it. The chimney stack
+    // rises above the roof line, so it goes with the roof: seen from outside, gone when the roof is
     const wallAt = (nx: number, nz: number) => walls.find((w) => w.nx === nx && w.nz === nz)!.obj;
     wallAt(1, 0).add(lantern, s);
-    for (const c of g.children.filter((c) => c.name === 'chimney')) wallAt(-1, 0).add(c);
+    for (const c of g.children.filter((c) => c.name === 'chimney')) roof.add(c);
     wallAt(0, 1).add(board);
     for (const c of inside.children.filter((c) => c.name === 'wall-skis')) wallAt(0, -1).add(c);
     this.group.add(g);
@@ -832,6 +832,11 @@ export class StationView {
         w.obj.visible = !(inside && facing);
       }
     }
+  }
+
+  /** True while the lodge's roof (and so its chimney stack) is cut away: no smoke from a chimney you cannot see. */
+  get chimneyHidden(): boolean {
+    return !this.rooms[0].roof.visible;
   }
 
   /** Where the flames sit in the hearth, in world space (the FXCraft fire is emitted here). */

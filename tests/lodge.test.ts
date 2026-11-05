@@ -166,7 +166,7 @@ describe('the patrol lodge (MeshCraft)', () => {
     }
   });
 
-  it('takes what hangs on a wall away with it: the porch sign and lantern, the chimney, the badge board', async () => {
+  it('takes what hangs on a wall away with it (the porch sign and lantern, the badge board), and the chimney with the roof', async () => {
     for (const models of [await all(), {}]) {
       const view = new StationView(terrain, topo, models);
       const room = (view as unknown as Rooms).rooms[0];
@@ -184,10 +184,14 @@ describe('the patrol lodge (MeshCraft)', () => {
       // nothing textured or glowing is left standing on its own at the porch
       const group = (view as unknown as { rooms: { group: THREE.Group }[] }).rooms[0].group;
       for (const c of group.children) if (!room.walls.some((w) => w.obj === c) && c !== room.roof && c.name !== 'inside') expect(has(c, (m) => textured(m) || glow(m)), c.name).toBe(false);
-      // the chimney stack goes with the west wall: nothing tall stands outside the west wall otherwise
-      wall(-1, 0).updateMatrixWorld(true);
-      const b = new THREE.Box3().setFromObject(wall(-1, 0));
-      expect(b.max.y - view.y).toBeGreaterThan(7);
+      // the chimney stack goes with the roof (it rises above it): hidden, with no smoke, while you are inside
+      room.roof.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(room.roof);
+      expect(b.min.x).toBeLessThan(LODGE.x - LODGE.w / 2 - 0.9);
+      view.cutaway(SPOTS.lodgeInside.x, SPOTS.lodgeInside.z, new THREE.Vector3(LODGE.x + 20, view.y + 10, LODGE.z));
+      expect(view.chimneyHidden).toBe(true);
+      view.cutaway(LODGE.x + 40, LODGE.z, new THREE.Vector3(LODGE.x + 60, view.y + 10, LODGE.z));
+      expect(view.chimneyHidden).toBe(false);
       // the badge board with the south wall, its pins still switchable
       view.setBadges(['b1']);
       const pins = (view as unknown as { badgePins: Map<string, THREE.Mesh> }).badgePins;

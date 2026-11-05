@@ -28,7 +28,7 @@ figurehead), and its shared 3D library was empty in this container. The one earl
 | Lodge shell: log walls, windows, door, roof, gables, porch, chimney | `stationView.ts` `buildLodge` | `rs_lodge` | `base`, `wall_n/s/w/e`, `roof`, `chimney` |
 | Lodge wing (upgrade) | `stationView.ts` `buildWing` | `rs_lodge_wing` | `wing` |
 | Hearth, mission table, bunk, wardrobe, armchair, shelf, dog bed, lamp | `stationView.ts` `buildLodge` | `rs_lodge_furniture` | one per piece |
-| Snow fence (×57 on Kessel Ridge) | `opsView.ts` `fence` | `rs_snow_fence` | `fence` |
+| Snow fence (20, on the shelf above Kessel Bowl) | `opsView.ts` `fence` | `rs_snow_fence` | `fence` |
 | Avalanche exploder (×3) | `opsView.ts` `exploder` | `rs_exploder` | `exploder` |
 | Solar radio repeater | `opsView.ts` `repeater` | `rs_repeater` | `repeater` |
 | AVALANCHE AREA sign (×2) | `opsView.ts` `warningSign` | `rs_warning_sign` | `sign` |
@@ -197,3 +197,40 @@ are code on purpose; every model keeps a tested code fallback.
   ROCKSLIDE MeshCraft script, and ship it with `--ship`.
 - `scripts/assetviews.mjs`: fixed in-game views of the modernized assets, with every station upgrade
   built (for before/after captures). `scripts/beforeafter.py` and `scripts/sheet.py` make the sheets.
+
+## QA follow-up: terrain placement and the lodge cut-away
+
+A browser QA pass found the working mountain's placement rule (sit at the lowest of four ground samples
+1.5 m from the centre) failing on steep ground. It was the same rule on `main`. Fences were buried up
+to 6.5 m in the 60–70° wall north of the bowl, with their drifts hanging off the rock. The mine cabin
+was buried 5.9 m, and the snowcat floated 2.8 m at one end. The QA pass also found lodge cut-away gaps.
+What changed:
+
+- **`src/world/footing.ts`**:
+  - samples the ground across each piece's real footprint and fits its plane;
+  - searches for ground a piece can stand on (slope, rise across the footprint, clear of roads, charge
+    spots and the ridge pad, relaxing step by step only if it must);
+  - stands plumb pieces on the lowest ground under them and lays conforming pieces (the snowcat) on
+    the fitted plane.
+
+  No per-object height offsets.
+- **Ground snow** (fence drifts, mounds, the tailings) has its own paint role (`groundSnow`). It is laid
+  onto the terrain vertex by vertex, so drifts follow the snow. Snow on rails, roofs and footings is
+  left alone.
+- **Snow fences** now run along the contour on the shelf above the start zone and along the ridge pad's
+  back rim: 20 fences, with gaps where the shelf turns to rock. The drift is back to a 10-sided, 3-ring
+  dome.
+- **The radio repeater** stands on the pad's north-west knoll, on the skyline as the ridge track
+  arrives (line of sight tested).
+- **The snowcat** lies on its slope on the nearest gentle ground east of the top station. The mine
+  cabin is on a level bench near the headframe.
+- **The lodge**:
+  - the roof is cut away when the camera is under it (walking out of the door);
+  - the porch sign and lantern go with the east wall, the badge board with the south and the hung skis
+    with the north;
+  - the chimney goes with the roof, with no smoke while it is hidden;
+  - the mission table's loose sheet is lifted 6 mm clear of the map.
+
+Tests: `tests/ops.test.ts` checks footprint seating, fences on gentle contour ground, drifts on the
+snow and the repeater's line of sight. `tests/lodge.test.ts` checks the camera cut-away and what goes
+with each wall.
