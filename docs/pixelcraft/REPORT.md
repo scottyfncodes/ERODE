@@ -9,6 +9,23 @@ close the map, pause and resume).
 **Everything here is browser emulation. Nothing was tested on a physical phone, in WebKit/Safari, or with a screen
 reader.**
 
+## After merging main (what will ship)
+
+While this was in review, main gained PRs #38-#40 (snowmobile handling, road layout, art bible, share card). They were
+merged into this branch (`5c7ada5`, no conflicts) and everything was re-run on the combined build
+(`index-CFjgShXv.js`), because that, not the branch alone, is what deploys:
+
+| | Result on the merged build |
+|---|---|
+| `npm run check` | exit 0: typecheck clean, 25 test files, 168 tests passed, build OK |
+| CI (`check`) on `5c7ada5` | success |
+| `scripts/keyboard.cjs` | 17/17 (`keyboard-after-merged.json`) |
+| `pixelcraft_verify` vs the 67.4 baseline | Visual 78.7 → 84.1, Usability 50.3 → 73.9, Consistency 73.2 → 76.8, **Overall 67.4 → 78.3**; 0 regressions, 0 new findings (`verify-comparison-merged.json`) |
+| Verify status | failed on coverage only: `type.readability` on the HUD at iPhone 17 and landscape, both the DISPATCH-line timing described below |
+
+The baseline Visual reads 78.7 here (78.8 below) because the set of metrics measured in both runs differs slightly.
+The sections below describe the branch before the merge (`6e94054`).
+
 ## What changed for the player
 
 | | Change | Before |
