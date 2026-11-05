@@ -109,8 +109,8 @@ button {
   font-family: var(--sans);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-size: 10px;
+  letter-spacing: 0.16em;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -379,7 +379,7 @@ button {
   top: 18px;
   transform: translateX(-50%);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 .compass .card.n {
@@ -441,7 +441,7 @@ button {
 }
 .cond .small {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
   white-space: nowrap;
@@ -609,7 +609,7 @@ button {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: 12px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -637,7 +637,7 @@ button {
   width: 64px;
   height: 56px;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   flex-direction: column;
   gap: 2px;
   padding: 0;
@@ -664,7 +664,7 @@ button {
 }
 .speedo .u {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .speedo.hidden {
@@ -693,7 +693,7 @@ button {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--amber);
   margin-right: 8px;
 }
@@ -797,7 +797,7 @@ button {
 .scan .bar .l {
   font-weight: 800;
   font-stretch: 112%;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--cyan);
@@ -1055,7 +1055,7 @@ button {
   left: 50%;
   bottom: 28px;
   transform: translateX(-50%);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--ink);
   background: var(--paper);
@@ -1090,7 +1090,7 @@ button {
   color: var(--ink);
   border-radius: 6px;
   padding: 5px 8px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   display: flex;
   gap: 10px;
@@ -1551,7 +1551,7 @@ body.booted .title-screen .inner {
     display: none;
   }
   .alt .label {
-    font-size: 9px;
+    font-size: 12px;
   }
   .alt .big {
     font-size: 14px;
@@ -1763,7 +1763,7 @@ body.booted .title-screen .inner {
   padding: 7px 11px 8px;
 }
 .task .fam {
-  font-size: 9.5px;
+  font-size: 12px;
 }
 .task .title {
   font-size: 14.5px;
@@ -1798,7 +1798,7 @@ body.booted .title-screen .inner {
   font-size: 14px;
 }
 .cond .small {
-  font-size: 9.5px;
+  font-size: 12px;
   margin-top: 1px;
 }
 .cond .danger {
@@ -1810,7 +1810,7 @@ body.booted .title-screen .inner {
   font-size: 13px;
 }
 .cond .danger .label {
-  font-size: 9px;
+  font-size: 12px;
 }
 .compass {
   height: 26px;
@@ -1824,7 +1824,7 @@ body.booted .title-screen .inner {
 }
 .compass .card {
   top: 11px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .compass .center {
   height: 5px;
@@ -1837,7 +1837,7 @@ body.booted .title-screen .inner {
 }
 .wp-dist {
   top: calc(38px + var(--safe-t));
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 7px;
 }
 .side {
@@ -1851,8 +1851,8 @@ body.booted .title-screen .inner {
   min-width: 58px;
   padding: 4px 6px 3px;
   gap: 3px;
-  font-size: 8.5px;
-  letter-spacing: 0.06em;
+  font-size: 12px;
+  letter-spacing: 0.04em;
 }
 .side .chip svg {
   width: 19px;
@@ -1902,7 +1902,7 @@ body.booted .title-screen .inner {
   gap: 7px;
 }
 .cond .box.wx .small {
-  font-size: 11px;
+  font-size: 12px;
   margin: 0;
 }
 .cond .danger > div:last-child {
@@ -1956,7 +1956,7 @@ body.booted .title-screen .inner {
   border-radius: 0;
 }
 .compass {
-  height: 22px;
+  height: 24px;
 }
 .compass .tick {
   top: 2px;
@@ -1966,8 +1966,8 @@ body.booted .title-screen .inner {
   height: 6px;
 }
 .compass .card {
-  top: 8px;
-  font-size: 9.5px;
+  top: 7px;
+  font-size: 12px;
 }
 .compass .wp {
   top: 0;
@@ -1976,7 +1976,7 @@ body.booted .title-screen .inner {
   margin-left: -4px;
 }
 .wp-dist {
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 0 7px;
   line-height: 20px;
 }
@@ -2056,13 +2056,13 @@ body.booted .title-screen .inner {
   font-size: 15px;
 }
 .alt .big .u {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--muted);
 }
 .alt .small {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 1px;
 }
