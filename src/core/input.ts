@@ -56,6 +56,9 @@ export class Input {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       if (!this.keys.has(e.code)) this.pressedSet.add(e.code);
       this.keys.add(e.code);
+      // Tab opens the map in play, but in a menu (the title, a panel) it moves the keyboard focus
+      const menu = !!document.querySelector('.title-screen, .panel-wrap');
+      if (e.code === 'Tab' && menu) return;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -139,10 +142,12 @@ export class Input {
       this.touch = this.touch || (e as PointerEvent).pointerType === 'touch';
       if (!this.btn.get(b)) this.pressedSet.add(`btn:${b}`);
       this.btn.set(b, true);
+      el.classList.add('down');
     };
     const off = (e: Event) => {
       e.preventDefault();
       this.btn.set(b, false);
+      el.classList.remove('down');
     };
     el.addEventListener('pointerdown', on);
     el.addEventListener('pointerup', off);

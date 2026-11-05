@@ -919,8 +919,8 @@ button {
   text-align: center;
 }
 .panel .x {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--slate-2);
@@ -1401,7 +1401,7 @@ button {
   text-align: center;
 }
 .title-screen .emblem {
-  margin: 0 auto 14px;
+  margin: 0 auto 16px;
 }
 .title-screen p {
   margin-left: auto !important;
@@ -1487,12 +1487,12 @@ body.titled #loading .loading-bar {
   font-size: 15px;
   line-height: 1.45;
   color: #dbe4ea;
-  margin: 14px 0 20px;
+  margin: 16px 0 20px;
   max-width: 440px;
 }
 .title-screen .row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .title-screen .meta {
@@ -2112,5 +2112,56 @@ body.titled #loading .loading-bar {
 @media (max-width: 520px) {
   .alt .big {
     font-size: 14px;
+  }
+}
+
+/* Every button answers the moment it is touched: a press darkens and sinks it (.down is set by
+   Input.bind for HUD buttons, whose pointerdown is consumed), a mouse over it lifts it, and the
+   keyboard focus ring shows where Tab is. */
+.btn,
+.chip,
+.iconbtn,
+.panel .x,
+.mapctl button {
+  transition: filter 0.12s, transform 0.08s, border-color 0.12s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn:not(:disabled):hover,
+  .chip:hover,
+  .iconbtn:hover,
+  .panel .x:hover,
+  .mapctl button:hover {
+    filter: brightness(1.12);
+    border-color: rgba(246, 236, 220, 0.85);
+  }
+}
+.btn:not(:disabled):active,
+.chip:active,
+.chip.down,
+.iconbtn:active,
+.iconbtn.down,
+.panel .x:active {
+  filter: brightness(0.82);
+  transform: translateY(1px) scale(0.97);
+}
+.act.down {
+  transform: translateY(2px);
+}
+.btn:focus-visible,
+.chip:focus-visible,
+.iconbtn:focus-visible,
+.act:focus-visible,
+.panel .x:focus-visible,
+.mapctl button:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .chip,
+  .iconbtn,
+  .panel .x,
+  .mapctl button {
+    transition: none;
   }
 }
