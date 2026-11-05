@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OPS_IDS, OPS_MODELS, type PatrolModels } from '../src/render/patrolModels';
 import { getTerrain } from '../src/world/terrain';
 import { CHARGE_SPOTS, PADS } from '../src/world/places';
 import { buildOps, opsObstacles, opsSpots } from '../src/render/opsView';
@@ -34,5 +38,60 @@ describe('the working mountain', () => {
     expect(meshes).toBeLessThanOrEqual(3);
     expect(opsObstacles(t).length).toBeGreaterThan(5);
     for (const k of ['fence', 'exploder', 'repeater', 'sign', 'snowcat', 'headframe', 'minecabin']) expect(spots.some((s) => s.kind === k), k).toBe(true);
+  });
+
+  // the MeshCraft working mountain (art/3d/scripts/working_mountain.py)
+  const load = (id: string): Promise<THREE.Group> =>
+    new Promise((ok, fail) => new GLTFLoader().parse(readFileSync(`public/models/${id}.glb`).slice().buffer as ArrayBuffer, '', (g) => ok(g.scene), fail));
+  const all = async (): Promise<PatrolModels> => Object.fromEntries(await Promise.all(OPS_IDS.map(async (id) => [id, await load(id)])));
+  const meshes = (g: THREE.Object3D) => {
+    let n = 0;
+    g.traverse((o) => (n += (o as THREE.Mesh).isMesh ? 1 : 0));
+    return n;
+  };
+  /** World bounds of the baked vertices within r of a spot. */
+  const near = (g: THREE.Object3D, x: number, z: number, r: number) => {
+    const b = new THREE.Box3();
+    const v = new THREE.Vector3();
+    g.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const pos = m.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i);
+        if (Math.hypot(v.x - x, v.z - z) < r) b.expandByPoint(v);
+      }
+    });
+    return b;
+  };
+
+  it('bakes the MeshCraft pieces into the same two draw calls, each standing where the code piece stood, as big', async () => {
+    const code = buildOps(t);
+    const model = buildOps(t, await all());
+    expect(meshes(model)).toBe(meshes(code));
+    const seen = new Set<string>();
+    for (const s of spots) {
+      if (seen.has(s.kind)) continue;
+      seen.add(s.kind);
+      const r = { fence: 2.4, exploder: 2.6, repeater: 1.6, sign: 0.9, snowcat: 3.2, headframe: 2.0, minecabin: 3.0 }[s.kind];
+      const a = near(code, s.x, s.z, r);
+      const b = near(model, s.x, s.z, r);
+      expect(b.isEmpty(), s.kind).toBe(false);
+      // (the headframe's sheave wheel now stands on its deck, and the cabin keeps its gable's boards: both a little taller)
+      expect(Math.abs(a.max.y - b.max.y), `${s.kind} height`).toBeLessThan(s.kind === 'headframe' || s.kind === 'minecabin' ? 1.3 : 0.45);
+      expect(Math.abs(a.min.y - b.min.y), `${s.kind} base`).toBeLessThan(0.45);
+    }
+  });
+
+  it('keeps the code-built piece for any model that is missing', async () => {
+    const m = await all();
+    delete m[OPS_MODELS.snowcat];
+    const code = buildOps(t);
+    const mixed = buildOps(t, m);
+    const cat = spots.find((s) => s.kind === 'snowcat')!;
+    const a = near(code, cat.x, cat.z, 3.2);
+    const b = near(mixed, cat.x, cat.z, 3.2);
+    expect(b.max.y).toBeCloseTo(a.max.y, 4);
+    expect(meshes(mixed)).toBe(meshes(code));
   });
 });

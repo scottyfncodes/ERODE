@@ -60,10 +60,14 @@ await view('lodge-north', 10 * 60, -30, 222, Math.PI - 0.5, 0.25);
 await view('lodge-inside', 12 * 60, -28, 245, 1.2, 0.5);
 await view('lodge-inside-bunk', 12 * 60, -33, 243, 0.4, 0.6);
 await view('lodge-dusk', 18 * 60 + 50, -12, 252, 1.4, 0.2);
-await view('ops-snowcat', 11 * 60, 640, -303, -0.3, 0.2);
-await view('ops-mine', 13 * 60, -345, -200, -0.4, 0.2);
-await view('ops-ridge', 10 * 60, -110, -462, 0.25, 0.25);
-await view('ops-sign', 13 * 60, -128, -27, 0.4, 0.15);
+// look at a target (tx, tz) from a player d metres away at bearing a (0 = south of it): the camera is
+// behind the player (angles picked so the slope does not fill the frame)
+const look = (name, minute, tx, tz, a, d, pitch) => view(name, minute, tx + Math.sin(a) * d, tz + Math.cos(a) * d, a, pitch);
+await look('ops-snowcat', 11 * 60, 634, -314, 2.1, 13, 0.42);
+await look('ops-mine', 13 * 60, -358, -224, 2.1, 15, 0.36);
+await look('ops-exploder', 10 * 60, -112, -474, 2.1, 11, 0.36);
+await look('ops-fence', 10 * 60, -100, -502, 2.1, 12, 0.4);
+await look('ops-sign', 13 * 60, -133, -36, 0.35, 10, 0.16);
 const info = await page.evaluate(() => window.patrol.info());
 console.log(JSON.stringify({ info, problems: problems.slice(0, 20) }));
 await browser.close();

@@ -4,6 +4,7 @@ import type { Terrain } from '../world/terrain';
 import type { Tree } from '../world/forest';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { box, cyl, mat, PAL } from './kit';
+import { OPS_MODELS, paintModel, type PatrolModels } from './patrolModels';
 
 /**
  * The working mountain: what an avalanche operation leaves on a range over the years, placed where it
@@ -17,8 +18,9 @@ import { box, cyl, mat, PAL } from './kit';
  * - Above the pass road (built, like most Colorado pass roads, to reach a mine): what is left of a
  *   silver mine, a timber headframe and a collapsed cabin.
  *
- * Built from the kit and baked by material (a handful of draw calls); the solid parts are returned
- * as obstacles for the walker.
+ * Each piece is a GITCRAFT MeshCraft model (art/3d/scripts/working_mountain.py) when it loaded, with
+ * the code-built one below as its fallback; either way the lot is baked into two meshes. The solid parts
+ * are returned as obstacles for the walker.
  */
 
 export interface OpsSpot {
@@ -267,15 +269,66 @@ function mineCabin(): THREE.Group {
 
 const BUILD: Record<OpsSpot['kind'], () => THREE.Group> = { fence, exploder, repeater, sign: warningSign, snowcat, headframe, minecabin: mineCabin };
 
+/** The game's colour for each paint role of the working-mountain models (graded like the code's parts). */
+const ROLE_HEX: Record<string, number> = {
+  timber: TIMBER,
+  timberOld: TIMBER_OLD,
+  timberDark: 0x4f4339,
+  steel: STEEL,
+  steelDark: 0x5b5e60,
+  concrete: CONCRETE,
+  catRed: CAT_RED,
+  rust: 0x7a4c33,
+  dark: 0x23262a,
+  track: 0x4a4d50,
+  glass: 0x2e3b44,
+  blade: 0x6d6a63,
+  snow: PAL.snow,
+  yellow: PAL.yellow,
+  control: 0xd2c9a8,
+  panel: 0x1d2a3a,
+  panelCell: 0x2f4a66,
+  battery: 0x8a8e88,
+  whip: 0xd8d8d8,
+  antenna: 0xe6e3dc,
+  plate: 0x55534e,
+  tailings: 0x9a7456,
+  pipe: 0x3b3532,
+  rope: 0x8a7a5a,
+  lamp: 0xe9c46a,
+};
+
+/** A working-mountain piece from its MeshCraft model, standing as the code-built one did. */
+function modelled(kind: OpsSpot['kind'], src: THREE.Object3D): THREE.Group {
+  const paint = Object.fromEntries(Object.entries(ROLE_HEX).map(([r, h]) => [r, mat(h)]));
+  const m = paintModel(src, paint, (hex) => mat(hex));
+  const g = new THREE.Group();
+  g.add(m);
+  if (kind === 'sign') {
+    // the printed face is the game's own canvas, on the model's backing plate
+    const tex = warningTexture();
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), tex ? new THREE.MeshLambertMaterial({ map: tex }) : mat(PAL.yellow));
+    face.position.set(0, 2.2, 0.06);
+    g.add(face);
+  }
+  if (kind === 'snowcat') {
+    // modelled upright on the ground: sunk a little and listing, as the code's
+    m.rotation.z = 0.1;
+    g.position.y = -0.35;
+  }
+  return g;
+}
+
 /**
  * The whole lot, baked to two meshes: every plain-coloured part merged into one vertex-coloured mesh
  * (its material's colour per vertex), and the sign faces (textured) into a second. Two draw calls for
  * the whole working mountain.
  */
-export function buildOps(t: Terrain): THREE.Group {
+export function buildOps(t: Terrain, models: PatrolModels = {}): THREE.Group {
   const all = new THREE.Group();
   for (const s of opsSpots()) {
-    const g = BUILD[s.kind]();
+    const src = models[OPS_MODELS[s.kind]];
+    const g = src ? modelled(s.kind, src) : BUILD[s.kind]();
     // stand on the snow; follow the ground's lowest corner so nothing floats
     const y = Math.min(t.height(s.x - 1.5, s.z), t.height(s.x + 1.5, s.z), t.height(s.x, s.z - 1.5), t.height(s.x, s.z + 1.5));
     g.position.set(s.x, y + g.position.y, s.z);
