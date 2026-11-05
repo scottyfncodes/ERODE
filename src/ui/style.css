@@ -2121,12 +2121,15 @@ body.titled #loading .loading-bar {
 
 /* Every button answers the moment it is touched: a press darkens and sinks it (.down is set by
    Input on every pointerdown, so touch gets it on iOS too), a mouse over it lifts it, and the
-   keyboard focus ring shows where Tab is. */
+   keyboard focus ring shows where Tab is. One list, so no kind of button is left out:
+   .btn, the HUD chips and icon button, the panel close, map zoom, tabs, settings toggles. */
 .btn,
 .chip,
 .iconbtn,
 .panel .x,
-.mapctl button {
+.mapctl button,
+.tab,
+.seg button {
   transition: filter 0.12s, transform 0.08s, border-color 0.12s;
 }
 @media (hover: hover) and (pointer: fine) {
@@ -2134,7 +2137,9 @@ body.titled #loading .loading-bar {
   .chip:hover,
   .iconbtn:hover,
   .panel .x:hover,
-  .mapctl button:hover {
+  .mapctl button:hover,
+  .tab:hover,
+  .seg button:hover {
     filter: brightness(1.12);
     border-color: rgba(246, 236, 220, 0.85);
   }
@@ -2146,7 +2151,11 @@ body.titled #loading .loading-bar {
 .iconbtn:active,
 .iconbtn.down,
 .panel .x:active,
-.panel .x.down {
+.panel .x.down,
+.tab:active,
+.tab.down,
+.seg button:active,
+.seg button.down {
   filter: brightness(0.82);
   transform: translateY(1px) scale(0.97);
   transition: none; /* the press shows on the very next frame; only the release eases back */
@@ -2159,7 +2168,9 @@ body.titled #loading .loading-bar {
 .iconbtn:focus-visible,
 .act:focus-visible,
 .panel .x:focus-visible,
-.mapctl button:focus-visible {
+.mapctl button:focus-visible,
+.tab:focus-visible,
+.seg button:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
 }
@@ -2168,7 +2179,9 @@ body.titled #loading .loading-bar {
   .chip,
   .iconbtn,
   .panel .x,
-  .mapctl button {
+  .mapctl button,
+  .tab,
+  .seg button {
     transition: none;
   }
 }
