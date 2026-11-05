@@ -346,11 +346,11 @@
   },
   {
    "path": "../public/og-image.jpg",
-   "bytes": 140680,
-   "tools": "DesignCraft layout, PhotoCraft JPEG",
+   "bytes": 150243,
+   "tools": "DesignCraft layout and JPEG export",
    "status": "shipped",
-   "notes": "share card (DesignCraft layout, PhotoCraft JPEG)",
-   "sha256": "f2c222aad1fbb293f2060e75e69267afa0d53dce2c5366395ebda9fef13331db"
+   "notes": "share card, storybook direction: aubergine card stock with an inset cream rule, Jost wordmark, Courier Prime copy, the lodge at dusk with Vince and Koda (Playwright capture of the game); art/pipeline/4_share_card.py",
+   "sha256": "3a926fb373b05883d9c81e04a0606b98afa70888f29221091d1d49eef7a28a87"
   },
   {
    "path": "../public/audio/voice/avy_clear.m4a",
@@ -1266,5 +1266,5 @@
   }
  ],
  "files": 147,
- "updated": "2026-11-05T04:54:04Z"
+ "updated": "2026-11-05T15:31:46Z"
 }
