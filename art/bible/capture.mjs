@@ -131,7 +131,7 @@ async function at(page, name, kind, s, note, wait = 2600) {
     await G(() => { window.patrol.setTime(10 * 60); window.patrol.teleport(-27, 245, 1.2); });
     await page.waitForTimeout(1500);
     await G(f, a);
-    await page.waitForTimeout(1400);
+    await page.waitForTimeout(2600); // the panel rises in over 0.3 s of animation; software WebGL frames are slow
     await shot(page, name, 'ui', note);
   };
   await panel('ui-board', () => window.patrol.game.openBoard('calls'), 'The mission table: calls, forecast and avalanche danger');

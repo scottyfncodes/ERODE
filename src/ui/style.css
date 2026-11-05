@@ -49,15 +49,6 @@ body {
   touch-action: none;
   overscroll-behavior: none;
 }
-/* read by screen readers, not drawn */
-.sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 canvas#view {
   position: fixed;
   inset: 0;
@@ -1131,7 +1122,7 @@ button {
 .mapctl button {
   width: 44px;
   height: 44px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid rgba(60, 45, 30, 0.35);
   background: var(--paper);
   color: var(--ink);
@@ -1198,6 +1189,15 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 7px 8px;
+}
+/* on a phone the four periods share 360 px: the tracked caps tighten so AFTERNOON fits its card */
+@media (max-width: 520px) {
+  .fc {
+    padding: 7px 6px;
+  }
+  .fc .label {
+    letter-spacing: 0.02em;
+  }
 }
 .fc.now {
   border-color: var(--cyan);

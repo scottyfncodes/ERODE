@@ -417,7 +417,7 @@ export class Hud {
       this.radioEl.classList.remove('on');
       return false;
     }
-    this.radioEl.innerHTML = `<span class="who">${n.who}<span class="sr">: </span></span>${n.text}`;
+    this.radioEl.innerHTML = `<span class="who">${n.who}</span>${n.text}`;
     this.radioEl.classList.add('on');
     this.radioT = n.secs;
     this.onLine?.(n.who, n.text);

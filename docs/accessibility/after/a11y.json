@@ -1,7 +1,7 @@
 {
  "kind": "rockslide-a11y",
  "url": "http://localhost:4173/",
- "when": "2026-11-05T18:04:46.256Z",
+ "when": "2026-11-05T20:01:20.468Z",
  "axe": "4.10.3",
  "screens": [
   {
@@ -340,7 +340,7 @@
    "area": "screen reader",
    "what": "the opening radio call is in the DOM as text (readable, not only voiced)",
    "ok": true,
-   "detail": "Dispatch: Morning, Kessel Patrol. Forty centimetres up high overnight. There is "
+   "detail": "DispatchMorning, Kessel Patrol. Forty centimetres up high overnight. There is a "
   },
   {
    "area": "touch",
@@ -534,7 +534,7 @@
    "area": "screen reader",
    "what": "the opening radio call is in the DOM as text (readable, not only voiced)",
    "ok": true,
-   "detail": "Dispatch: Morning, Kessel Patrol. Forty centimetres up high overnight. There is "
+   "detail": "DispatchMorning, Kessel Patrol. Forty centimetres up high overnight. There is a "
   },
   {
    "area": "text",

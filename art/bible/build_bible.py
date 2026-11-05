@@ -1,4 +1,4 @@
-"""ROCKSLIDE: the Kessel art bible, edition 2. Laid out in GITCRAFT DesignCraft from captures of the
+"""ROCKSLIDE: the Kessel art bible, edition 2.1. Laid out in GITCRAFT DesignCraft from captures of the
 running game and colour tokens read from the game's own code. Reproducible end to end:
 
   npm ci && npx vite build && (npx vite preview --port 4173 &)
@@ -69,7 +69,7 @@ def captures():
     # derived crops, all from captures: the in-game wordmark and the emblem without its square field
     title = Image.open(os.path.join(CAPS, "ui-title.jpg"))
     # crops of captures (recorded in shots.json under "derived"): the wordmark and the forecast strip
-    derived = {"ui-title-wordmark": ("ui-title", (440, 540, 1000, 740)), "ui-forecast": ("ui-board", (738, 132, 1165, 243))}
+    derived = {"ui-title-wordmark": ("ui-title", (440, 540, 1000, 740)), "ui-forecast": ("ui-board", (728, 222, 1165, 334))}
     for name, (src, box) in derived.items():
         Image.open(os.path.join(CAPS, src + ".jpg")).crop(box).save(os.path.join(CAPS, name + ".jpg"), quality=90)
     meta["derived"] = {k: {"from": v[0], "crop": v[1]} for k, v in derived.items()}
@@ -96,7 +96,7 @@ d = None
 
 def chrome(sp, n, section, source, dark=False):
     ink = MUTED if dark else BTN
-    d.text(sp, [M, 26, 600, 38], "ROCKSLIDE  ·  KESSEL ART BIBLE  ·  EDITION 2", J, "SemiBold", 7.5, ink, tracking=300)
+    d.text(sp, [M, 26, 600, 38], "ROCKSLIDE  ·  KESSEL ART BIBLE  ·  EDITION 2.1", J, "SemiBold", 7.5, ink, tracking=300)
     d.text(sp, [W - M - 300, 26, W - M, 38], f"{section}   {n:02d} / {PAGES}", J, "SemiBold", 7.5, ink, tracking=300, align="right")
     d.rect(sp, [M, 42, W - M, 42.75], fill=MUTED if not dark else "#6A4552")
     if source:
@@ -167,7 +167,7 @@ def p_cover(sp):
     d.gradient(sp, [428, 0, 800, H], [{"location": 0, "color": INK, "opacity": 100}, {"location": 40, "color": INK, "opacity": 78}, {"location": 100, "color": INK, "opacity": 0}])
     d.rect(sp, [20, 20, W - 20, H - 20], stroke=CREAM, weight=1.5)
     d.tool("place_image", {"path": os.path.join(WORK, "emblem-round.png"), "x": 72, "y": 76, "width": 96, "spread": sp})
-    d.text(sp, [72, 214, 1000, 226], "THE KESSEL PATROL  ·  ART BIBLE  ·  EDITION 2", J, "Medium", 10, PINK, tracking=420)
+    d.text(sp, [72, 214, 1000, 226], "THE KESSEL PATROL  ·  ART BIBLE  ·  EDITION 2.1", J, "Medium", 10, PINK, tracking=420)
     d.text(sp, [66, 236, 900, 330], "ROCKSLIDE", J, "SemiBold", 86, CREAM, tracking=110, leading=90)
     d.text(sp, [72, 334, 800, 360], "MOUNTAIN PATROL", J, "Medium", 20, PINK, tracking=520)
     d.rect(sp, [72, 386, 118, 387.5], fill=CREAM)
@@ -428,8 +428,8 @@ def p_ui_title(sp):
     h3(sp, x2, 500, W - M - x2, "WHAT MAKES IT")
     bullets(sp, [x2, 518, W - M, 750], [
         "Title: the camera square on to the lodge door, Vince and Koda either side of it, a slow push in and out. In the lower third: the emblem, the cut wordmark, MOUNTAIN PATROL in blush, two or three lines of Jost, one red button (Start your patrol, or Continue).",
-        "The table: one burgundy card on the dimmed lodge. Centred title in tracked caps; sentence-case tabs, paper when selected; a paper topo map; the forecast as four periods (sky, temperature, wind); avalanche danger as a mustard number and its name; the calls as cards, locked ones dimmed; the selected call's brief on paper with a red Take this call and a ghost Free patrol.",
-        "On a phone the card fills the width inside the safe area; nothing shrinks below 12 px; every target is 44 px.",
+        "The table: one burgundy card on the dimmed lodge. Centred title in tracked caps; sentence-case tabs, paper when selected; a paper topo map; the forecast as four periods (sky, temperature, wind); avalanche danger as a mustard number and its name; the next rank above the forecast as one line and a thin mustard bar; the calls as cards, locked ones as dashed open cards with quiet text (never faded below 4.5:1 contrast); the selected call's brief on paper with a red Take this call and a ghost Free patrol.",
+        "On a phone the card is one column that fits the width inside the safe area; nothing shrinks below 12 px; every target, the tabs included, is 44 px. Every card button lifts under a mouse, sinks when pressed and shows a 2 px cyan focus ring.",
     ], size=9.5, gap=5)
 
 
@@ -445,7 +445,7 @@ def p_ui_hud(sp):
     y2 = 196 + fw * 0.625 + 40
     h3(sp, x2, y2, fw, "THE RULES OF THE HUD")
     bullets(sp, [x2, y2 + 18, x2 + fw, 760], [
-        "One act button, bottom right: paper, burgundy type, 86 px; red in an emergency. Hold to work (repairs, charges, first aid): a ring fills.",
+        "One act button, bottom right: paper, burgundy type, 86 px; red in an emergency. Hold to work (repairs, charges, first aid): a ring fills. Under a mouse it brightens and rises a pixel off its rim.",
         "Chips: 44 px, burgundy at 90%, a cream rule; cyan when on. Map, Koda, Skis on, Get off.",
         "Top: a slim compass ribbon naming the objective and its distance; top right the clock and temperature, the danger number, funds and pause, in Plex Mono.",
         "The radio sits centred above the controls; toasts centred near the top in tracked caps (mint good, mustard warning). No minimap, no health bars: poles, beacons and the route line carry the rest.",
@@ -465,7 +465,8 @@ def p_ui_missions(sp):
         "Funds and reputation after every job; reputation is the patrol rank. A rank up gets the stinger and a line on the debrief card.",
         "The station grows in the yard: kennel, workshop, equipment room, hangar, radio mast, the bunkhouse wing, yard lights. Each is a real building, not a menu icon.",
         "Gear for Vince, the sled, the helicopter, the skis and Koda: colours and kit in the same card layout, the price in the button.",
-        "The map is a paper topo sheet, pinch to zoom; calls are pinned on it in their family tones.",
+        "After the story Kessel Bowl reloads with new snow: a recon call and a control call share one pin, and a reward that depends on the result reads 'up to'. The next rank is always on the mission table.",
+        "The map is a paper topo sheet on an 8 px card, pinch to zoom, paper zoom buttons on the 4 px grid; calls are pinned on it in their family tones.",
         "Every one of these is a card on the dimmed scene. No full-screen menus, no store front.",
     ], size=9.4, gap=5)
 
@@ -766,7 +767,7 @@ def main():
     shots, _ = captures()
     shutil.copy(os.path.join(REPO, "public/og-image.jpg"), os.path.join(CAPS, "share-card.jpg"))
     d = DC(REPO, os.path.join(WORK, "designcraft.log"))
-    d.tool("new_document", {"width": W, "height": H, "pages": PAGES, "facingPages": False, "intent": "print", "margins": 0, "title": "ROCKSLIDE: the Kessel art bible, edition 2"})
+    d.tool("new_document", {"width": W, "height": H, "pages": PAGES, "facingPages": False, "intent": "print", "margins": 0, "title": "ROCKSLIDE: the Kessel art bible, edition 2.1"})
     d.tool("save_document", {"path": DOC})
     r = d.tool("open_document", {"path": DOC})
     print("document fonts:", r.get("documentFonts"))
@@ -794,7 +795,7 @@ def main():
     elif over:
         raise SystemExit(f"overset text: {json.dumps([(s['id'], s.get('preview')) for s in over])[:1500]}")
     d.tool("save_document", {"path": DOC})
-    r = d.x("file.exportPdf", {"path": PDF, "title": "ROCKSLIDE: the Kessel art bible, edition 2", "author": "The Kessel Patrol (ROCKSLIDE)", "compressImages": True})
+    r = d.x("file.exportPdf", {"path": PDF, "title": "ROCKSLIDE: the Kessel art bible, edition 2.1", "author": "The Kessel Patrol (ROCKSLIDE)", "compressImages": True})
     print("pdf:", r)
     os.makedirs(os.path.join(WORK, "pages"), exist_ok=True)
     for i in range(PAGES):

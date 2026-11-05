@@ -1,3 +1,18 @@
+# Art bible edition 2.1: synchronised with the quality and retention pass (2026-11-05)
+
+A point edition: the interface changed in small ways, so the pages that show it were brought back in step. Nothing
+else was re-captured or re-laid; the palette, type, tokens and world colours are unchanged (no new tokens).
+
+| Page | What changed in the game | In the bible |
+| --- | --- | --- |
+| 8 Title and the mission table | The next rank above the forecast; locked calls as dashed open cards (were faded to 45%, which failed contrast); one column on a phone that fits 390 px; tabs 44 px; hover, press and focus on every card button | `ui-board`, `ui-board-station`, `phone-board` re-captured; the "What makes it" text |
+| 9 The HUD | The round action button brightens and rises a pixel under a mouse | Text |
+| 10 Calls, the map and progression | Kessel Bowl's repeat calls (one shared pin, "up to" rewards); map card on the 4 px grid with the 8 px card radius and paper controls; locked shop items as dashed cards | `ui-map`, `ui-wardrobe`, `ui-pause` re-captured; the progression text |
+| 15 Weather | The forecast moved down on the board | `ui-forecast` crop moved |
+
+`capture.mjs` now waits 2.6 s for a panel to finish rising before it shoots (the 1.4 s it had caught the board
+mid fade-in under software WebGL).
+
 # Art bible edition 2: what changed
 
 Edition 2 (`art/kessel-art-bible.pdf`, 20 pages) replaces edition 1 (3 pages: an emblem, a palette

@@ -81,7 +81,9 @@ export class Panels {
     this.onClose = null;
     const back = this.returnFocus;
     this.returnFocus = null;
-    if (back?.isConnected) back.focus({ preventScroll: true });
+    // back to where focus was, except a HUD button: in play the keyboard drives the game, and Enter on
+    // a focused chip would open things mid-ride
+    if (back?.isConnected && !back.closest('.hud')) back.focus({ preventScroll: true });
     else (document.activeElement as HTMLElement | null)?.blur?.();
     f?.();
   }
