@@ -47,6 +47,8 @@ The day runs 06:00 to 22:00 in about twenty minutes; weather blends between clea
 
 Touch: a floating stick wherever your left thumb lands, drag anywhere on the right to look, one big contextual action button (hold it for work like repairs, charges and first aid), and a few chips: Map, Koda, Skis on, Get off. The stick has a small deadzone and a gentle curve (a short push is a careful walk or a slow line on the sled; a full push is full speed), and every touch target is at least 44 px. The camera aims a little past you, so you sit in the lower third and see where you are going; on a phone held upright it pulls back and keeps at least a 40° view across. Keyboard: WASD, Shift to run, E to act, Q skis, X get off, G Koda, R and C climb and descend, J and L turn the camera, M map (M or Esc closes it), Esc pause (and closes any panel).
 
+**Assists** (pause menu, all off unless you turn them on): *Helicopter hover and landing* holds you steady against the wind while the stick is centred, slows the last 12 m of a descent to a gentle touch and settles you onto the skids from a low hover; *Sled hill hold* stops the sled sliding back on a slope too steep for its track (it adds no grip or power, so what it can climb is unchanged) and tells you to angle across; *Route line* puts a dotted line on the snow along the roads and tracks to your objective (joining the nearest road, leaving it near the target, straight there when that is shorter), on foot, on the sled and on skis. Phones that can vibrate (not iPhone Safari) buzz on the blast, a hard landing and a finished job; that is in the pause menu too.
+
 **The map** handles like a map on a phone: pinch with two fingers to zoom (about the point between them, from the whole valley to 6x) and pan as they move, drag with one finger, flick and it coasts, double tap to zoom in, and the +, - and locate buttons for one thumb. Pins and markers keep their size as you zoom, the map never leaves its frame, the page itself never zooms or scrolls, and only a clean tap on the dimmed edge closes it (a thumb landing there mid-pinch does not). The mission table's map does the same. A sharp 1536 px copy of the map is drawn a few milliseconds at a time after the valley loads; the valley behind an open panel is drawn only a few times a second.
 
 ## Koda
@@ -100,6 +102,8 @@ Everything persists in `localStorage` (`rockslide.patrol.v1`): missions done and
 
 ## Performance on phones
 
+The title card goes up as soon as the fonts are in, and the valley is built behind it in stages that hand the main thread back to the browser between them, so the card stays responsive; where the browser can compile shaders in parallel they are compiled while the title is up, and the sharp map is drawn on a CPU-backed canvas, so neither stalls the first seconds of play (before/after: `docs/playcraft/startup.md`). Tap Start before the valley is ready and the button says so; play begins the moment it is up, with the sound unlocked in that first tap.
+
 Terrain in 64 chunks culled to the view; trees instanced in 25 cells with a lighter tree on phones and about half the density; every static building merged into a few meshes per material (about halving the draw calls at the station); shadows only in a box around you; pooled particles and track ribbons with a fixed budget; the renderer drops its resolution when frames run long and raises it again when there is headroom. Graphics can be forced to Light or Full in the pause menu.
 
 ## Architecture
@@ -134,10 +138,13 @@ node scripts/perf.mjs http://localhost:4173/ low|high                 # draw cal
 node scripts/verify.mjs http://localhost:4173/                        # release check: five iPhone sizes, HUD overlaps, touch targets, kit, flows
 node scripts/maptouch.mjs http://localhost:4173/ out/map              # map gestures with real multitouch on three iPhone sizes (pinch, pan, flick, double tap, limits)
 node scripts/runcapture.mjs http://localhost:4173/ out/run            # the patroller running and stopping in the game, on the touch stick
+npx tsx scripts/playthrough.ts http://localhost:4173/ docs/playcraft/evidence  # every mission end to end, with an evidence report
 ```
+
+`scripts/playthrough.ts` plays the whole campaign on the production build in a 390x844 touch viewport: every story mission and both callouts, building the workshop and buying an engine (and measuring that the sled really is faster), finding a badge with Koda, quitting mid-mission and continuing after a reload, sleeping to the next day. Every action is real key input or a real click; the long journeys are skipped with the debug teleport and the callout timer is wound down, and the report counts both. It writes `playthrough.json` and `playthrough.md` (each check, pass or fail, with what it saw) and exits 1 on any failure.
 
 `scripts/verify.mjs` runs on the production build (`npm run build && npm run preview`). At iPhone 15, SE and 15 Pro Max sizes, upright and on their side, it fails on any console warning, a kit model that did not load, HUD cards that overlap or leave the screen (on foot, on the sled, in the helicopter), a HUD button under 44 px, a page that can scroll, or a start-over / continue that leaves state behind.
 
 The gait lab, `/tools/gaitlab/` on the dev server (not shipped), films the patroller on a measured floor at any speed (`?speed=5.8`, `?profile=ramp`, `?cam=side|front|follow`) and measures how far a boot slides while it is on the snow; `node tools/gaitlab/capture.mjs <url> <out> <speed>` grabs frames and the numbers.
 
-`window.patrol` in the browser is a debug handle (teleport, accept missions, set the time) used by the tour script.
+`window.patrol` in the browser is a debug handle (teleport, accept missions, set the time) used by the tour script. `window.game` is a read-only view of the live game for tools and tests: each read is a fresh, frozen plain object (clock, funds, rank, mode, position, speed, the mission step and its objective, the action button, weather, Koda, the avalanche result, progress, assists); nothing written to it reaches the game.

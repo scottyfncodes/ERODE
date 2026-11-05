@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { AudioEngine } from '../audio/audio';
 import { Input } from '../core/input';
 import { BUZZ, buzz, hitStopScale, HIT_TOTAL } from './feel';
+import type { GameSnapshot } from './snapshot';
+import { TitleScreen } from '../ui/title';
+import { RoadNet, trimWay, wayTo, type Way } from '../world/routing';
 import { forwardSpeed, glideSpeed, newGlider, SKIS, SLED, stepGlider, type Glider } from '../actors/glide';
 import { HELI, heliAgl, newHeli, stepHeli, type Heli } from '../actors/heli';
 import { newHusky, pet, startTrack, stepHusky, type Husky, type Scent } from '../actors/husky';
@@ -10,7 +13,7 @@ import { Snowpack, simulateRelease } from '../missions/avalanche';
 import { FAMILY_LABEL, mission, MISSIONS, type MissionDef, type Vehicle } from '../missions/catalog';
 import { currentStep, fire, fireState, interact, interactables, navTarget, newRun, tickRun, type RunEvent } from '../missions/runner';
 import { BADGES, item, RANKS, type Group } from '../progress/catalog';
-import { available, build, buy, complete, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
+import { available, browserStore, build, buy, complete, done, equip, findBadge, hasUpgrade, loadProfile, newProfile, rank, saveProfile, tickEvents, type Profile, type Settings, type Store } from '../progress/profile';
 import { PatrollerMesh, type Pose } from '../render/characterMesh';
 import { ForestView } from '../render/forestView';
 import { FX_KIND, GroundDrift, Particles, Snowfall, Tracks } from '../render/fx';
@@ -57,58 +60,49 @@ interface Act {
   work?: 'saw' | 'dig' | 'fix';
 }
 
-const storage = (): Store | null => {
-  try {
-    const s = window.localStorage;
-    s.setItem('__t', '1');
-    s.removeItem('__t');
-    return s;
-  } catch {
-    return null;
-  }
-};
+const storage = (): Store | null => browserStore();
 
 const UP = new THREE.Vector3(0, 1, 0);
 
 export class Game {
-  private rig: Rig;
-  private terrain: Terrain;
-  private trees: Tree[];
-  private grid: TreeGrid;
-  private solid: Colliders;
-  private station: StationView;
-  private world: WorldView;
-  private kitView: KitView;
-  private scattered: Placed[];
-  private markers: Markers;
-  private avView: AvalancheView;
-  private props: MissionProps;
-  private particles: Particles;
-  private snowfall: Snowfall;
-  private tracks: Tracks;
-  private drift: GroundDrift;
+  private rig!: Rig;
+  private terrain!: Terrain;
+  private trees!: Tree[];
+  private grid!: TreeGrid;
+  private solid!: Colliders;
+  private station!: StationView;
+  private world!: WorldView;
+  private kitView!: KitView;
+  private scattered!: Placed[];
+  private markers!: Markers;
+  private avView!: AvalancheView;
+  private props!: MissionProps;
+  private particles!: Particles;
+  private snowfall!: Snowfall;
+  private tracks!: Tracks;
+  private drift!: GroundDrift;
   private spinT = 0;
   /** Vince: twenty, the patrol's newest hand, long blonde hair with a bit of a curl */
   private player = new PatrollerMesh(false, { hair: VINCE_HAIR, long: true });
   private dogMesh = new HuskyMesh();
   private sledMesh = new SledMesh();
   private heliMesh = new HeliMesh();
-  private pepperHeld: THREE.Group;
-  private walker: Walker;
-  private sled: Glider;
-  private skis: Glider;
-  private heli: Heli;
-  private dog: Husky;
+  private pepperHeld!: THREE.Group;
+  private walker!: Walker;
+  private sled!: Glider;
+  private skis!: Glider;
+  private heli!: Heli;
+  private dog!: Husky;
   private mode: Mode = 'foot';
-  private pack: Snowpack;
-  private input: Input;
-  private hud: Hud;
-  private panels: Panels;
-  private audio = new AudioEngine();
-  private cam: FollowCamera;
-  private p: Profile;
+  private pack!: Snowpack;
+  private input!: Input;
+  private hud!: Hud;
+  private panels!: Panels;
+  private audio: AudioEngine;
+  private cam!: FollowCamera;
+  private p!: Profile;
   private store = storage();
-  private topo: HTMLCanvasElement;
+  private topo!: HTMLCanvasElement;
   /** when the valley was last drawn behind an open panel */
   private lastBehind = 0;
   /** the sharp copy of the map is drawn */
@@ -126,7 +120,16 @@ export class Game {
   /** real seconds since the last hit-stop began (past HIT_TOTAL: none running) */
   private hitStopT = HIT_TOTAL;
   private watchSkip = false;
-  private cond: Conditions;
+  /** the action button as last shown (for the read-only snapshot) */
+  private lastAct: GameSnapshot['action'] = null;
+  /** sled climb assist: how long it has been holding you, and when it last said so */
+  private heldT = 0;
+  private heldHintAt = -99;
+  /** route line: the planned way and where it was planned from */
+  private readonly roads = new RoadNet();
+  private way: Way | null = null;
+  private wayFrom = { x: 0, z: 0, tx: 1e9, tz: 1e9 };
+  private cond!: Conditions;
   private indoors = 0;
   private seat = new THREE.Vector3();
   private tmp = new THREE.Vector3();
@@ -145,26 +148,47 @@ export class Game {
   private stats: StatsOverlay | null = null;
   private forest!: ForestView;
 
-  constructor(canvas: HTMLCanvasElement, private ui: HTMLElement, progress: (f: number, t: string) => void, kit: Kit = {}, models: PatrolModels = {}) {
+  constructor(
+    private canvas: HTMLCanvasElement,
+    private ui: HTMLElement,
+    audio: AudioEngine = new AudioEngine(),
+  ) {
+    this.audio = audio;
+  }
+
+  /**
+   * Build the valley. It runs in stages and `pause` between them hands the main thread back to the
+   * browser, so the title card on top stays responsive (taps, its animation) while the world goes up.
+   */
+  async build(progress: (f: number, t: string) => void, kit: Kit = {}, models: PatrolModels = {}, pause: () => Promise<void> = async () => {}) {
+    const canvas = this.canvas;
+    const ui = this.ui;
     this.p = loadProfile(this.store) ?? newProfile();
     if (statsWanted()) this.stats = new StatsOverlay(document.body);
     this.rig = new Rig(canvas, detectQuality(this.p.settings.quality));
     progress(0.15, 'Raising the mountains');
+    await pause();
     this.terrain = getTerrain();
     this.solid = buildColliders();
+    await pause();
     progress(0.35, 'Planting the forest');
     this.trees = plantForest(this.terrain, this.rig.quality.trees);
+    await pause();
     // the Kessel kit (MeshCraft): tors on the steeps, boulders, deadwood and the patrol's own gear
     const scattered = (this.scattered = scatterKit(this.terrain, this.trees, this.rig.quality.trees));
     // collisions use the same trees and rocks you see
     this.grid = new TreeGrid([...this.trees, ...kitObstacles(scattered.filter((p) => kit[p.kind])), ...opsObstacles(this.terrain)]);
     progress(0.5, 'Drawing the map');
+    await pause();
     this.topo = drawTopo(this.terrain, 640);
+    await pause();
     const scene = this.rig.scene;
     scene.add(buildTerrain(this.terrain));
+    await pause();
     // the working mountain: snow fences, exploders, signs, the old snowcat, the mine
     scene.add(buildOps(this.terrain, models));
     this.modelled.ops = OPS_IDS.every((id) => models[id]);
+    await pause();
     const forest = (this.forest = new ForestView(this.trees, models));
     scene.add(forest.group);
     // the patrol's vehicles from MeshCraft; the code-built ones stay if a model did not load
@@ -172,16 +196,20 @@ export class Game {
     // the patroller and Koda: skinned models on skeletons of the code's own joints
     this.modelled.patroller = this.player.useModel(models.rs_patroller);
     this.modelled.koda = this.dogMesh.useModel(models.rs_koda);
+    await pause();
     this.kitLoaded = Object.keys(kit).sort();
     this.kitView = new KitView(kit, scattered, (x, z) => this.terrain.height(x, z), this.rig.quality.tier === 'high');
     scene.add(this.kitView.group);
     progress(0.7, 'Lighting the stove');
+    await pause();
     this.station = new StationView(this.terrain, this.topo, models);
+    await pause();
     this.modelled.yard = this.station.modelled;
     this.modelled.lodge = this.station.lodgeModelled;
     this.world = new WorldView(this.terrain, models);
     this.modelled.buildings = this.world.modelled;
     this.modelled.weather = this.world.weatherModelled;
+    await pause();
     this.markers = new Markers(this.terrain);
     this.avView = new AvalancheView();
     this.props = new MissionProps(this.terrain, models);
@@ -198,6 +226,7 @@ export class Game {
     scene.add(this.station.group, this.world.group, this.markers.group, this.avView.group, this.props.group, this.particles.points, this.snowfall.points, this.tracks.mesh, this.drift.group);
     scene.add(this.player.group, this.dogMesh.group, this.sledMesh.group, this.heliMesh.group);
     progress(0.85, 'Waking Koda');
+    await pause();
     this.pack = new Snowpack(this.terrain);
     const pl = this.p.player;
     this.walker = newWalker(pl.x, pl.z, pl.yaw, this.terrain);
@@ -303,8 +332,25 @@ export class Game {
     }
   }
 
-  start() {
-    this.showTitle();
+  /**
+   * Where the browser can compile shaders in parallel (KHR_parallel_shader_compile), compile every one the
+   * valley uses while the title is up, so neither the first frame nor the first step into the lodge
+   * stalls on it. Without it an "async" compile would block just the same, so the first frames behind the
+   * title compile them instead, as before.
+   */
+  async warm() {
+    const r = this.rig.renderer;
+    if (!r.extensions.has('KHR_parallel_shader_compile')) return;
+    try {
+      await r.compileAsync(this.rig.scene, this.rig.camera);
+    } catch {
+      /* fall back to compiling on the first frames */
+    }
+  }
+
+  /** Start the frame loop on the title card: `title` is one already showing (put up before the build). */
+  start(title?: TitleScreen) {
+    this.adoptTitle(title ?? new TitleScreen(this.ui, this.p, import.meta.env.BASE_URL));
     const loop = () => {
       requestAnimationFrame(loop);
       this.frame();
@@ -315,32 +361,19 @@ export class Game {
   // ------------------------------------------------------------------ title
 
   private showTitle() {
+    this.adoptTitle(new TitleScreen(this.ui, this.p, import.meta.env.BASE_URL));
+  }
+
+  private adoptTitle(t: TitleScreen) {
     this.state = 'title';
     this.hud.show(false);
-    const has = !!this.p.savedAt && !this.p.fresh;
-    const el = document.createElement('div');
-    el.className = 'title-screen';
-    const when = has ? `Day ${this.p.weather.day}, ${clock(this.p.weather.minute)} · ${RANKS[rank(this.p)].name} · ${this.p.funds} funds` : '';
-    el.innerHTML = `<div class="inner"><img class="emblem" src="${import.meta.env.BASE_URL}icons/icon.svg" alt="" width="72" height="72"><div class="wordmark" role="img" aria-label="ROCKSLIDE"><span class="wm-top" aria-hidden="true">ROCKSLIDE</span><span class="wm-bot" aria-hidden="true">ROCKSLIDE</span></div><div class="subbrand">Mountain Patrol</div><p>The Kessel valley is yours to look after: its slopes, its roads, its people. You have a log station, a snowmobile, a borrowed helicopter, a pair of old skis, and Koda.</p><div class="row">${has ? '<button class="btn red" data-a="cont">Continue</button><button class="btn ghost" data-a="new">New patrol</button>' : '<button class="btn red" data-a="new">Start your patrol</button>'}</div>${has ? `<div class="meta">${when}</div>` : ''}</div>`;
-    this.ui.appendChild(el);
-    const go = (fresh: boolean) => {
+    t.onGo = (fresh: boolean) => {
       this.audio.unlock();
       this.applySettings(this.p.settings);
-      if (fresh) {
-        const btn = el.querySelector('[data-a=new]') as HTMLElement;
-        if (has && !btn.dataset.armed) {
-          btn.dataset.armed = '1';
-          btn.textContent = 'Tap again: this erases your save';
-          return;
-        }
-        this.resetProfile();
-      }
-      el.remove();
+      if (fresh) this.resetProfile();
+      t.remove();
       this.beginPlay();
     };
-    (el.querySelector('[data-a=new]') as HTMLElement).onclick = () => go(true);
-    const c = el.querySelector('[data-a=cont]') as HTMLElement | null;
-    if (c) c.onclick = () => go(false);
   }
 
   private resetProfile() {
@@ -729,7 +762,13 @@ export class Game {
       const trackStat = item(e.sledTrack).stat ?? 1;
       // the deep lug track floats and bites in powder
       const prof = { ...SLED, powderDrag: SLED.powderDrag * trackStat, powderBite: 1 / Math.sqrt(trackStat) };
-      stepGlider(s, prof, free ? mv.x : 0, free ? mv.y : 0, dt, this.terrain, this.solid, this.grid, boost);
+      stepGlider(s, prof, free ? mv.x : 0, free ? mv.y : 0, dt, this.terrain, this.solid, this.grid, boost, this.p.settings.sledAssist);
+      // climb assist: held on a slope too steep for the track while you are on the throttle: say why
+      this.heldT = s.held && mv.y > 0.2 ? this.heldT + dt : 0;
+      if (this.heldT > 1.2 && this.time - this.heldHintAt > 10) {
+        this.heldHintAt = this.time;
+        this.hud.toast('Too steep for the track. Angle across the slope.', 'warn', 3);
+      }
       const sp = glideSpeed(s);
       const fx = -Math.sin(s.yaw);
       const fz = -Math.cos(s.yaw);
@@ -796,7 +835,7 @@ export class Game {
       void scan;
       const gust = Math.sin(this.time * 0.7) * 0.5 + Math.sin(this.time * 1.9) * 0.3;
       const w = this.cond.wind * (1 + gust * 0.5) * 1.1;
-      stepHeli(h, HELI, free ? wx : 0, free ? wz : 0, lift, dt, this.terrain, { x: w, z: w * 0.3 });
+      stepHeli(h, HELI, free ? wx : 0, free ? wz : 0, lift, dt, this.terrain, { x: w, z: w * 0.3 }, this.p.settings.heliAssist);
       // rotor wash: snow blown off the ground when low
       const agl = heliAgl(h, this.terrain);
       if (h.rotor > 0.6 && agl < 14) {
@@ -1180,6 +1219,7 @@ export class Game {
     }
     if (!a) {
       this.hud.setAction(null);
+      this.lastAct = null;
       if (this.holdId !== 'pet-pose') {
         this.holdId = '';
         this.holdT = 0;
@@ -1193,6 +1233,7 @@ export class Game {
     if (a.hold <= 0) {
       if (pressed && enabled) a.run();
       this.hud.setAction(a.label, !!a.red, 0, enabled);
+      this.lastAct = { label: a.label, hold: 0, enabled };
       return;
     }
     if (held && enabled) {
@@ -1214,6 +1255,7 @@ export class Game {
       if (this.holdT === 0) this.holdId = '';
     }
     this.hud.setAction(a.label, !!a.red, this.holdId === a.id ? this.holdT / a.hold : 0, enabled);
+    this.lastAct = { label: a.label, hold: this.holdId === a.id ? this.holdT / a.hold : 0, enabled };
   }
 
   private updateBadges() {
@@ -1474,6 +1516,7 @@ export class Game {
       this.hud.setCompass(heading, null, 0, '');
       this.markers.setBeacon(null);
     }
+    this.updateRoute(target, pos);
     const c = this.cond;
     const danger = avalancheDanger(p.weather, c);
     // minimal: the temperature, and the sky only when it matters (snow, a storm that grounds the helicopter)
@@ -1501,6 +1544,28 @@ export class Game {
     } else this.hud.setScan(null, 0);
     this.hud.hint(!this.input.touch ? false : p.played < 25 && this.mode === 'foot');
     this.hud.update(Math.max(dt, this.realDt));
+  }
+
+  /**
+   * The route line (an assist, off unless chosen): dots on the snow along the roads to the objective.
+   * Planned again only when the target moves or you stray from the plan; on foot, on the sled and on
+   * skis (from the helicopter the beacon and compass are the guide).
+   */
+  private updateRoute(target: { x: number; z: number } | null, pos: { x: number; z: number }) {
+    const on = this.p.settings.routeLine && !!target && this.mode !== 'heli' && !(this.watching > 0 && !this.watchSkip);
+    if (!on || !target) {
+      this.way = null;
+      this.markers.setRoute(null);
+      return;
+    }
+    const f = this.wayFrom;
+    const moved = Math.hypot(pos.x - f.x, pos.z - f.z);
+    const retarget = Math.hypot(target.x - f.tx, target.z - f.tz) > 5;
+    if (!this.way || retarget || moved > 40) {
+      this.way = wayTo(this.roads, pos, target);
+      this.wayFrom = { x: pos.x, z: pos.z, tx: target.x, tz: target.z };
+    }
+    this.markers.setRoute(trimWay(this.way, pos, 166), this.p.active ? 0x5ad1ff : 0xf2c230);
   }
 
   private indoorsNow() {
@@ -1687,6 +1752,44 @@ export class Game {
   }
 
   /** For the browser test scripts. */
+  /** The read-only view behind `window.game` (see snapshot.ts): plain values only, built on each read. */
+  publicState(): GameSnapshot {
+    const p = this.p;
+    const f = this.focusPos();
+    const r = p.active;
+    const step = r ? currentStep(r) : null;
+    const res = this.pack.result;
+    const rk = rank(p);
+    return {
+      state: this.state,
+      panel: this.panels.open,
+      day: p.weather.day,
+      minute: Math.floor(p.weather.minute),
+      funds: p.funds,
+      reputation: p.rep,
+      rank: { index: rk, name: RANKS[rk].name },
+      mode: this.mode,
+      position: { x: f.x, y: f.y, z: f.z },
+      speedKmh: this.speedNow() * 3.6,
+      heading: (-this.headingNow() * 180) / Math.PI,
+      heli: { altitudeAboveGround: heliAgl(this.heli, this.terrain), landed: this.heli.landed, rotor: this.heli.rotor },
+      koda: { mode: this.dog.mode, distance: Math.hypot(this.dog.x - f.x, this.dog.z - f.z) },
+      weather: { sky: this.cond.sky, windKmh: this.cond.windKmh, tempC: this.cond.temp, snow: this.cond.snow, grounded: this.cond.grounded, avalancheDanger: avalancheDanger(p.weather, this.cond) },
+      mission: r && step ? { id: r.id, title: mission(r.id).title, step: r.step, steps: mission(r.id).steps.length, stepKind: step.kind, objective: step.text, seconds: r.time } : null,
+      action: this.state === 'play' && this.lastAct ? { ...this.lastAct } : null,
+      progress: {
+        storyDone: MISSIONS.filter((m) => !m.dynamic && done(p, m.id)).length,
+        storyTotal: MISSIONS.filter((m) => !m.dynamic).length,
+        calloutsAnswered: MISSIONS.filter((m) => m.dynamic).reduce((a, m) => a + (p.completed[m.id] ?? 0), 0),
+        badges: p.badges.length,
+        badgesTotal: BADGES.length,
+        buildings: [...p.upgrades],
+      },
+      avalanche: { fired: this.pack.fired, settled: this.pack.done, releasedShare: res.weakTotal ? res.weakReleased / res.weakTotal : 0, reachedRoad: res.roadHit },
+      assists: { heliHover: p.settings.heliAssist, sledClimb: p.settings.sledAssist, routeLine: p.settings.routeLine },
+    };
+  }
+
   debug() {
     return {
       game: this,
@@ -1722,6 +1825,7 @@ export class Game {
                 .slice(0, 5),
       }),
       sharpMap: () => this.sharpMap,
+      route: () => ({ dots: this.markers.routeDots, way: this.way ? { roads: this.way.roads, length: Math.round(this.way.length), points: this.way.pts.length } : null }),
       actor: () => ({ yaw: this.walker.yaw, speed: this.walker.speed, camYaw: this.cam.yaw, x: this.walker.x, z: this.walker.z }),
       info: () => ({ calls: this.rig.renderer.info.render.calls, tris: this.rig.renderer.info.render.triangles, heli: { ...this.heli }, dog: { mode: this.dog.mode, anim: this.dog.anim, x: this.dog.x, z: this.dog.z } }),
       state: () => ({ mode: this.mode, pos: this.pos2(), active: this.p.active, fps: Math.round(this.fps), step: this.p.active ? currentStep(this.p.active)?.kind : null, watching: this.watching, pack: { fired: this.pack.fired, done: this.pack.done, moving: this.pack.moving, result: this.pack.result } }),

@@ -48,8 +48,11 @@ export const heliAgl = (h: Heli, t: Terrain) => h.y - t.height(h.x, h.z);
 /**
  * One step. `mx, mz`: desired ground direction (world, magnitude 0..1). `lift`: -1..1.
  * `wind`: a push (m/s²) on the airframe.
+ * `assist`: the hover and landing assist. With the stick centred it holds position against the wind and
+ * brakes harder; low down it slows the descent to a gentle touch and bleeds off sideways speed, and
+ * hovering just above the ground with nothing held it settles onto the skids. Off: unchanged.
  */
-export function stepHeli(h: Heli, p: HeliProfile, mx: number, mz: number, lift: number, dt: number, t: Terrain, wind: { x: number; z: number } = { x: 0, z: 0 }): void {
+export function stepHeli(h: Heli, p: HeliProfile, mx: number, mz: number, lift: number, dt: number, t: Terrain, wind: { x: number; z: number } = { x: 0, z: 0 }, assist = false): void {
   h.bump = 0;
   h.rotor += ((h.running ? 1 : 0) - h.rotor) * Math.min(1, dt * (h.running ? 1.3 : 0.45));
   const ready = h.rotor > 0.92;
@@ -72,13 +75,22 @@ export function stepHeli(h: Heli, p: HeliProfile, mx: number, mz: number, lift: 
   const top = p.top * (0.35 + 0.65 * low);
   const tx = mx * top;
   const tz = mz * top;
-  const k = Math.min(1, (p.accel / Math.max(6, p.top)) * dt * 1.6);
+  const centred = mag < 0.12;
+  const k = Math.min(1, (p.accel / Math.max(6, p.top)) * dt * 1.6 * (assist && centred ? (agl < 6 ? 4 : 2.5) : 1));
   const ax = (tx - h.vx) * k;
   const az = (tz - h.vz) * k;
-  h.vx += ax + wind.x * dt;
-  h.vz += az + wind.z * dt;
+  // the assist leans into the wind for you while the stick is centred
+  const windK = assist && centred ? 0 : 1;
+  h.vx += ax + wind.x * dt * windK;
+  h.vz += az + wind.z * dt * windK;
   // climb with the lever; hold altitude when it is centred
-  const targetVy = lift * p.climb * (h.rotor > 0.6 ? 1 : 0) - (h.rotor < 0.6 ? 3 : 0);
+  let targetVy = lift * p.climb * (h.rotor > 0.6 ? 1 : 0) - (h.rotor < 0.6 ? 3 : 0);
+  if (assist && h.rotor > 0.6) {
+    // a gentle touch: the descent slows to about 1 m/s over the last 12 m
+    if (targetVy < 0 && agl < 12) targetVy = Math.max(targetVy, -(1 + (agl / 12) * (p.climb - 1)));
+    // hovering just off the ground with nothing held: settle onto the skids
+    if (agl < 2.5 && centred && Math.abs(lift) < 0.05) targetVy = -0.8;
+  }
   h.vy += (targetVy - h.vy) * Math.min(1, dt * 2.5);
   h.x += h.vx * dt;
   h.y += h.vy * dt;

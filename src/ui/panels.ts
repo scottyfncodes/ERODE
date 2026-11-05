@@ -262,6 +262,10 @@ export class Panels {
       <div class="setrow"><span>Look up and down</span>${seg('invertY', [['0', 'Normal'], ['1', 'Inverted']], s.invertY ? '1' : '0')}</div>
       <div class="setrow"><span>Graphics</span>${seg('quality', [['auto', 'Auto'], ['low', 'Light'], ['high', 'Full']], s.quality)}</div>
       ${canVibrate() ? `<div class="setrow"><span>Vibration</span>${seg('vibrate', [['1', 'On'], ['0', 'Off']], s.vibrate ? '1' : '0')}</div>` : ''}
+      <div class="label set-h">Assists</div>
+      <div class="setrow"><span>Helicopter hover and landing<small>Holds you steady when the stick is centred and sets you down gently</small></span>${seg('heliAssist', [['1', 'On'], ['0', 'Off']], s.heliAssist ? '1' : '0')}</div>
+      <div class="setrow"><span>Sled hill hold<small>Stops the sled sliding back on slopes too steep to climb</small></span>${seg('sledAssist', [['1', 'On'], ['0', 'Off']], s.sledAssist ? '1' : '0')}</div>
+      <div class="setrow"><span>Route line<small>Dots on the snow along the roads to your objective</small></span>${seg('routeLine', [['1', 'On'], ['0', 'Off']], s.routeLine ? '1' : '0')}</div>
       <div class="label" style="margin-top:12px">Keys: WASD move, Shift run, E act, F fire, R and C climb and descend, J and L turn the camera, M map, Esc pause</div>
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><button class="btn" data-a="back">Back to patrol</button><button class="btn ghost" data-a="title">Save and quit to title</button><button class="btn ghost" data-a="reset" style="margin-left:auto">Start over</button></div>`;
     body.querySelectorAll('.seg').forEach((g) => {
@@ -270,7 +274,7 @@ export class Panels {
           const k = (g as HTMLElement).dataset.k!;
           const v = (b as HTMLElement).dataset.v!;
           const next = { ...s } as Settings;
-          if (k === 'sound' || k === 'music' || k === 'invertY' || k === 'vibrate') (next as unknown as Record<string, boolean>)[k] = v === '1';
+          if (k === 'sound' || k === 'music' || k === 'invertY' || k === 'vibrate' || k === 'heliAssist' || k === 'sledAssist' || k === 'routeLine') (next as unknown as Record<string, boolean>)[k] = v === '1';
           else if (k === 'look') next.look = Number(v);
           else if (k === 'quality') next.quality = v as Settings['quality'];
           apply(next);
