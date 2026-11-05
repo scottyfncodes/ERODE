@@ -30,7 +30,9 @@ ROLES = {
     "concrete": "#9A9893", "catRed": "#A4473A", "rust": "#7A4C33", "dark": "#23262A", "track": "#4A4D50",
     "glass": "#2E3B44", "blade": "#6D6A63", "snow": "Kessel Snow", "yellow": "#D9A429", "control": "#D2C9A8",
     "panel": "#1D2A3A", "panelCell": "#2F4A66", "battery": "#8A8E88", "whip": "#D8D8D8", "antenna": "#E6E3DC",
-    "plate": "#55534E", "tailings": "#9A7456", "pipe": "#3B3532", "rope": "#8A7A5A", "lamp": "#E9C46A",
+    "plate": "#55534E", "tailings": "#9A7456",
+    # snow lying on the ground (drifts, mounds, banks): the game lays it onto the terrain under the piece
+    "groundSnow": "Kessel Snow", "pipe": "#3B3532", "rope": "#8A7A5A", "lamp": "#E9C46A",
 }
 mats = K.Materials(pal, ROLES, prefix="RS")
 M = mats.__getitem__
@@ -115,7 +117,7 @@ def snow_fence():
         p.append(B("timberOld" if i % 2 else "timber", 4.6, 0.15, 0.04, (0, y, 0.1), (0, 0, 0.012 * ((i * 7) % 3 - 1))))
     for x in (-1.0, 1.0):
         p.append(B("timberDark", 0.1, 1.9, 0.05, (x, 1.15, 0.14)))
-    p += [B("snow", 4.5, 0.08, 0.16, (0, 2.27, 0.1)), mound("snow", 5.2, 0.62, 3.6, (0, -0.1, 1.55), seg=8, rings=2)]
+    p += [B("snow", 4.5, 0.08, 0.16, (0, 2.27, 0.1)), mound("groundSnow", 5.2, 0.62, 3.6, (0, -0.1, 1.55), seg=10, rings=3)]
     return [finish(p, "fence")]
 
 
@@ -181,7 +183,7 @@ def repeater():
             c.rotate(Matrix.Rotation(-0.9, 3, "X"))
             p.append(B("panelCell", 0.36, 0.01, 0.4, tuple(Vector((0, 3.2, 0.9)) + c), (-0.9, 0, 0)))
     p += [B("battery", 0.8, 1.0, 0.6, (0.9, 0.5, 0), bevel=0.02), B("snow", 0.9, 0.12, 0.7, (0.9, 1.05, 0)),
-          B("dark", 0.05, 0.3, 0.05, (0.9, 0.75, 0.32)), mound("snow", 2.6, 0.35, 2.0, (0.3, -0.05, -0.4))]
+          B("dark", 0.05, 0.3, 0.05, (0.9, 0.75, 0.32)), mound("groundSnow", 2.6, 0.35, 2.0, (0.3, -0.05, -0.4))]
     return [finish(p, "repeater")]
 
 
@@ -192,7 +194,7 @@ def warning_sign():
     p = [C("steel", 0.05, 0.05, 2.6, 6, (-0.5, 1.3, 0)), C("steel", 0.05, 0.05, 2.6, 6, (0.5, 1.3, 0)),
          B("plate", 1.56, 1.56, 0.04, (0, 2.2, 0.02)), B("steelDark", 1.2, 0.06, 0.06, (0, 2.75, -0.03)),
          B("steelDark", 1.2, 0.06, 0.06, (0, 1.65, -0.03)), B("snow", 1.0, 0.1, 0.3, (0, 3.02, 0.02)),
-         mound("snow", 1.6, 0.3, 0.8, (0, -0.05, 0))]
+         mound("groundSnow", 1.6, 0.3, 0.8, (0, -0.05, 0))]
     for x in (-0.5, 0.5):
         for y in (1.65, 2.75):
             p.append(C("steelDark", 0.03, 0.03, 0.06, 6, (x, y, 0.045), (math.pi / 2, 0, 0)))
@@ -271,7 +273,7 @@ def headframe():
     # the collar of the shaft and the tailings heap, with snow on them
     p += [B("timberOld", 3.4, 0.6, 3.0, (0, 0.1, 0)), B("dark", 2.2, 0.62, 1.8, (0, 0.11, 0.2)),
           B("snow", 0.6, 0.1, 3.0, (-1.4, 0.45, 0)), B("snow", 0.6, 0.1, 3.0, (1.4, 0.45, 0)),
-          mound("tailings", 7, 1.6, 5, (3.5, -0.3, 2.5), seg=12), mound("snow", 5.2, 1.5, 3.6, (3.2, -0.08, 2.3), seg=12)]
+          mound("tailings", 7, 1.6, 5, (3.5, -0.3, 2.5), seg=12), mound("groundSnow", 5.2, 1.5, 3.6, (3.2, -0.08, 2.3), seg=12)]
     return [finish(p, "headframe")]
 
 
@@ -305,7 +307,7 @@ def mine_cabin():
     p += [B("timberDark", 0.8, 1.6, 0.06, (0.6, 0.75, 1.95), (0, 0.5, 0.18)),
           C("pipe", 0.12, 0.12, 2.2, 8, (1.6, 1.4, 1.0)), C("pipe", 0.16, 0.16, 0.12, 8, (1.6, 2.5, 1.0)),
           B("timberDark", 2.2, 0.06, 0.25, (-1.5, 0.08, 2.6), (0, 0.4, 0)), B("timberDark", 1.8, 0.06, 0.25, (-0.6, 0.1, -2.5), (0, -0.3, 0.05)),
-          mound("snow", 3.4, 0.5, 2.0, (-2.6, -0.05, 0.6)), mound("snow", 5.4, 0.35, 1.6, (0, -0.05, -2.3))]
+          mound("groundSnow", 3.4, 0.5, 2.0, (-2.6, -0.05, 0.6)), mound("groundSnow", 5.4, 0.35, 1.6, (0, -0.05, -2.3))]
     return [finish(p, "minecabin")]
 
 

@@ -145,4 +145,57 @@ describe('the patrol lodge (MeshCraft)', () => {
       expect(meshes(view.group)).toBe(meshes(new StationView(terrain, topo).group));
     }
   });
+
+  it('cuts the roof away when the camera is under it, as when you walk out of the door with the camera behind you', async () => {
+    for (const models of [await all(), {}]) {
+      const view = new StationView(terrain, topo, models);
+      const room = (view as unknown as Rooms).rooms[0];
+      // on the porch steps, outside the lodge; the camera behind, under the porch roof
+      const px = LODGE.x + LODGE.w / 2 + 4.5;
+      const cam = new THREE.Vector3(LODGE.x + LODGE.w / 2 + 1.5, view.y + 2.4, LODGE.z);
+      view.cutaway(px, LODGE.z, cam);
+      expect(room.roof.visible).toBe(false);
+      // and inside the room by the door: the east wall between it and you goes too
+      view.cutaway(px, LODGE.z, cam.set(LODGE.x + LODGE.w / 2 - 1.2, view.y + 2.2, LODGE.z));
+      expect(room.roof.visible).toBe(false);
+      expect(room.walls.find((w) => w.nx === 1)!.obj.visible).toBe(false);
+      // out in the yard with the camera high above: everything stands
+      view.cutaway(px + 8, LODGE.z, cam.set(px + 16, view.y + 9, LODGE.z));
+      expect(room.roof.visible).toBe(true);
+      for (const w of room.walls) expect(w.obj.visible).toBe(true);
+    }
+  });
+
+  it('takes what hangs on a wall away with it: the porch sign and lantern, the chimney, the badge board', async () => {
+    for (const models of [await all(), {}]) {
+      const view = new StationView(terrain, topo, models);
+      const room = (view as unknown as Rooms).rooms[0];
+      const wall = (nx: number, nz: number) => room.walls.find((w) => w.nx === nx && w.nz === nz)!.obj;
+      const has = (o: THREE.Object3D, test: (m: THREE.Mesh) => boolean) => {
+        let hit = false;
+        o.traverse((c) => (c as THREE.Mesh).isMesh && test(c as THREE.Mesh) && (hit = true));
+        return hit;
+      };
+      const textured = (m: THREE.Mesh) => !!(m.material as THREE.MeshLambertMaterial).map;
+      const glow = (m: THREE.Mesh) => (m.material as THREE.Material).type === 'MeshBasicMaterial';
+      // the east wall carries the KESSEL PATROL sign (its painted face) and the lantern (a glow)
+      expect(has(wall(1, 0), textured)).toBe(true);
+      expect(has(wall(1, 0), glow)).toBe(true);
+      // nothing textured or glowing is left standing on its own at the porch
+      const group = (view as unknown as { rooms: { group: THREE.Group }[] }).rooms[0].group;
+      for (const c of group.children) if (!room.walls.some((w) => w.obj === c) && c !== room.roof && c.name !== 'inside') expect(has(c, (m) => textured(m) || glow(m)), c.name).toBe(false);
+      // the chimney stack goes with the west wall: nothing tall stands outside the west wall otherwise
+      wall(-1, 0).updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(wall(-1, 0));
+      expect(b.max.y - view.y).toBeGreaterThan(7);
+      // the badge board with the south wall, its pins still switchable
+      view.setBadges(['b1']);
+      const pins = (view as unknown as { badgePins: Map<string, THREE.Mesh> }).badgePins;
+      for (const p of pins.values()) {
+        let under = false;
+        for (let q: THREE.Object3D | null = p; q; q = q.parent) if (q === wall(0, 1)) under = true;
+        expect(under).toBe(true);
+      }
+    }
+  });
 });

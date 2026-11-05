@@ -138,6 +138,8 @@ export function paintModel(src: THREE.Object3D, paint: Record<string, THREE.Mate
     const role = roleOf(m);
     const hex = parseInt(String((m.material as THREE.Material).userData?.gitcraft_color ?? '#cccccc').slice(1), 16);
     m.material = paint[role] ?? fallback(hex);
+    // the role it was painted for (placement reads it: ground snow is laid onto the terrain)
+    m.userData.role = role;
     m.castShadow = true;
     m.receiveShadow = true;
   });

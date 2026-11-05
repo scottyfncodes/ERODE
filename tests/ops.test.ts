@@ -5,12 +5,13 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OPS_IDS, OPS_MODELS, type PatrolModels } from '../src/render/patrolModels';
 import { getTerrain } from '../src/world/terrain';
 import { CHARGE_SPOTS, PADS } from '../src/world/places';
-import { buildOps, opsObstacles, opsSpots } from '../src/render/opsView';
+import { buildOps, groundUnder, opsFootprint, opsObstacles, opsSpots } from '../src/render/opsView';
+import { grade, PAL } from '../src/render/kit';
 
 // The working mountain's infrastructure stands where it belongs and never in the way of play.
 describe('the working mountain', () => {
   const t = getTerrain();
-  const spots = opsSpots();
+  const spots = opsSpots(t);
 
   it('keeps every piece off the roads, tracks and piste, the charge spots and the station yard', () => {
     for (const s of spots) {
@@ -102,5 +103,101 @@ describe('the working mountain', () => {
     const b = near(mixed, cat.x, cat.z, 3.2);
     expect(b.max.y).toBeCloseTo(a.max.y, 4);
     expect(meshes(mixed)).toBe(meshes(code));
+  });
+
+  // ---- setting things down on the mountain (src/world/footing.ts)
+  it('seats every piece by its whole footprint: nothing hangs in the air, and nothing is sunk past what its ground allows', () => {
+    for (const s of spots) {
+      const g = groundUnder(t, s.x, s.z, s.rot, opsFootprint(s.kind));
+      if (s.mode === 'plumb') {
+        // the base is the lowest ground under the footprint: no corner is above the snow
+        expect(s.y, `${s.kind} at ${s.x.toFixed(0)},${s.z.toFixed(0)}`).toBeCloseTo(g.min, 6);
+        // and the uphill side runs in by no more than the ground's rise across it, which is kept small
+        expect(g.max - g.min, `${s.kind} rise`).toBeLessThan(s.kind === 'fence' ? 1.15 : 1.3);
+      } else {
+        // lying on the fitted plane: the ground under it is within a hand's breadth of that plane
+        const n = s.n;
+        const pts = 9;
+        let worst = 0;
+        for (let i = 0; i < pts; i++)
+          for (let j = 0; j < pts; j++) {
+            const f = opsFootprint(s.kind);
+            const lx = (i / (pts - 1) - 0.5) * 2 * f.hx;
+            const lz = (j / (pts - 1) - 0.5) * 2 * f.hz;
+            const c = Math.cos(s.rot);
+            const sn = Math.sin(s.rot);
+            const wx = s.x + lx * c + lz * sn;
+            const wz = s.z - lx * sn + lz * c;
+            const plane = s.y - (n[0] * (wx - s.x) + n[2] * (wz - s.z)) / n[1];
+            worst = Math.max(worst, Math.abs(t.height(wx, wz) - plane));
+          }
+        expect(worst, `${s.kind} on its plane`).toBeLessThan(0.45);
+      }
+    }
+  });
+
+  it('runs the snow fences along gentle ground on the shelf above the start zone, following the contour', () => {
+    const fences = spots.filter((s) => s.kind === 'fence');
+    expect(fences.length).toBeGreaterThanOrEqual(16);
+    for (const s of fences) {
+      const g = groundUnder(t, s.x, s.z, s.rot, opsFootprint('fence'));
+      expect(g.steepest, `fence at ${s.x.toFixed(0)}`).toBeLessThan((25 * Math.PI) / 180);
+      // the shelf at the top of Kessel Bowl, above the slab
+      expect(s.z).toBeLessThan(-460);
+      expect(s.z).toBeGreaterThan(-500);
+      // along the contour: the fence's length (local x) is level to within a few degrees
+      const c = Math.cos(s.rot);
+      const sn = Math.sin(s.rot);
+      const along = t.height(s.x + 2.2 * c, s.z - 2.2 * sn) - t.height(s.x - 2.2 * c, s.z + 2.2 * sn);
+      expect(Math.abs(along) / 4.4, `fence at ${s.x.toFixed(0)} along its length`).toBeLessThan(0.2);
+    }
+  });
+
+  it('lays the fence drifts on the snow: no drift hangs in the air or sinks out of sight', async () => {
+    const g = buildOps(t, await all());
+    const snow = new THREE.Color(grade(PAL.snow));
+    const v = new THREE.Vector3();
+    const c = new THREE.Color();
+    let checked = 0;
+    for (const s of spots.filter((s) => s.kind === 'fence')) {
+      // the drift: 1.55 m behind the fence (local +z), downhill
+      const dx = s.x + 1.55 * Math.sin(s.rot);
+      const dz = s.z + 1.55 * Math.cos(s.rot);
+      g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !(m.material as THREE.MeshLambertMaterial).vertexColors) return;
+        const pos = m.geometry.getAttribute('position');
+        const col = m.geometry.getAttribute('color');
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i);
+          if (Math.hypot(v.x - dx, v.z - dz) > 1.6) continue;
+          c.fromBufferAttribute(col, i);
+          if (Math.abs(c.r - snow.r) + Math.abs(c.g - snow.g) + Math.abs(c.b - snow.b) > 0.02) continue;
+          const above = v.y - t.height(v.x, v.z);
+          if (above > 1.5) continue; // the snow along the top rail
+          checked++;
+          expect(above, `drift by the fence at ${s.x.toFixed(0)}`).toBeGreaterThan(-0.15);
+          expect(above).toBeLessThan(0.7);
+        }
+      });
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it('puts the radio repeater where you can see it: clear sight from the ridge track as it arrives, not on a cliff', () => {
+    const r = spots.find((s) => s.kind === 'repeater')!;
+    const g = groundUnder(t, r.x, r.z, r.rot, opsFootprint('repeater'));
+    expect(g.steepest).toBeLessThan((15 * Math.PI) / 180);
+    // from where the track arrives on the pad (eye height), the mast's top half is in plain view
+    const eye = { x: -215, z: -470, y: t.height(-215, -470) + 1.7 };
+    const top = { x: r.x, z: r.z, y: r.y + 6 };
+    const d = Math.hypot(top.x - eye.x, top.z - eye.z);
+    expect(d).toBeLessThan(40);
+    for (let k = 1; k < 40; k++) {
+      const f = k / 40;
+      const x = eye.x + (top.x - eye.x) * f;
+      const z = eye.z + (top.z - eye.z) * f;
+      expect(t.height(x, z), 'terrain in the way').toBeLessThan(eye.y + (top.y - eye.y) * f);
+    }
   });
 });

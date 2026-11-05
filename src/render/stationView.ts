@@ -5,6 +5,12 @@ import { EQUIP, GARAGE, HANGAR, KENNEL, LODGE, MAST, PAD, SPOTS, WING, type Upgr
 import { bakeInPlace, ball, box, cyl, gable, glow, logWall, mat, PAL, shade, snowRoof, windowPane } from './kit';
 import { LODGE_IDS, paintModel, YARD_IDS, type LodgeId, type PatrolModels, type YardId } from './patrolModels';
 
+/** Whether `o` is `root` or inside it. */
+function isUnder(o: THREE.Object3D, root: THREE.Object3D): boolean {
+  for (let p: THREE.Object3D | null = o; p; p = p.parent) if (p === root) return true;
+  return false;
+}
+
 /** A painted sign: chunky letters on a board. */
 export function signTexture(text: string, bg = '#7b2f3b', fg = '#f6ecdc', w = 512, h = 128, accent?: string): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -128,12 +134,12 @@ export class StationView {
       // the MeshCraft lodge is painted in many roles: bake its plain colours per vertex, so each
       // cut-away wall still draws in a couple of calls
       const vc = this.lodgeModelled && r === this.rooms[0];
-      for (const w of r.walls) bakeInPlace(w.obj, [], vc);
+      for (const w of r.walls) bakeInPlace(w.obj, [...this.badgePins.values()].filter((p) => isUnder(p, w.obj)), vc);
       bakeInPlace(r.roof, [], vc);
       const keep: THREE.Object3D[] = [...r.walls.map((w) => w.obj), r.roof];
       for (const c of r.group.children) if (c.name === 'inside' || c.name === 'supply-crate') keep.push(c);
       const inside = r.group.getObjectByName('inside');
-      if (inside) bakeInPlace(inside, [...this.fire, ...this.badgePins.values()], vc);
+      if (inside) bakeInPlace(inside, [...this.fire, ...[...this.badgePins.values()].filter((p) => isUnder(p, inside))], vc);
       bakeInPlace(r.group, keep, vc);
     }
     for (const [id, o] of this.upgrades) bakeInPlace(o, id === 'lights' ? [this.flag] : [], id === 'wing' && this.lodgeModelled);
@@ -328,10 +334,19 @@ export class StationView {
     inside.add(lamp);
     for (let k = 0; k < 3; k++) {
       const ski = box(0.1, 1.8, 0.04, [PAL.red, PAL.wood, 0x2a9d8f][k], 5.6 + k * 0.25, 1.3, -hd + 0.3);
+      ski.name = 'wall-skis';
       inside.add(ski);
     }
     inside.name = 'inside';
     g.add(inside);
+    // what hangs on a wall, or is built into it, goes with that wall in the cut-away: the porch sign and
+    // lantern with the east wall, the chimney with the west, the badge board with the south, the skis
+    // hung on the north wall with it
+    const wallAt = (nx: number, nz: number) => walls.find((w) => w.nx === nx && w.nz === nz)!.obj;
+    wallAt(1, 0).add(lantern, s);
+    for (const c of g.children.filter((c) => c.name === 'chimney')) wallAt(-1, 0).add(c);
+    wallAt(0, 1).add(board);
+    for (const c of inside.children.filter((c) => c.name === 'wall-skis')) wallAt(0, -1).add(c);
     this.group.add(g);
     this.group.add(this.fireLight);
     return { group: g, roof, walls, x: L.x, z: L.z };
@@ -422,6 +437,7 @@ export class StationView {
     // chimney on the west end
     const chim = box(1.2, L.wallH + 4.5, 1.2, PAL.stone, -hw - 0.5, (L.wallH + 4.5) / 2, 2.5);
     const cap = box(1.5, 0.3, 1.5, PAL.stoneDark, -hw - 0.5, L.wallH + 4.6, 2.5);
+    chim.name = cap.name = 'chimney';
     g.add(chim, cap);
   }
 
@@ -804,7 +820,12 @@ export class StationView {
       const lodge = r === this.rooms[0];
       // the lodge's cutaway reaches out over the porch
       const dx = px - r.x;
-      const inside = (lodge ? dx > -LODGE.w / 2 - 0.6 && dx < LODGE.w / 2 + 3.4 : Math.abs(dx) < GARAGE.w / 2 + 0.6) && Math.abs(pz - r.z) < (lodge ? LODGE.d : GARAGE.d) / 2 + 0.6;
+      const playerIn = (lodge ? dx > -LODGE.w / 2 - 0.6 && dx < LODGE.w / 2 + 3.4 : Math.abs(dx) < GARAGE.w / 2 + 0.6) && Math.abs(pz - r.z) < (lodge ? LODGE.d : GARAGE.d) / 2 + 0.6;
+      // the camera inside the lodge's roof (over the room or under the porch roof, as it is when you walk
+      // out of the door with the camera behind you) cuts it away too, so it never looks out through logs
+      const cx = cam.x - r.x;
+      const camIn = lodge && cx > -LODGE.w / 2 - 1.0 && cx < LODGE.w / 2 + 3.6 && Math.abs(cam.z - r.z) < LODGE.d / 2 + 1.0 && cam.y < this.y + LODGE.wallH + 3.3;
+      const inside = playerIn || camIn;
       r.roof.visible = !inside;
       for (const w of r.walls) {
         const facing = (cam.x - r.x) * w.nx + (cam.z - r.z) * w.nz > 0;
