@@ -10,6 +10,8 @@ import { pieceGeometry } from './pieceGeometry';
  * you are going, a ring where you can act, pins over the slopes the scanner reads, flags where
  * charges go, paw prints on a scent trail.
  */
+const ROUTE_DOTS = 64;
+
 export class Markers {
   readonly group = new THREE.Group();
   private beacon: THREE.Group;
@@ -22,6 +24,9 @@ export class Markers {
   private paws: THREE.InstancedMesh;
   private pawCount = 0;
   private t = 0;
+  /** the route line (an assist): dots on the ground along the way to the objective */
+  private route: THREE.InstancedMesh;
+  private routeMat: THREE.MeshBasicMaterial;
 
   constructor(private terrain: Terrain) {
     this.beaconMat = new THREE.MeshBasicMaterial({ color: 0x5ad1ff, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide, fog: false });
@@ -48,6 +53,55 @@ export class Markers {
     this.paws.count = 0;
     this.paws.frustumCulled = false;
     this.group.add(this.paws);
+    const dot = new THREE.CircleGeometry(0.46, 12);
+    dot.rotateX(-Math.PI / 2);
+    this.routeMat = new THREE.MeshBasicMaterial({ color: 0x5ad1ff, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, fog: true });
+    this.route = new THREE.InstancedMesh(dot, this.routeMat, ROUTE_DOTS);
+    this.route.count = 0;
+    this.route.frustumCulled = false;
+    this.route.renderOrder = 2;
+    this.group.add(this.route);
+  }
+
+  /**
+   * The route line: a dotted line on the snow along `pts` (the next stretch of the way, from where you
+   * stand), every 2.6 m, getting smaller towards its end so it reads as leading off ahead.
+   */
+  /** how many route dots are down (QA) */
+  get routeDots() {
+    return this.route.count;
+  }
+
+  setRoute(pts: { x: number; z: number }[] | null, color = 0x5ad1ff) {
+    if (!pts || pts.length < 2) {
+      this.route.count = 0;
+      return;
+    }
+    this.routeMat.color.setHex(color);
+    const m = new THREE.Matrix4();
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+    let n = 0;
+    // start a couple of metres out, so the line does not sit under your feet
+    let s = 2.4;
+    let walked = 0;
+    for (let i = 1; i < pts.length && n < ROUTE_DOTS; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const d = Math.hypot(b.x - a.x, b.z - a.z);
+      while (s <= walked + d && n < ROUTE_DOTS) {
+        const f = (s - walked) / (d || 1);
+        const x = a.x + (b.x - a.x) * f;
+        const z = a.z + (b.z - a.z) * f;
+        const k = 1 - 0.55 * (s / Math.max(total, 1));
+        m.makeScale(k, 1, k).setPosition(x, this.terrain.height(x, z) + 0.12, z);
+        this.route.setMatrixAt(n++, m);
+        s += 2.6;
+      }
+      walked += d;
+    }
+    this.route.count = n;
+    this.route.instanceMatrix.needsUpdate = true;
   }
 
   setBeacon(x: number | null, z = 0, color = 0x5ad1ff) {
@@ -164,6 +218,7 @@ export class Markers {
     this.beaconRing.scale.setScalar(s);
     this.beaconMat.opacity = 0.2 + Math.sin(this.t * 2) * 0.06;
     this.ringMat.opacity = 0.6 + Math.sin(this.t * 5) * 0.25;
+    this.routeMat.opacity = 0.78 + Math.sin(this.t * 2.4) * 0.1;
     for (const [, p] of this.pins) p.g.rotation.y += dt * 0.6;
     void this.pawCount;
   }

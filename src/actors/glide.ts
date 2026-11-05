@@ -71,13 +71,15 @@ export interface Glider {
   power: number;
   /** sideways slip (m/s), for the spray */
   slip: number;
+  /** the climb assist is holding the sled on a slope too steep for its track (this step) */
+  held: boolean;
 }
 
 const G = 9.81;
 const _trees: Tree[] = [];
 
 export const newGlider = (x: number, z: number, yaw: number, t: Terrain): Glider => ({
-  x, y: t.height(x, z), z, vx: 0, vy: 0, vz: 0, yaw, lean: 0, airborne: false, air: 0, landed: 0, bump: 0, surface: 'packed', power: 0, slip: 0,
+  x, y: t.height(x, z), z, vx: 0, vy: 0, vz: 0, yaw, lean: 0, airborne: false, air: 0, landed: 0, bump: 0, surface: 'packed', power: 0, slip: 0, held: false,
 });
 
 export const glideSpeed = (g: Glider) => Math.hypot(g.vx, g.vz);
@@ -87,10 +89,14 @@ export const forwardSpeed = (g: Glider) => -(g.vx * Math.sin(g.yaw) + g.vz * Mat
 /**
  * One step. `steer` -1 (left) .. 1 (right), `throttle` -1 (brake / reverse / snowplough) .. 1.
  * `boost` multiplies the engine and top speed (upgrades).
+ * `hold`: the sled climb assist. Where the slope would beat the track and the sled is all but stopped
+ * (bogged on a climb, or parked facing uphill), it holds still like a parking brake instead of sliding
+ * back down. It never adds grip or power: what the sled can climb is unchanged.
  */
-export function stepGlider(g: Glider, p: GlideProfile, steer: number, throttle: number, dt: number, t: Terrain, solid: Colliders, trees: TreeGrid | null, boost = 1): void {
+export function stepGlider(g: Glider, p: GlideProfile, steer: number, throttle: number, dt: number, t: Terrain, solid: Colliders, trees: TreeGrid | null, boost = 1, hold = false): void {
   g.bump = 0;
   g.landed = 0;
+  g.held = false;
   const fx = -Math.sin(g.yaw);
   const fz = -Math.cos(g.yaw);
   const surf = t.surface(g.x, g.z);
@@ -126,6 +132,18 @@ export function stepGlider(g: Glider, p: GlideProfile, steer: number, throttle: 
       if (back > 0 && p.climb > 0) {
         gx += fx * back * p.climb * throttle;
         gz += fz * back * p.climb * throttle;
+      }
+    }
+    if (hold && throttle >= 0 && speed < 2) {
+      // the slope's pull backwards along the heading, against what the track can give
+      const back = -(gx * fx + gz * fz);
+      if (back > 0.4 && back > push + 0.05) {
+        gx = 0;
+        gz = 0;
+        push = 0;
+        g.vx *= 0.3;
+        g.vz *= 0.3;
+        g.held = true;
       }
     }
     g.vx += (fx * push + gx) * dt;

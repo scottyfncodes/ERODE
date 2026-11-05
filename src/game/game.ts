@@ -3,6 +3,7 @@ import { AudioEngine } from '../audio/audio';
 import { Input } from '../core/input';
 import { BUZZ, buzz, hitStopScale, HIT_TOTAL } from './feel';
 import type { GameSnapshot } from './snapshot';
+import { RoadNet, trimWay, wayTo, type Way } from '../world/routing';
 import { forwardSpeed, glideSpeed, newGlider, SKIS, SLED, stepGlider, type Glider } from '../actors/glide';
 import { HELI, heliAgl, newHeli, stepHeli, type Heli } from '../actors/heli';
 import { newHusky, pet, startTrack, stepHusky, type Husky, type Scent } from '../actors/husky';
@@ -130,6 +131,13 @@ export class Game {
   /** the action button as last shown (for the read-only snapshot) */
   private lastAct: GameSnapshot['action'] = null;
   private cond: Conditions;
+  /** sled climb assist: how long it has been holding you, and when it last said so */
+  private heldT = 0;
+  private heldHintAt = -99;
+  /** route line: the planned way and where it was planned from */
+  private readonly roads = new RoadNet();
+  private way: Way | null = null;
+  private wayFrom = { x: 0, z: 0, tx: 1e9, tz: 1e9 };
   private indoors = 0;
   private seat = new THREE.Vector3();
   private tmp = new THREE.Vector3();
@@ -732,7 +740,13 @@ export class Game {
       const trackStat = item(e.sledTrack).stat ?? 1;
       // the deep lug track floats and bites in powder
       const prof = { ...SLED, powderDrag: SLED.powderDrag * trackStat, powderBite: 1 / Math.sqrt(trackStat) };
-      stepGlider(s, prof, free ? mv.x : 0, free ? mv.y : 0, dt, this.terrain, this.solid, this.grid, boost);
+      stepGlider(s, prof, free ? mv.x : 0, free ? mv.y : 0, dt, this.terrain, this.solid, this.grid, boost, this.p.settings.sledAssist);
+      // climb assist: held on a slope too steep for the track while you are on the throttle: say why
+      this.heldT = s.held && mv.y > 0.2 ? this.heldT + dt : 0;
+      if (this.heldT > 1.2 && this.time - this.heldHintAt > 10) {
+        this.heldHintAt = this.time;
+        this.hud.toast('Too steep for the track. Angle across the slope.', 'warn', 3);
+      }
       const sp = glideSpeed(s);
       const fx = -Math.sin(s.yaw);
       const fz = -Math.cos(s.yaw);
@@ -799,7 +813,7 @@ export class Game {
       void scan;
       const gust = Math.sin(this.time * 0.7) * 0.5 + Math.sin(this.time * 1.9) * 0.3;
       const w = this.cond.wind * (1 + gust * 0.5) * 1.1;
-      stepHeli(h, HELI, free ? wx : 0, free ? wz : 0, lift, dt, this.terrain, { x: w, z: w * 0.3 });
+      stepHeli(h, HELI, free ? wx : 0, free ? wz : 0, lift, dt, this.terrain, { x: w, z: w * 0.3 }, this.p.settings.heliAssist);
       // rotor wash: snow blown off the ground when low
       const agl = heliAgl(h, this.terrain);
       if (h.rotor > 0.6 && agl < 14) {
@@ -1480,6 +1494,7 @@ export class Game {
       this.hud.setCompass(heading, null, 0, '');
       this.markers.setBeacon(null);
     }
+    this.updateRoute(target, pos);
     const c = this.cond;
     const danger = avalancheDanger(p.weather, c);
     // minimal: the temperature, and the sky only when it matters (snow, a storm that grounds the helicopter)
@@ -1507,6 +1522,28 @@ export class Game {
     } else this.hud.setScan(null, 0);
     this.hud.hint(!this.input.touch ? false : p.played < 25 && this.mode === 'foot');
     this.hud.update(Math.max(dt, this.realDt));
+  }
+
+  /**
+   * The route line (an assist, off unless chosen): dots on the snow along the roads to the objective.
+   * Planned again only when the target moves or you stray from the plan; on foot, on the sled and on
+   * skis (from the helicopter the beacon and compass are the guide).
+   */
+  private updateRoute(target: { x: number; z: number } | null, pos: { x: number; z: number }) {
+    const on = this.p.settings.routeLine && !!target && this.mode !== 'heli' && !(this.watching > 0 && !this.watchSkip);
+    if (!on || !target) {
+      this.way = null;
+      this.markers.setRoute(null);
+      return;
+    }
+    const f = this.wayFrom;
+    const moved = Math.hypot(pos.x - f.x, pos.z - f.z);
+    const retarget = Math.hypot(target.x - f.tx, target.z - f.tz) > 5;
+    if (!this.way || retarget || moved > 40) {
+      this.way = wayTo(this.roads, pos, target);
+      this.wayFrom = { x: pos.x, z: pos.z, tx: target.x, tz: target.z };
+    }
+    this.markers.setRoute(trimWay(this.way, pos, 166), this.p.active ? 0x5ad1ff : 0xf2c230);
   }
 
   private indoorsNow() {
@@ -1766,6 +1803,7 @@ export class Game {
                 .slice(0, 5),
       }),
       sharpMap: () => this.sharpMap,
+      route: () => ({ dots: this.markers.routeDots, way: this.way ? { roads: this.way.roads, length: Math.round(this.way.length), points: this.way.pts.length } : null }),
       actor: () => ({ yaw: this.walker.yaw, speed: this.walker.speed, camYaw: this.cam.yaw, x: this.walker.x, z: this.walker.z }),
       info: () => ({ calls: this.rig.renderer.info.render.calls, tris: this.rig.renderer.info.render.triangles, heli: { ...this.heli }, dog: { mode: this.dog.mode, anim: this.dog.anim, x: this.dog.x, z: this.dog.z } }),
       state: () => ({ mode: this.mode, pos: this.pos2(), active: this.p.active, fps: Math.round(this.fps), step: this.p.active ? currentStep(this.p.active)?.kind : null, watching: this.watching, pack: { fired: this.pack.fired, done: this.pack.done, moving: this.pack.moving, result: this.pack.result } }),

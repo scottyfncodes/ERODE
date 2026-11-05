@@ -1510,6 +1510,19 @@ body.booted .title-screen .inner {
   border-bottom: 1px solid var(--line);
   font-size: 14px;
 }
+.setrow small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--muted);
+}
+.setrow .seg {
+  flex: none;
+}
+.set-h {
+  margin-top: 14px;
+}
 .seg {
   display: flex;
   gap: 4px;
