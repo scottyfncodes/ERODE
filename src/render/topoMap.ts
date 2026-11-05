@@ -20,7 +20,9 @@ export function drawTopo(t: Terrain, size = 640): HTMLCanvasElement {
 export function topoJob(t: Terrain, size: number): { canvas: HTMLCanvasElement; step: (ms: number) => boolean } {
   const c = document.createElement('canvas');
   c.width = c.height = size;
-  const g = c.getContext('2d')!;
+  // a CPU-backed canvas: the pixels are written here and read back once for the PNG, so a GPU-backed
+  // one only adds an upload and a read-back (seconds on a software renderer) for nothing
+  const g = c.getContext('2d', { willReadFrequently: true })!;
   const img = g.createImageData(size, size);
   const px = (i: number) => -WORLD_HALF + ((i + 0.5) / size) * WORLD_HALF * 2;
   const H = new Float32Array(size * size);
