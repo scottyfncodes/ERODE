@@ -333,15 +333,18 @@ export class Game {
   }
 
   /**
-   * Compile every shader the valley uses while the title is up (in parallel where the browser can), so
-   * neither the first frame nor the first step into the lodge stalls on it.
+   * Where the browser can compile shaders in parallel (KHR_parallel_shader_compile), compile every one the
+   * valley uses while the title is up, so neither the first frame nor the first step into the lodge
+   * stalls on it. Without it an "async" compile would block just the same, so the first frames behind the
+   * title compile them instead, as before.
    */
   async warm() {
     const r = this.rig.renderer;
+    if (!r.extensions.has('KHR_parallel_shader_compile')) return;
     try {
       await r.compileAsync(this.rig.scene, this.rig.camera);
     } catch {
-      /* an older browser without async compile: the first frame compiles them instead */
+      /* fall back to compiling on the first frames */
     }
   }
 
