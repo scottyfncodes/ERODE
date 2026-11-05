@@ -12,30 +12,38 @@ Everything here can be regenerated; nothing in this folder is loaded by the game
 | `MANIFEST.json` | Every shipped asset: path, SHA-256, bytes, the tools that made it |
 | `audio/` | The voice lines, the Kessel theme and the stingers: AudioCraft requests and `build_audio.sh` (see `audio/README.md`) |
 | `fx/` | The particle atlas from FXCraft flipbooks: `build_fx.py` (see `fx/README.md`) |
-| `kessel-art-bible.pdf` | Emblem, art direction, palette and the kit contact sheet (DesignCraft layout, PDFCraft assembly) |
+| `kessel-art-bible.pdf` | **The art bible, edition 2: the canonical visual reference** (20 pages: direction, colour, type, shapes, interface, people, places, light, weather, markers, the checklist for new assets). DesignCraft layout from in-game captures |
+| `bible/` | How the bible is made: `capture.mjs` (in-game captures), `tokens.ts` (colour values from the code), `build_bible.py` (DesignCraft), the captures, the editable `.designcraft` layout, `QA.md` (the page-by-page review) |
 
-## Art direction: the storybook valley
+## Art direction: storybook interface, high-country world
 
-A painted Swiss valley, framed square on: a miniature alpine world of chunky faceted primitives,
-coloured like a pastel postcard and composed with a love of symmetry.
+**The canonical reference is the art bible, `kessel-art-bible.pdf` (edition 2), built from `bible/`.**
+It is made from captures of the running game and colour values read from the code; when the game and
+any text here disagree, the game is right and the bible is rebuilt (`bible/build_bible.py`).
+`tests/art-direction.test.ts` fails when the stylesheet's tokens or the kit's rendered colours no
+longer match the bible, and when edition 1's retired dark-slate language comes back.
 
-- **Palette** (`rockslide-palette.json`, mirrored in `src/render/kit.ts` `PAL`): powder-blue
-  sky over a blush horizon, apricot and lavender at the golden hours, plum nights. Cream snow
-  with lavender shade, teal spruce, warm mauve granite. The patrol station is painted timber,
-  raspberry with cream trim under burgundy roofs; Hollin is a pastel row (blush, mustard, mint,
-  powder blue, lavender) with a powder-blue chapel under a mustard onion dome.
-- **The grade:** every material passes through `storybook()` once, when it is made: darks
-  lift to plum and chocolate (never black), loud colours settle to a painted pastel. So even a
-  one-off colour sits in the palette. A browser-composited plum vignette and fine film grain
-  finish the print.
-- **Composition:** the title is a symmetrical, one-point view of the lodge front, with the
-  patroller and Koda either side of the door and a slow push in and out. Taking a call shows a
-  centred chapter card ("Chapter Two · Eyes on Kessel Bowl"), coloured by the mission's family.
-- **Type:** Jost (a free Futura-style geometric) in tracked capitals for titles, signs and
-  labels; Courier Prime for the radio, like a telegram.
-- **Patrol equipment** stays tomato red with a cream cross, so anything that can help you
-  reads at a glance; pole orange still marks the way.
-- **The interface** is burgundy and aubergine card stock with an inset cream rule.
+- **Two layers.** The interface is storybook card stock: aubergine and burgundy cards with a thin
+  cream rule, cream paper, chapter cards in a soft family tone (blush, powder, mustard, mint,
+  lavender). The world is a working Colorado mountain in winter (#33): cobalt sky over a pale
+  horizon, a hard warm sun and cold blue shadows, aerial perspective, cold granite, weathered timber,
+  dark standing-seam roofs, Engelmann spruce, Hollin's barn-red, slate-blue, ochre and sage row.
+- **The grade:** every world material passes once through `grade()` in `src/render/kit.ts`:
+  lightness kept between 0.10 and 0.96 (no black, no blown white), saturation capped, near-blacks
+  toward a cold slate blue, greens toward olive, and the old storybook paints repainted (mint to
+  forest-service green, raspberry to oxblood, teal to spruce). A browser-composited lens (a cold
+  vignette, a cool-sky / warm-snow split, fine grain; closing in at night and in storms) finishes
+  the frame. The interface is never graded.
+- **Composition:** the title is a symmetrical, one-point view of the lodge front, with Vince and Koda
+  either side of the door and a slow push in and out. Taking a call shows a centred chapter card
+  ("Chapter Two · Eyes on Kessel Bowl"), coloured by the mission's family.
+- **Type:** Jost (tracked capitals for titles, labels, buttons; the cut wordmark), Courier Prime for
+  the radio and anything said aloud, IBM Plex Mono for readouts. Nothing else.
+- **Patrol equipment** stays patrol red with a cream cross; orange-tipped poles mark every road; the
+  mission beacon is amber for a call waiting and cyan for the active objective.
+- **Retired (edition 1):** slate instrument housings (#141C24, #1D2731), Inter and JetBrains Mono, the
+  plum print grade, the raspberry lodge and pastel village. `rockslide-palette.json` still holds the
+  storybook roles the MeshCraft scripts paint with; `grade()` turns them into the colours above.
 
 ## The people
 
@@ -184,7 +192,7 @@ python3 1_build_kit.py          # MeshCraft: build, preview, export three-web-to
 python3 2_forge_library.py      # ForgeCraft: route + library versions + hand-off; MeshCraft lantern template
 python3 3_emblem.py             # VectorCraft emblem (SVG/PNG/PDF)
 python3 4_share_card.py         # DesignCraft share card
-python3 5_art_bible.py          # DesignCraft art bible pages
+python3 ../bible/build_bible.py  # DesignCraft art bible, edition 2 (see bible/build_bible.py for the capture step)
 python3 6_verify_shipped.py     # MeshCraft: inspect + engine-check the GLBs that ship, compare with the rebuild
 python3 7_polish_sheets.py      # PhotoCraft: before/after sheets (docs/polish/) from captures of two builds
 ```

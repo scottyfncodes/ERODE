@@ -77,6 +77,7 @@ export class Terrain {
   readonly cell: number;
   readonly heights: Float32Array;
   readonly routes: RouteGeo[] = [];
+  private shapingOrder: RouteGeo[] = [];
 
   constructor(cell = 6.25) {
     this.cell = cell;
@@ -84,6 +85,7 @@ export class Terrain {
     // the shape before roads, then roads derived from it
     const pre = (x: number, z: number) => this.shaped(x, z, false);
     for (const r of ROUTES) this.routes.push(this.buildRoute(r, pre));
+    this.shapingOrder = [...this.routes.filter((g) => g.route.kind !== 'road'), ...this.routes.filter((g) => g.route.kind === 'road')];
     const n = this.n;
     this.heights = new Float32Array(n * n);
     for (let j = 0; j < n; j++) {
@@ -127,6 +129,19 @@ export class Terrain {
         }
       }
     }
+    // where it branches off a road already laid (the lake trail off the pass road, the ridge track),
+    // it leaves at that road's height: otherwise the later route, laid over the first, cuts a step or a
+    // pit into it (the lake trail left a 21 m deep notch in the pass road)
+    for (const g of this.routes) {
+      for (let s = 0; s < count; s++) {
+        const p = pointAt(line, s);
+        const hit = pathDistance(g.line, p.x, p.z, _hit);
+        if (hit.d < route.width + g.route.width) {
+          heights[s] = g.heights[clamp(Math.round(hit.s), 0, g.heights.length - 1)];
+          fixed[s] = 1;
+        }
+      }
+    }
     // then never steeper than a sled can comfortably climb
     const g = route.kind === 'road' ? 0.25 : route.kind === 'track' ? 0.36 : 0.5;
     for (let pass = 0; pass < 3; pass++) {
@@ -166,7 +181,9 @@ export class Terrain {
       if (d < p.r + p.blend) h = lerp(p.h, h, smoothstep(p.r, p.r + p.blend, d));
     }
     if (withRoutes) {
-      for (const g of this.routes) {
+      // tracks and the piste first, the roads last: where a track branches off a road, the road keeps
+      // its own surface and the track's shoulder does not pull it out of shape
+      for (const g of this.shapingOrder) {
         const l = g.line;
         const w = g.route.width;
         const shoulder = g.route.kind === 'piste' ? 10 : 14;

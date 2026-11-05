@@ -41,9 +41,44 @@ export interface GlideProfile {
   traction?: number;
   /** the powder track's bite in powder, as a multiple (deep lug track) */
   powderBite?: number;
+  /**
+   * Weight and suspension (the sled). Unset: the light model (skis), which leaves the ground on any crest
+   * the next step's free fall would clear.
+   * - `stick`: how hard the suspension keeps the track on the snow, as a multiple of g. The sled only
+   *   leaves the ground where the snow ahead falls away faster than that.
+   * - `travel`: suspension travel (m): the snow must drop this far below that curve before it lifts off.
+   * - `airG`: gravity in the air, as a multiple of g (a heavy machine comes down sooner).
+   * - `settle`: seconds after touching down when the suspension is still compressed and cannot launch
+   *   again (no bouncing from one landing into the next jump).
+   * - `soak`: share of the landing's impact (into the slope) the suspension takes up.
+   * - `pop`: share of the lip's upward speed the sled keeps as it leaves (the suspension extending
+   *   after the snow takes some of the kick).
+   */
+  weight?: { stick: number; travel: number; airG: number; settle: number; soak: number; pop: number };
 }
 
-export const SLED: GlideProfile = { engine: 9.5, top: 24, brake: 12, reverse: 4, turn: 1.9, grip: 5.5, air: 0.0016, push: 0, pushTop: 0, powderDrag: 0.55, radius: 1.1, climb: 0, traction: 0.6 };
+/**
+ * The snowmobile: a heavy, sprung machine. A strong engine (0-50 km/h in about 2.2 s on packed snow), a
+ * track that bites hard (its weight presses it in), and a suspension that keeps it on the snow over the
+ * road's crests: it only takes off where the snow really falls away, comes down sooner, soaks up the
+ * landing and does not bounce out of it.
+ */
+export const SLED: GlideProfile = {
+  engine: 12.5,
+  top: 24,
+  brake: 12,
+  reverse: 4,
+  turn: 1.9,
+  grip: 5.5,
+  air: 0.0016,
+  push: 0,
+  pushTop: 0,
+  powderDrag: 0.55,
+  radius: 1.1,
+  climb: 0,
+  traction: 0.68,
+  weight: { stick: 4, travel: 0.55, airG: 1.6, settle: 0.5, soak: 0.4, pop: 0.5 },
+};
 
 /** how much of the track's bite each surface gives (packed snow is the reference) */
 export const SURFACE_BITE: Record<Surface, number> = { packed: 1, crust: 0.85, powder: 0.7, ice: 0.2 };
@@ -73,13 +108,17 @@ export interface Glider {
   slip: number;
   /** the climb assist is holding the sled on a slope too steep for its track (this step) */
   held: boolean;
+  /** seconds since the last touchdown */
+  sinceLand: number;
 }
 
 const G = 9.81;
+/** how far ahead (s) the sled's suspension looks for the snow falling away */
+const LOOK = [0.1, 0.2, 0.3];
 const _trees: Tree[] = [];
 
 export const newGlider = (x: number, z: number, yaw: number, t: Terrain): Glider => ({
-  x, y: t.height(x, z), z, vx: 0, vy: 0, vz: 0, yaw, lean: 0, airborne: false, air: 0, landed: 0, bump: 0, surface: 'packed', power: 0, slip: 0, held: false,
+  x, y: t.height(x, z), z, vx: 0, vy: 0, vz: 0, yaw, lean: 0, airborne: false, air: 0, landed: 0, bump: 0, surface: 'packed', power: 0, slip: 0, held: false, sinceLand: 99,
 });
 
 export const glideSpeed = (g: Glider) => Math.hypot(g.vx, g.vz);
@@ -234,12 +273,22 @@ export function stepGlider(g: Glider, p: GlideProfile, steer: number, throttle: 
   }
 
   const gy = t.height(nx, nz);
+  const w = p.weight;
+  g.sinceLand += dt;
   if (g.airborne) {
-    g.vy -= G * dt;
+    g.vy -= G * (w ? w.airG : 1) * dt;
     let ny = g.y + g.vy * dt;
     if (ny <= gy) {
+      const flew = g.air;
       g.landed = Math.max(0, -g.vy);
       ny = gy;
+      // a heavy sled's landing is how hard it meets the slope (speed into it), not how fast it was
+      // falling: touching down along a steep run-out is soft
+      if (w) {
+        const n1 = t.normal(nx, nz);
+        // caught by the suspension within a few frames: it never really left, so no landing
+        g.landed = flew < 0.1 ? 0 : Math.max(0, -(g.vx * n1.x + g.vy * n1.y + g.vz * n1.z));
+      }
       g.airborne = false;
       g.air = 0;
       // keep the part of the fall that runs along the slope
@@ -248,10 +297,49 @@ export function stepGlider(g: Glider, p: GlideProfile, steer: number, throttle: 
       if (vdotn < 0) {
         g.vx -= n2.x * vdotn;
         g.vz -= n2.z * vdotn;
+        // the suspension soaks up part of the hit: it takes a little speed off rather than handing it all
+        // back along the slope
+        if (w) {
+          const k = 1 - w.soak * Math.min(1, -vdotn / 25);
+          g.vx *= k;
+          g.vz *= k;
+        }
       }
       g.vy = 0;
+      // a hop the suspension caught is not a landing: it does not hold off the next take-off
+      if (!w || flew >= 0.1) g.sinceLand = 0;
     }
     g.y = ny;
+  } else if (w) {
+    // heavy and sprung: follow the snow over a crest unless it falls away, just ahead, faster than the
+    // suspension can push the track down after it (stick x g), by more than the suspension's travel
+    const vyGround = (gy - g.y) / Math.max(dt, 1e-4);
+    const sp = Math.hypot(g.vx, g.vz);
+    let lift = false;
+    if (sp > 8 && g.sinceLand > w.settle) {
+      const ux = g.vx / sp;
+      const uz = g.vz / sp;
+      // the snow has to fall away over the whole look ahead, not dip at one point
+      // ...starting with where it will be next step, so it leaves at the lip, not before it
+      lift = true;
+      for (const tau of [dt, ...LOOK]) {
+        const d = sp * tau;
+        const arc = gy + vyGround * tau - 0.5 * G * w.stick * tau * tau;
+        if (t.height(nx + ux * d, nz + uz * d) >= arc - w.travel * (tau / LOOK[LOOK.length - 1])) {
+          lift = false;
+          break;
+        }
+      }
+    }
+    if (lift) {
+      g.airborne = true;
+      g.air = 0;
+      g.vy = vyGround > 0 ? vyGround * w.pop : vyGround;
+      g.y = gy;
+    } else {
+      g.vy = vyGround;
+      g.y = gy;
+    }
   } else {
     // would we leave the ground here? (a crest at speed)
     const vyGround = (gy - g.y) / Math.max(dt, 1e-4);

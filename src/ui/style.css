@@ -1,6 +1,8 @@
-/* ROCKSLIDE: Mountain Patrol. The interface is patrol equipment: slate instrument housings,
-   paper topo maps, mono readouts, and colour only where it means something
-   (red: patrol and emergencies, amber: caution, cyan: navigation, green: done). */
+/* ROCKSLIDE: Mountain Patrol. The interface is storybook card stock: aubergine and burgundy cards
+   with a thin cream rule, cream paper topo maps, Jost labels, Courier Prime on the radio, Plex Mono
+   readouts, and colour only where it means something (red: patrol and emergencies, amber: caution,
+   cyan: navigation, green: done). The canonical reference is art/kessel-art-bible.pdf; change a
+   token here and rebuild it (art/bible/), or tests/art-direction.test.ts fails. */
 
 :root {
   /* the Kessel storybook palette: aubergine and burgundy cards, cream paper, a powder-blue sky,

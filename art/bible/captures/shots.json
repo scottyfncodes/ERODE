@@ -1,0 +1,273 @@
+{
+ "url": "http://localhost:4173/",
+ "taken": "2026-11-05T16:00:38.401Z",
+ "shots": [
+  {
+   "name": "ui-title",
+   "kind": "ui",
+   "note": "Title screen, first launch",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-title",
+   "kind": "env",
+   "note": "Title view: the lodge front, symmetrical, the interface hidden",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-lodge-dawn",
+   "kind": "env",
+   "note": "Lodge front, 06:40",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-lodge-day",
+   "kind": "env",
+   "note": "Lodge front, 12:00, clear",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-lodge-dusk",
+   "kind": "env",
+   "note": "Lodge front, 18:40, first snow of the evening",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-lodge-night",
+   "kind": "env",
+   "note": "Lodge front, 21:30",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-yard",
+   "kind": "env",
+   "note": "The station yard, 09:00",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-lodge-inside",
+   "kind": "env",
+   "note": "Inside the lodge: the roof lifts away",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-pad",
+   "kind": "env",
+   "note": "Helipad and hangar",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-topstation",
+   "kind": "env",
+   "note": "Tannberg top station",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-ops-sign",
+   "kind": "env",
+   "note": "Avalanche area sign on the pass road",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-ops-exploder",
+   "kind": "env",
+   "note": "Remote exploder, Kessel Ridge",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-snow",
+   "kind": "env",
+   "note": "Snow, day 30 08:00",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-storm",
+   "kind": "env",
+   "note": "Storm, day 30 12:00",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-overcast",
+   "kind": "env",
+   "note": "Overcast, day 1 15:30",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-vince-front",
+   "kind": "env",
+   "note": "Vince, front",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-vince-back",
+   "kind": "env",
+   "note": "Vince, back: the pack and the scarf",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-board",
+   "kind": "ui",
+   "note": "The mission table: calls, forecast and avalanche danger",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-board-station",
+   "kind": "ui",
+   "note": "The mission table: building up the station",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-wardrobe",
+   "kind": "ui",
+   "note": "The wardrobe",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-map",
+   "kind": "ui",
+   "note": "The valley map",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-pause",
+   "kind": "ui",
+   "note": "Pause: settings and assists",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-hud-foot",
+   "kind": "ui",
+   "note": "HUD on foot with a dispatch radio line",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-chapter",
+   "kind": "ui",
+   "note": "Chapter card on accepting a call",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-hud-mission",
+   "kind": "ui",
+   "note": "HUD during a call: the objective, the route line on the snow",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-beacon",
+   "kind": "env",
+   "note": "Mission beacon over the objective (here the lodge), dusk",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-hud-heli",
+   "kind": "ui",
+   "note": "HUD in the helicopter over Kessel Bowl",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-heli",
+   "kind": "env",
+   "note": "The rescue helicopter in flight",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "phone-title",
+   "kind": "ui",
+   "note": "Title screen on a phone held upright",
+   "viewport": "390x844"
+  },
+  {
+   "name": "phone-hud",
+   "kind": "ui",
+   "note": "HUD on a phone: stick, look, the action button and chips",
+   "viewport": "390x844"
+  },
+  {
+   "name": "phone-board",
+   "kind": "ui",
+   "note": "The mission table on a phone",
+   "viewport": "390x844"
+  },
+  {
+   "name": "env-hollin",
+   "kind": "env",
+   "note": "Hollin: the Kettle and the village row",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-vince-three",
+   "kind": "env",
+   "note": "Vince, three-quarter",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-koda",
+   "kind": "env",
+   "note": "Koda beside Vince",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-cast",
+   "kind": "env",
+   "note": "Cast lineup, staged in engine: Greta, Koda, Vince, Nils, the van driver",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "ui-hud-sled",
+   "kind": "ui",
+   "note": "HUD on the snowmobile",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-sled",
+   "kind": "env",
+   "note": "The snowmobile with Koda on the rack",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-air-hollin",
+   "kind": "env",
+   "note": "Hollin from the air (staged: the helicopter model hidden)",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-air-tannberg",
+   "kind": "env",
+   "note": "The Tannberg ski area from the air (staged: the helicopter model hidden)",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-air-bowl",
+   "kind": "env",
+   "note": "Kessel Bowl and the ridge from the air (staged: the helicopter model hidden)",
+   "viewport": "1440x900"
+  },
+  {
+   "name": "env-air-lake",
+   "kind": "env",
+   "note": "Mirror Lake from the air (staged: the helicopter model hidden)",
+   "viewport": "1440x900"
+  }
+ ],
+ "problems": [],
+ "derived": {
+  "ui-title-wordmark": {
+   "from": "ui-title",
+   "crop": [
+    440,
+    540,
+    1000,
+    740
+   ]
+  },
+  "ui-forecast": {
+   "from": "ui-board",
+   "crop": [
+    738,
+    132,
+    1165,
+    243
+   ]
+  }
+ }
+}
